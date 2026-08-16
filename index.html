@@ -1,0 +1,2595 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>SnapNow — Photographers in minutes</title>
+<style>
+/* ============================================================
+   SnapNow — design system
+   ============================================================ */
+:root{
+  --bg:#0a0a0f;
+  --surface:#14141c;
+  --surface-2:#1c1c26;
+  --surface-3:#252533;
+  --border:#2b2b3a;
+  --border-soft:#22222e;
+  --text:#f4f4f7;
+  --muted:#8b8b9e;
+  --muted-2:#61617a;
+  --accent:#ff5a1f;
+  --accent-soft:rgba(255,90,31,.14);
+  --accent-2:#ffc857;
+  --green:#28c76f;
+  --green-soft:rgba(40,199,111,.14);
+  --blue:#4d8dff;
+  --red:#ff4d5e;
+  --purple:#a67cff;
+  --r-sm:10px; --r-md:16px; --r-lg:22px; --r-xl:28px;
+  --shadow:0 18px 50px -12px rgba(0,0,0,.75);
+  --ff:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0;height:100%}
+body{
+  background:
+    radial-gradient(1000px 700px at 80% -10%, rgba(255,90,31,.10), transparent 60%),
+    radial-gradient(900px 600px at 10% 110%, rgba(166,124,255,.10), transparent 60%),
+    var(--bg);
+  color:var(--text);
+  font-family:var(--ff);
+  font-size:15px;
+  line-height:1.45;
+  -webkit-font-smoothing:antialiased;
+  overflow:hidden;
+}
+button{font-family:inherit;font-size:inherit;color:inherit;border:0;background:none;cursor:pointer}
+input,select,textarea{font-family:inherit;font-size:inherit;color:inherit}
+::-webkit-scrollbar{width:0;height:0}
+
+/* ---------- layout shell ---------- */
+#shell{display:flex;height:100vh;width:100vw;align-items:stretch}
+
+#sidebar{
+  width:270px;flex:0 0 270px;
+  border-right:1px solid var(--border-soft);
+  padding:22px 18px;
+  display:flex;flex-direction:column;gap:22px;
+  background:rgba(10,10,15,.5);
+}
+.brand{display:flex;align-items:center;gap:11px}
+.brand-mark{
+  width:40px;height:40px;border-radius:13px;
+  background:linear-gradient(135deg,var(--accent),#ff8a3d);
+  display:grid;place-items:center;
+  box-shadow:0 8px 22px -6px rgba(255,90,31,.6);
+}
+.brand-name{font-weight:800;font-size:19px;letter-spacing:-.5px}
+.brand-tag{font-size:11px;color:var(--muted-2);letter-spacing:.3px;margin-top:-2px}
+
+.role-label{font-size:10px;letter-spacing:1.4px;text-transform:uppercase;color:var(--muted-2);font-weight:700;margin-bottom:9px}
+.role-switch{display:flex;flex-direction:column;gap:7px}
+.role-btn{
+  display:flex;align-items:center;gap:11px;
+  padding:11px 13px;border-radius:14px;
+  border:1px solid transparent;color:var(--muted);
+  font-weight:600;font-size:14px;transition:.16s;
+}
+.role-btn:hover{background:var(--surface);color:var(--text)}
+.role-btn.on{background:var(--accent-soft);border-color:rgba(255,90,31,.35);color:#ffb894}
+.role-btn .ic{width:26px;height:26px;display:grid;place-items:center;flex:0 0 26px}
+.role-btn .sub{font-size:11px;font-weight:500;color:var(--muted-2);display:block;margin-top:-2px}
+
+.side-card{
+  background:var(--surface);border:1px solid var(--border-soft);
+  border-radius:var(--r-md);padding:14px;font-size:12.5px;color:var(--muted);
+}
+.side-card b{color:var(--text);display:block;margin-bottom:6px;font-size:13px}
+.side-card ul{margin:0;padding-left:16px}
+.side-card li{margin-bottom:4px}
+.side-foot{margin-top:auto;font-size:11px;color:var(--muted-2);line-height:1.6}
+.reset-btn{
+  width:100%;margin-top:10px;padding:9px;border-radius:11px;
+  border:1px solid var(--border);color:var(--muted);font-size:12px;font-weight:600;
+}
+.reset-btn:hover{border-color:var(--red);color:var(--red)}
+
+/* ---------- phone ---------- */
+#stage{flex:1;display:grid;place-items:center;position:relative;padding:20px;min-width:0}
+#phone{
+  width:420px;max-width:100%;height:min(880px,calc(100vh - 40px));
+  background:var(--bg);
+  border:1px solid var(--border);
+  border-radius:38px;
+  box-shadow:var(--shadow);
+  overflow:hidden;position:relative;
+  display:flex;flex-direction:column;
+}
+.statusbar{
+  height:34px;flex:0 0 34px;display:flex;align-items:center;justify-content:space-between;
+  padding:0 22px;font-size:11.5px;font-weight:600;color:var(--muted);
+  border-bottom:1px solid var(--border-soft);
+}
+.statusbar .dots{display:flex;gap:4px;align-items:center}
+#screen{flex:1;overflow-y:auto;overflow-x:hidden;position:relative;scroll-behavior:smooth}
+#screen.no-scroll{overflow:hidden}
+.tabbar{
+  flex:0 0 auto;display:flex;border-top:1px solid var(--border-soft);
+  background:rgba(10,10,15,.94);backdrop-filter:blur(10px);padding:6px 4px 10px;
+}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:7px 0;color:var(--muted-2);font-size:10.5px;font-weight:600;border-radius:12px;transition:.15s;position:relative}
+.tab.on{color:var(--accent)}
+.tab .badge{position:absolute;top:2px;right:calc(50% - 20px);background:var(--red);color:#fff;font-size:9px;font-weight:800;min-width:16px;height:16px;border-radius:9px;display:grid;place-items:center;padding:0 4px}
+
+/* ---------- generic ---------- */
+.pad{padding:16px 18px}
+.row{display:flex;align-items:center;gap:10px}
+.between{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.grow{flex:1;min-width:0}
+.stack{display:flex;flex-direction:column}
+.gap6{gap:6px}.gap8{gap:8px}.gap10{gap:10px}.gap12{gap:12px}.gap16{gap:16px}
+.mt4{margin-top:4px}.mt8{margin-top:8px}.mt12{margin-top:12px}.mt16{margin-top:16px}.mt20{margin-top:20px}.mt24{margin-top:24px}
+.mb4{margin-bottom:4px}.mb8{margin-bottom:8px}.mb12{margin-bottom:12px}.mb16{margin-bottom:16px}
+.h1{font-size:24px;font-weight:800;letter-spacing:-.7px;line-height:1.2}
+.h2{font-size:18px;font-weight:750;letter-spacing:-.4px}
+.h3{font-size:15px;font-weight:700;letter-spacing:-.2px}
+.sm{font-size:12.5px}
+.xs{font-size:11px}
+.muted{color:var(--muted)}
+.muted2{color:var(--muted-2)}
+.accent{color:var(--accent)}
+.green{color:var(--green)}
+.bold{font-weight:700}
+.center{text-align:center}
+.truncate{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sec-title{font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted-2);font-weight:700;margin-bottom:10px}
+.divider{height:1px;background:var(--border-soft);margin:14px 0}
+
+.card{background:var(--surface);border:1px solid var(--border-soft);border-radius:var(--r-md);padding:14px}
+.card.tap{transition:.15s;cursor:pointer}
+.card.tap:active{transform:scale(.985)}
+.card.tap:hover{border-color:var(--border)}
+
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  padding:14px 18px;border-radius:15px;font-weight:700;font-size:15px;
+  background:var(--surface-2);border:1px solid var(--border);transition:.15s;
+}
+.btn:active{transform:scale(.98)}
+.btn.primary{background:linear-gradient(135deg,var(--accent),#ff7a3d);border-color:transparent;color:#fff;box-shadow:0 10px 26px -10px rgba(255,90,31,.85)}
+.btn.green{background:linear-gradient(135deg,#22b563,var(--green));border-color:transparent;color:#fff}
+.btn.ghost{background:transparent}
+.btn.danger{border-color:rgba(255,77,94,.4);color:var(--red)}
+.btn.block{width:100%}
+.btn.sm{padding:9px 14px;font-size:13px;border-radius:12px}
+.btn[disabled]{opacity:.4;pointer-events:none}
+
+.chip{display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:999px;background:var(--surface-2);border:1px solid var(--border);font-size:11.5px;font-weight:600;color:var(--muted)}
+.chip.accent{background:var(--accent-soft);border-color:rgba(255,90,31,.3);color:#ffab86}
+.chip.green{background:var(--green-soft);border-color:rgba(40,199,111,.3);color:#5fe0a0}
+.chip.blue{background:rgba(77,141,255,.14);border-color:rgba(77,141,255,.3);color:#8fb6ff}
+.chip.red{background:rgba(255,77,94,.14);border-color:rgba(255,77,94,.3);color:#ff8f9b}
+.chip.purple{background:rgba(166,124,255,.14);border-color:rgba(166,124,255,.3);color:#c4a6ff}
+
+.field{margin-bottom:14px}
+.field label{display:block;font-size:12px;font-weight:700;color:var(--muted);margin-bottom:7px}
+.input,select.input,textarea.input{
+  width:100%;padding:13px 14px;border-radius:13px;
+  background:var(--surface);border:1px solid var(--border);
+  outline:none;transition:.15s;
+}
+.input:focus{border-color:var(--accent);background:var(--surface-2)}
+textarea.input{resize:none;min-height:76px;line-height:1.5}
+select.input{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%238b8b9e' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center}
+
+.topbar{
+  position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:12px;
+  padding:14px 16px;background:rgba(10,10,15,.9);backdrop-filter:blur(14px);
+  border-bottom:1px solid var(--border-soft);
+}
+.iconbtn{width:36px;height:36px;flex:0 0 36px;border-radius:12px;display:grid;place-items:center;background:var(--surface);border:1px solid var(--border-soft);transition:.15s}
+.iconbtn:hover{background:var(--surface-2)}
+
+/* ---------- media / portfolio ---------- */
+.ph{position:relative;overflow:hidden;background:var(--surface-2)}
+.ph::after{content:"";position:absolute;inset:0;background:linear-gradient(160deg,rgba(255,255,255,.12),transparent 45%),radial-gradient(120% 90% at 20% 15%,rgba(255,255,255,.16),transparent 55%)}
+.ph .grain{position:absolute;inset:0;opacity:.32;mix-blend-mode:overlay;background-size:180px 180px;
+  background-image:radial-gradient(rgba(255,255,255,.5) .7px,transparent .7px),radial-gradient(rgba(0,0,0,.5) .7px,transparent .7px);
+  background-position:0 0,9px 9px}
+.avatar{border-radius:50%;display:grid;place-items:center;font-weight:800;color:#fff;flex:0 0 auto;position:relative;overflow:hidden}
+.avatar span{position:relative;z-index:2;text-shadow:0 1px 3px rgba(0,0,0,.35)}
+.av-40{width:40px;height:40px;font-size:14px}
+.av-48{width:48px;height:48px;font-size:16px}
+.av-56{width:56px;height:56px;font-size:18px}
+.av-72{width:72px;height:72px;font-size:24px}
+.online-dot{position:absolute;bottom:0;right:0;width:13px;height:13px;border-radius:50%;background:var(--green);border:2.5px solid var(--surface);z-index:3}
+
+.pgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}
+.pgrid .ph{aspect-ratio:1;border-radius:9px}
+.pstrip{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px}
+.pstrip .ph{width:86px;height:86px;flex:0 0 86px;border-radius:11px}
+
+/* ---------- urgency picker ---------- */
+.urgency{display:grid;grid-template-columns:repeat(2,1fr);gap:9px}
+.u-card{
+  padding:13px;border-radius:15px;border:1.5px solid var(--border);
+  background:var(--surface);text-align:left;transition:.15s;position:relative;overflow:hidden;
+}
+.u-card:active{transform:scale(.98)}
+.u-card.on{border-color:var(--accent);background:var(--accent-soft)}
+.u-card .u-em{font-size:19px;line-height:1}
+.u-card .u-t{font-weight:750;font-size:14px;margin-top:7px}
+.u-card .u-s{font-size:11px;color:var(--muted-2);margin-top:1px}
+.u-card .u-surge{position:absolute;top:9px;right:9px;font-size:9.5px;font-weight:800;padding:2px 6px;border-radius:6px;background:rgba(255,77,94,.18);color:#ff8f9b}
+
+/* ---------- radar / matching ---------- */
+.radar{position:relative;height:190px;display:grid;place-items:center;margin:6px 0 4px}
+.radar .ring{position:absolute;border:1.5px solid rgba(255,90,31,.4);border-radius:50%;animation:pulse 2.6s ease-out infinite}
+@keyframes pulse{0%{width:60px;height:60px;opacity:.9}100%{width:230px;height:230px;opacity:0}}
+.radar .core{width:66px;height:66px;border-radius:50%;background:linear-gradient(135deg,var(--accent),#ff8a3d);display:grid;place-items:center;box-shadow:0 0 40px rgba(255,90,31,.55);z-index:2}
+.radar .sat{position:absolute;width:30px;height:30px;border-radius:50%;border:2px solid var(--surface);z-index:3;display:grid;place-items:center;font-size:10px;font-weight:800;color:#fff;animation:fadein .5s ease}
+@keyframes fadein{from{opacity:0;transform:scale(.3)}to{opacity:1;transform:scale(1)}}
+
+.offer{animation:slideup .35s cubic-bezier(.2,.9,.3,1)}
+@keyframes slideup{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+
+/* ---------- map ---------- */
+.mapwrap{position:relative;border-radius:var(--r-md);overflow:hidden;border:1px solid var(--border-soft);background:#0e131a}
+.mapwrap svg{display:block;width:100%}
+.map-pin{cursor:pointer}
+.map-pin circle.halo{animation:halo 2.4s ease-out infinite}
+@keyframes halo{0%{r:7;opacity:.7}100%{r:20;opacity:0}}
+
+/* ---------- chat ---------- */
+.chat-scroll{display:flex;flex-direction:column;gap:9px;padding:16px}
+.bub{max-width:76%;padding:10px 13px;border-radius:16px;font-size:13.5px;line-height:1.45;word-wrap:break-word}
+.bub.them{background:var(--surface-2);border:1px solid var(--border-soft);align-self:flex-start;border-bottom-left-radius:5px}
+.bub.me{background:linear-gradient(135deg,var(--accent),#ff7a3d);color:#fff;align-self:flex-end;border-bottom-right-radius:5px}
+.bub-time{font-size:9.5px;opacity:.65;margin-top:3px;text-align:right}
+.chat-input{display:flex;gap:8px;padding:10px 12px;border-top:1px solid var(--border-soft);background:rgba(10,10,15,.95)}
+.chat-input input{flex:1;padding:12px 14px;border-radius:999px;background:var(--surface);border:1px solid var(--border);outline:none}
+.chat-input input:focus{border-color:var(--accent)}
+
+/* ---------- sheets / toast ---------- */
+.sheet-bg{position:absolute;inset:0;background:rgba(0,0,0,.66);backdrop-filter:blur(3px);z-index:60;display:flex;align-items:flex-end;animation:fade .2s}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+.sheet{width:100%;background:var(--surface);border-radius:26px 26px 0 0;border-top:1px solid var(--border);max-height:88%;overflow-y:auto;animation:up .3s cubic-bezier(.2,.9,.3,1)}
+@keyframes up{from{transform:translateY(100%)}to{transform:none}}
+.sheet-grab{width:38px;height:4px;border-radius:3px;background:var(--border);margin:11px auto 4px}
+
+#toasts{position:absolute;top:44px;left:12px;right:12px;z-index:90;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+.toast{
+  background:var(--surface-2);border:1px solid var(--border);border-radius:15px;
+  padding:12px 14px;display:flex;gap:11px;align-items:flex-start;
+  box-shadow:0 14px 32px -10px rgba(0,0,0,.85);animation:tin .3s cubic-bezier(.2,.9,.3,1);
+}
+@keyframes tin{from{opacity:0;transform:translateY(-16px)}to{opacity:1;transform:none}}
+.toast.out{animation:tout .3s forwards}
+@keyframes tout{to{opacity:0;transform:translateY(-16px)}}
+.toast .t-ic{width:32px;height:32px;flex:0 0 32px;border-radius:10px;display:grid;place-items:center;background:var(--accent-soft)}
+.toast .t-t{font-weight:700;font-size:13px}
+.toast .t-s{font-size:11.5px;color:var(--muted);margin-top:1px;line-height:1.35}
+
+/* ---------- misc ---------- */
+.stars{display:inline-flex;gap:1px;align-items:center}
+.progress{height:5px;border-radius:3px;background:var(--surface-3);overflow:hidden}
+.progress i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--accent-2));border-radius:3px;transition:width .6s}
+.empty{text-align:center;padding:46px 24px;color:var(--muted-2)}
+.empty .e-ic{font-size:34px;margin-bottom:10px;opacity:.5}
+.kv{display:flex;justify-content:space-between;padding:9px 0;font-size:13.5px;border-bottom:1px solid var(--border-soft)}
+.kv:last-child{border-bottom:0}
+.kv span:first-child{color:var(--muted)}
+.kv span:last-child{font-weight:650}
+.timer{font-variant-numeric:tabular-nums;font-weight:800}
+.blink{animation:bl 1.4s infinite}
+@keyframes bl{50%{opacity:.35}}
+.hscroll{display:flex;gap:10px;overflow-x:auto;padding:2px 18px 4px;margin:0 -18px}
+.hscroll>*{flex:0 0 auto}
+
+.stat{background:var(--surface);border:1px solid var(--border-soft);border-radius:var(--r-md);padding:13px}
+.stat .s-v{font-size:21px;font-weight:800;letter-spacing:-.6px}
+.stat .s-l{font-size:11px;color:var(--muted-2);font-weight:600;margin-top:2px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+
+table.tbl{width:100%;border-collapse:collapse;font-size:12px}
+table.tbl th{text-align:left;color:var(--muted-2);font-weight:700;font-size:10px;letter-spacing:.8px;text-transform:uppercase;padding:8px 6px;border-bottom:1px solid var(--border)}
+table.tbl td{padding:10px 6px;border-bottom:1px solid var(--border-soft);vertical-align:middle}
+
+@media (max-width:900px){
+  #sidebar{display:none}
+  #stage{padding:0}
+  #phone{width:100%;height:100vh;border-radius:0;border:0}
+}
+</style>
+</head>
+<body>
+<div id="shell">
+  <aside id="sidebar">
+    <div class="brand">
+      <div class="brand-mark">
+        <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>
+        </svg>
+      </div>
+      <div>
+        <div class="brand-name">SnapNow</div>
+        <div class="brand-tag">Photographers in minutes</div>
+      </div>
+    </div>
+
+    <div>
+      <div class="role-label" id="roleLabel">Account</div>
+      <div class="role-switch" id="roleSwitch"></div>
+    </div>
+
+    <div class="side-card">
+      <b>How to demo it</b>
+      <ul>
+        <li>Sign up as a <b>customer</b> and post a shoot request</li>
+        <li>Photographers nearby get pinged and accept live</li>
+        <li><b>Switch account</b> → sign up as a <b>photographer</b> to receive and quote on jobs yourself</li>
+        <li>Compare quotes, pay, chat, track arrival</li>
+      </ul>
+    </div>
+
+    <div class="side-foot">
+      Everything is saved in your browser. No server, no account.
+      <button class="reset-btn" onclick="resetAll()">Reset demo data</button>
+    </div>
+  </aside>
+
+  <main id="stage">
+    <div id="phone">
+      <div class="statusbar">
+        <span id="clock">—</span>
+        <span id="sbRole" class="muted2" onclick="cycleRole()" title="Tap to switch role"
+          style="cursor:pointer;padding:2px 10px;border-radius:9px;border:1px solid var(--border-soft);background:var(--surface)">Customer</span>
+        <span class="dots">
+          <svg width="15" height="11" viewBox="0 0 16 12" fill="currentColor"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="4.3" y="5.5" width="3" height="6.5" rx="1"/><rect x="8.6" y="3" width="3" height="9" rx="1"/><rect x="12.9" y="0" width="3" height="12" rx="1"/></svg>
+          <svg width="19" height="11" viewBox="0 0 22 12" fill="none" stroke="currentColor" stroke-width="1.3"><rect x=".7" y=".7" width="17" height="10.6" rx="3"/><rect x="2.4" y="2.4" width="12" height="7.2" rx="1.6" fill="currentColor" stroke="none"/><path d="M20 4.3v3.4" stroke-linecap="round"/></svg>
+        </span>
+      </div>
+      <div id="toasts"></div>
+      <div id="screen"></div>
+      <div id="tabbar"></div>
+    </div>
+  </main>
+</div>
+<script>
+/* ============================================================
+   SnapNow — a Blinkit-style, on-demand photographer marketplace
+   Single-file demo app. State lives in localStorage.
+   ============================================================ */
+"use strict";
+
+/* ---------- tiny helpers ---------- */
+const $  = (s,r=document)=>r.querySelector(s);
+const el = (id)=>document.getElementById(id);
+const esc = (s)=>String(s==null?"":s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const rnd  = (a,b)=>a+Math.random()*(b-a);
+const rint = (a,b)=>Math.floor(rnd(a,b+1));
+const pick = (a)=>a[Math.floor(Math.random()*a.length)];
+const uid  = (p="id")=>p+"_"+Math.random().toString(36).slice(2,9);
+const inr  = (n)=>"₹"+Math.round(n).toLocaleString("en-IN");
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+
+function timeAgo(ts){
+  const s=Math.floor((Date.now()-ts)/1000);
+  if(s<10)return"just now"; if(s<60)return s+"s ago";
+  const m=Math.floor(s/60); if(m<60)return m+"m ago";
+  const h=Math.floor(m/60); if(h<24)return h+"h ago";
+  return Math.floor(h/24)+"d ago";
+}
+function clockStr(d=new Date()){
+  let h=d.getHours(),m=String(d.getMinutes()).padStart(2,"0");
+  const ap=h>=12?"PM":"AM"; h=h%12||12; return h+":"+m+" "+ap;
+}
+function dayStr(ts){
+  const d=new Date(ts),t=new Date(),tm=new Date(Date.now()+864e5);
+  if(d.toDateString()===t.toDateString())return"Today";
+  if(d.toDateString()===tm.toDateString())return"Tomorrow";
+  return d.toLocaleDateString("en-IN",{weekday:"short",day:"numeric",month:"short"});
+}
+function mmss(ms){
+  if(ms<0)ms=0; const t=Math.floor(ms/1000);
+  return String(Math.floor(t/60)).padStart(2,"0")+":"+String(t%60).padStart(2,"0");
+}
+/* deterministic pseudo-random from a string — keeps "photos" stable per person */
+function seedOf(str){let h=2166136261;for(let i=0;i<str.length;i++){h^=str.charCodeAt(i);h=Math.imul(h,16777619)}return Math.abs(h)}
+function hueOf(str,off=0){return (seedOf(str)+off*137)%360}
+
+/* fake photo tile — CSS gradients, no network needed */
+function photoBg(key,i=0){
+  const s=seedOf(key+"#"+i);
+  const h=hueOf(key,i*3+1), h2=(h+20+(s%50))%360;
+  return `background:linear-gradient(${s%360}deg,hsl(${h} 62% ${28+(s%14)}%),hsl(${h2} 55% ${12+((s>>3)%12)}%))`;
+}
+function photoTile(key,i,extraStyle=""){
+  return `<div class="ph" style="${photoBg(key,i)};${extraStyle}"><div class="grain"></div></div>`;
+}
+function avatarHtml(p,size="av-48",online=false){
+  const h=hueOf(p.id||p.name);
+  const initials=p.name.split(" ").map(w=>w[0]).slice(0,2).join("").toUpperCase();
+  return `<div class="avatar ${size}" style="background:linear-gradient(135deg,hsl(${h} 65% 45%),hsl(${(h+45)%360} 60% 32%))">
+    <span>${esc(initials)}</span>${online?'<i class="online-dot"></i>':''}</div>`;
+}
+function starsHtml(r,size=11){
+  let out='<span class="stars">';
+  for(let i=1;i<=5;i++){
+    const f=r>=i?1:(r>i-1?r-(i-1):0);
+    out+=`<svg width="${size}" height="${size}" viewBox="0 0 24 24"><defs><linearGradient id="g${i}${size}${Math.round(f*100)}"><stop offset="${f*100}%" stop-color="#ffc857"/><stop offset="${f*100}%" stop-color="#3a3a48"/></linearGradient></defs><path fill="url(#g${i}${size}${Math.round(f*100)})" d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg>`;
+  }
+  return out+"</span>";
+}
+function icon(name,size=20,color="currentColor",w=2){
+  const P={
+    home:'<path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/>',
+    search:'<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>',
+    bolt:'<path d="M13 2L4.5 13.5H11l-1 8.5 8.5-11.5H12z"/>',
+    bell:'<path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/>',
+    user:'<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+    cam:'<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>',
+    pin:'<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>',
+    clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>',
+    chat:'<path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.5 8.5 0 0 1-3.9-.9L3 21l1.9-5A8.4 8.4 0 0 1 12 3a8.4 8.4 0 0 1 9 8.5z"/>',
+    back:'<path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/>',
+    check:'<path d="M20 6L9 17l-5-5"/>',
+    x:'<path d="M18 6L6 18"/><path d="M6 6l12 12"/>',
+    card:'<rect x="2" y="5" width="20" height="14" rx="3"/><path d="M2 10h20"/>',
+    star:'<path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/>',
+    grid:'<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+    wallet:'<path d="M20 12V8H6a2 2 0 0 1 0-4h12v4"/><path d="M4 6v12a2 2 0 0 0 2 2h14v-4"/><path d="M18 12a2 2 0 0 0 0 4h4v-4z"/>',
+    send:'<path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4z"/>',
+    calendar:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 11h18"/>',
+    list:'<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
+    trend:'<path d="M23 6l-9.5 9.5-5-5L1 18"/><path d="M17 6h6v6"/>',
+    filter:'<path d="M22 3H2l8 9.46V19l4 2v-8.54z"/>',
+    heart:'<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1L12 21l7.7-7.7 1.1-1a5.5 5.5 0 0 0 0-7.7z"/>',
+    shield:'<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
+    power:'<path d="M18.4 6.6a9 9 0 1 1-12.7 0"/><path d="M12 2v10"/>'
+  };
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round">${P[name]||""}</svg>`;
+}
+
+/* ============================================================
+   DATA
+   ============================================================ */
+const CATEGORIES = [
+  {id:"portrait",  name:"Portrait",       emoji:"🧑‍🎤", base:2500},
+  {id:"event",     name:"Party / Event",  emoji:"🎉", base:4000},
+  {id:"wedding",   name:"Wedding",        emoji:"💍", base:12000},
+  {id:"birthday",  name:"Birthday",       emoji:"🎂", base:3500},
+  {id:"product",   name:"Product",        emoji:"📦", base:5000},
+  {id:"food",      name:"Food",           emoji:"🍜", base:4500},
+  {id:"maternity", name:"Maternity",      emoji:"🤰", base:6000},
+  {id:"corporate", name:"Corporate",      emoji:"💼", base:7000},
+  {id:"realestate",name:"Real Estate",    emoji:"🏠", base:5500},
+  {id:"fashion",   name:"Fashion",        emoji:"👗", base:8000},
+  {id:"pet",       name:"Pet",            emoji:"🐕", base:2800},
+  {id:"street",    name:"Candid / Street",emoji:"🚶", base:2200}
+];
+const catById = id => CATEGORIES.find(c=>c.id===id) || CATEGORIES[0];
+
+const URGENCY = [
+  {id:"now",  label:"Right now",  sub:"Arrives in ~30 min", emoji:"⚡", mins:30,   surge:1.6},
+  {id:"1h",   label:"In 1 hour",  sub:"Fast dispatch",      emoji:"🔥", mins:60,   surge:1.35},
+  {id:"3h",   label:"In 3 hours", sub:"Plenty of options",  emoji:"🕒", mins:180,  surge:1.15},
+  {id:"today",label:"Later today",sub:"Best value",         emoji:"🌆", mins:480,  surge:1.0},
+  {id:"tmrw", label:"Tomorrow",   sub:"Plan ahead",         emoji:"📅", mins:1440, surge:0.95},
+  {id:"pick", label:"Pick a date",sub:"Choose date & time", emoji:"🗓️", mins:4320, surge:0.9}
+];
+const urgById = id => URGENCY.find(u=>u.id===id) || URGENCY[0];
+
+const AREAS = ["Indiranagar","Koramangala","HSR Layout","Whitefield","Jayanagar","MG Road","Hebbal","Bellandur","JP Nagar","Malleshwaram"];
+
+const GEAR = ["Sony A7 IV","Canon R6 Mk II","Nikon Z8","Sony A7R V","Canon R5","Fujifilm X-T5","DJI Mini 4 Pro drone","Godox AD200 lighting","85mm f/1.4 prime","24-70mm f/2.8"];
+const TRAITS = ["Fast turnaround","Great with kids","Candid specialist","Drone certified","Studio lighting","Same-day edits","Cinematic style","Documentary style","Low-light expert","Print-ready delivery"];
+
+const PHOTOG_SEED = [
+  {name:"Aarav Mehta",    cats:["wedding","event","portrait"],  rating:4.9, jobs:284, years:8,  price:1.15, bio:"Wedding & candid storyteller. I shoot the moments between the poses."},
+  {name:"Priya Nair",     cats:["portrait","fashion","product"],rating:4.8, jobs:196, years:6,  price:1.0,  bio:"Editorial portraits with clean, warm colour. Studio or on-location."},
+  {name:"Rohan Kapoor",   cats:["event","birthday","street"],   rating:4.7, jobs:341, years:9,  price:0.85, bio:"Party specialist. Fast, unobtrusive, and I never miss the cake cutting."},
+  {name:"Sneha Iyer",     cats:["maternity","portrait","pet"],  rating:5.0, jobs:118, years:4,  price:1.2,  bio:"Soft natural light, gentle direction. Families and expecting mums."},
+  {name:"Vikram Singh",   cats:["product","food","corporate"],  rating:4.6, jobs:409, years:11, price:1.05, bio:"Commercial shooter. Tabletop, menus, e-comm packshots, catalogue work."},
+  {name:"Ananya Rao",     cats:["fashion","portrait","event"],  rating:4.9, jobs:167, years:5,  price:1.3,  bio:"High-fashion look on a real-world budget. I bring my own lighting kit."},
+  {name:"Kabir Sharma",   cats:["realestate","corporate","product"],rating:4.5,jobs:222,years:7, price:0.9,  bio:"Architecture & interiors, drone certified. HDR interiors delivered in 24h."},
+  {name:"Meera Joshi",    cats:["birthday","pet","portrait"],   rating:4.8, jobs:153, years:3,  price:0.8,  bio:"Bright, playful, colourful. Kids' parties and very good dogs."},
+  {name:"Arjun Pillai",   cats:["street","event","wedding"],    rating:4.7, jobs:298, years:10, price:0.95, bio:"Documentary approach — I disappear into the room and come back with gold."},
+  {name:"Ishita Verma",   cats:["food","product","fashion"],    rating:4.9, jobs:187, years:6,  price:1.25, bio:"Food stylist + photographer. I make the dish look better than it tastes."},
+  {name:"Dev Malhotra",   cats:["corporate","portrait","event"],rating:4.4, jobs:512, years:13, price:0.75, bio:"Headshots and conferences. Volume shooter, unbeatable turnaround."},
+  {name:"Tara Chatterjee",cats:["wedding","maternity","portrait"],rating:5.0,jobs:96, years:4,  price:1.4,  bio:"Fine-art film aesthetic. Limited slots, heavily edited galleries."}
+];
+
+const REVIEW_TEXT = [
+  "Showed up 10 minutes early and just got to work. Photos were in my inbox the next morning.",
+  "Genuinely made everyone comfortable — my family hates being photographed and they loved him.",
+  "Worth every rupee. The lighting on the indoor shots was incredible.",
+  "Booked at 2 hours' notice and still got a full gallery. Unreal.",
+  "Great eye for detail. Caught moments I didn't even know happened.",
+  "Professional, punctual, and the edits were exactly the mood I asked for.",
+  "Slight delay in delivery but the quality more than made up for it.",
+  "Would book again in a heartbeat. Already recommended to three friends.",
+  "Brought extra lighting without me asking. Real pro.",
+  "The candid shots are the best photos we have of us together."
+];
+const REVIEWER = ["Nikhil G.","Shruti B.","Aman K.","Divya S.","Raghav M.","Pooja T.","Karan D.","Neha J.","Farhan A.","Ritu P."];
+
+function makePhotographer(seed,i){
+  const id = "pg_"+i;
+  const s  = seedOf(id);
+  const lat = 30 + ((s*7)%210);       /* map coords, 0..280 canvas */
+  const lng = 30 + ((s*13)%300);
+  const revs = Array.from({length:rint(3,6)},(_,k)=>({
+    by: REVIEWER[(s+k)%REVIEWER.length],
+    stars: clamp(Math.round(seed.rating + rnd(-0.6,0.3)),3,5),
+    text: REVIEW_TEXT[(s+k*3)%REVIEW_TEXT.length],
+    at: Date.now()-rint(2,180)*864e5
+  }));
+  return {
+    id, name:seed.name, cats:seed.cats, rating:seed.rating, jobs:seed.jobs,
+    years:seed.years, priceMult:seed.price, bio:seed.bio,
+    area: AREAS[s%AREAS.length],
+    distance: +(rnd(0.6,7.5).toFixed(1)),
+    online: Math.random()>0.25,
+    responseMin: rint(2,14),
+    gear: [GEAR[s%GEAR.length],GEAR[(s+4)%GEAR.length],GEAR[(s+7)%GEAR.length]],
+    traits:[TRAITS[s%TRAITS.length],TRAITS[(s+3)%TRAITS.length],TRAITS[(s+6)%TRAITS.length]],
+    portfolio: Array.from({length:12},(_,k)=>k),
+    reviews: revs,
+    x:lat, y:lng,
+    earnings: rint(18,140)*1000,
+    verified: seed.rating>=4.7
+  };
+}
+
+/* ============================================================
+   STATE
+   ============================================================ */
+const KEY = "snapnow.v2";
+var S = null;   /* var (not let) so inline handlers + devtools can always reach it */
+
+function freshState(){
+  return {
+    accounts:[],                     // [{id,type,phone,name,customer?,photographerId?}]
+    session:null,                    // account id, or "admin"
+    auth:{step:"welcome", type:null, phone:"", otp:"", draft:null},
+    role:"customer",                 // derived from the session; kept for the view router
+    nav:{customer:"home", photographer:"home", admin:"home"},
+    stack:[],                        // modal-ish screens {name,props}
+    guestCustomer:{ name:"Guest", area:"Indiranagar", wallet:0 },
+    myPhotographerId:"pg_0",
+    photographers: PHOTOG_SEED.map(makePhotographer),
+    requests:[],
+    bookings:[],
+    chats:{},
+    notifs:[],
+    seenNotifs:0,
+    draft:null,
+    firstRun:true
+  };
+}
+
+/* ---------- session helpers ---------- */
+function acct(){ return S.session && S.session!=="admin" ? S.accounts.find(a=>a.id===S.session)||null : null; }
+function cust(){ const a=acct(); return (a&&a.type==="customer") ? a.customer : S.guestCustomer; }
+function isAdmin(){ return S.session==="admin"; }
+function loggedIn(){ return !!S.session; }
+/* photographers that belong to a real signed-up account — these never auto-accept */
+function ownedPgIds(){ return new Set(S.accounts.filter(a=>a.type==="photographer").map(a=>a.photographerId)); }
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} }
+function load(){
+  try{
+    const raw = localStorage.getItem(KEY);
+    if(raw){ const p = JSON.parse(raw); if(p && p.photographers && p.photographers.length){ return p; } }
+  }catch(e){}
+  return freshState();
+}
+function resetAll(){
+  if(!confirm("Reset all demo data? This clears requests, bookings and chats."))return;
+  localStorage.removeItem(KEY); S = freshState(); save(); render();
+}
+function myPg(){
+  const a=acct();
+  if(a && a.type==="photographer"){
+    const p=S.photographers.find(x=>x.id===a.photographerId);
+    if(p)return p;
+  }
+  return S.photographers.find(p=>p.id===S.myPhotographerId) || S.photographers[0];
+}
+
+/* ---------- navigation ---------- */
+function go(tab){ S.nav[S.role]=tab; S.stack=[]; save(); render(); }
+function push(name,props={}){ S.stack.push({name,props}); save(); render(); scrollTop(); }
+function pop(){ S.stack.pop(); save(); render(); }
+function popTo(n){ S.stack=S.stack.slice(0,n); save(); render(); }
+function scrollTop(){ const sc=el("screen"); if(sc)sc.scrollTop=0; }
+function setRole(r){ S.role=r; S.stack=[]; save(); render(); }
+
+/* ---------- notifications ---------- */
+function notify(title,sub,opts={}){
+  const n = {id:uid("n"), title, sub, at:Date.now(), for:opts.for||"all", icon:opts.icon||"bell", tap:opts.tap||null};
+  S.notifs.unshift(n); if(S.notifs.length>60)S.notifs.pop();
+  save();
+  if(!opts.for || opts.for===S.role) toast(title,sub,opts.icon||"bell");
+}
+function toast(title,sub,ic="bell"){
+  const box = el("toasts"); if(!box)return;
+  const d = document.createElement("div");
+  d.className="toast";
+  d.innerHTML=`<div class="t-ic">${icon(ic,17,"var(--accent)")}</div>
+    <div class="grow"><div class="t-t">${esc(title)}</div><div class="t-s">${esc(sub)}</div></div>`;
+  box.appendChild(d);
+  setTimeout(()=>{ d.classList.add("out"); setTimeout(()=>d.remove(),300); }, 4200);
+}
+
+/* ============================================================
+   PRICING
+   ============================================================ */
+function quoteFor(pg, req){
+  const cat = catById(req.category);
+  const urg = urgById(req.urgency);
+  const hours = req.hours || 2;
+  let base = cat.base * (hours/2) * pg.priceMult * urg.surge;
+  base *= 1 + (pg.rating-4.5)*0.10;
+  base *= 1 + (pg.distance/100);
+  return Math.round(base/50)*50;
+}
+function feeBreakdown(amount){
+  const platform = Math.round(amount*0.08);
+  const gst      = Math.round((amount+platform)*0.18);
+  const travel   = 99;
+  return {amount, platform, gst, travel, total: amount+platform+gst+travel};
+}
+
+/* ============================================================
+   ENGINE — requests, offers, bookings, chat, tracking
+   ============================================================ */
+const BROADCAST_MS = 5*60*1000;   // how long a request stays live
+
+function createRequest(d){
+  const urg = urgById(d.urgency);
+  const startAt = d.customDate ? new Date(d.customDate).getTime() : Date.now()+urg.mins*60*1000;
+  const req = {
+    id: uid("req"),
+    createdAt: Date.now(),
+    expiresAt: Date.now()+BROADCAST_MS,
+    category: d.category,
+    urgency: d.urgency,
+    startAt,
+    hours: d.hours,
+    area: d.area,
+    address: d.address,
+    budget: d.budget,
+    notes: d.notes,
+    deliverables: d.deliverables,
+    status: "live",           // live | booked | expired | cancelled
+    offers: [],
+    declined: [],
+    bookingId: null,
+    customerName: cust().name
+  };
+  S.requests.unshift(req);
+
+  // who gets pinged
+  const eligible = S.photographers.filter(p=>p.cats.includes(req.category));
+  req.pinged = (eligible.length?eligible:S.photographers).map(p=>p.id);
+
+  save();
+  notify("Request sent to "+req.pinged.length+" photographers",
+         catById(req.category).name+" · "+dayStr(req.startAt)+" "+clockStr(new Date(req.startAt)),
+         {for:"customer", icon:"bolt"});
+  scheduleSimOffers(req);
+  return req;
+}
+
+/* photographers (other than "me") accept over time */
+function scheduleSimOffers(req){
+  const owned = ownedPgIds();
+  const pool = req.pinged.filter(id=>!owned.has(id));
+  const n = clamp(rint(3,6), 1, pool.length);
+  const chosen = pool.slice().sort(()=>Math.random()-.5).slice(0,n);
+  chosen.forEach((pid,i)=>{
+    const delay = 2200 + i*rint(2600,6200) + rint(0,2200);
+    setTimeout(()=>{
+      const live = S.requests.find(r=>r.id===req.id);
+      if(!live || live.status!=="live")return;
+      if(live.offers.some(o=>o.photographerId===pid))return;
+      addOffer(live, pid);
+    }, delay);
+  });
+}
+
+const OFFER_NOTES = [
+  "I'm free at that time and 10 min away. Happy to take this.",
+  "Available — I'll bring my full lighting kit.",
+  "Can do. Edited gallery delivered within 24 hours.",
+  "I've shot several of these nearby. Count me in.",
+  "Free that slot. I can arrive 15 min early to set up.",
+  "Yes! I'll bring a second body as backup.",
+  "Available. Drone included if the venue allows it."
+];
+
+function addOffer(req, pid, custom){
+  const pg = S.photographers.find(p=>p.id===pid); if(!pg)return;
+  const offer = {
+    id: uid("of"),
+    photographerId: pid,
+    price: custom?.price ?? quoteFor(pg, req),
+    etaMin: custom?.etaMin ?? rint(8, 40),
+    note: custom?.note ?? pick(OFFER_NOTES),
+    at: Date.now()
+  };
+  req.offers.push(offer);
+  save();
+  notify(pg.name+" accepted your request",
+         inr(offer.price)+" · "+pg.rating+"★ · arrives in ~"+offer.etaMin+" min",
+         {for:"customer", icon:"check"});
+  render();
+}
+
+function declineRequest(req, pid){
+  if(!req.declined.includes(pid))req.declined.push(pid);
+  save(); render();
+}
+
+function bookOffer(reqId, offerId, payMethod){
+  const req = S.requests.find(r=>r.id===reqId); if(!req)return null;
+  const offer = req.offers.find(o=>o.id===offerId); if(!offer)return null;
+  const pg = S.photographers.find(p=>p.id===offer.photographerId);
+  const fees = feeBreakdown(offer.price);
+  const b = {
+    id: uid("bk"),
+    requestId: req.id,
+    photographerId: pg.id,
+    category: req.category,
+    startAt: req.startAt,
+    hours: req.hours,
+    area: req.area,
+    address: req.address,
+    price: offer.price,
+    total: fees.total,
+    fees,
+    payMethod,
+    customerName: cust().name,
+    createdAt: Date.now(),
+    etaMin: offer.etaMin,
+    status: "confirmed",     // confirmed | enroute | arrived | shooting | delivered | cancelled
+    trackStartedAt: null,
+    rated: null
+  };
+  S.bookings.unshift(b);
+  req.status="booked"; req.bookingId=b.id;
+  S.chats[b.id] = [{
+    from:"pg", text:"Hi "+cust().name.split(" ")[0]+"! Confirmed for "+dayStr(b.startAt)+" at "+clockStr(new Date(b.startAt))+". I'll message when I set off. 📸",
+    at: Date.now()
+  }];
+  pg.earnings += Math.round(offer.price*0.85);
+  save();
+  notify("Booking confirmed with "+pg.name, inr(fees.total)+" · "+dayStr(b.startAt)+" "+clockStr(new Date(b.startAt)), {for:"customer",icon:"check"});
+  notify("You got the job! "+catById(b.category).name, cust().name+" booked you · you earn "+inr(Math.round(offer.price*0.85)), {for:"photographer",icon:"wallet"});
+  return b;
+}
+
+function advanceBooking(b){
+  const flow = ["confirmed","enroute","arrived","shooting","delivered"];
+  const i = flow.indexOf(b.status);
+  if(i<0 || i>=flow.length-1)return;
+  b.status = flow[i+1];
+  if(b.status==="enroute") b.trackStartedAt = Date.now();
+  const pg = S.photographers.find(p=>p.id===b.photographerId);
+  const msg = {
+    enroute:  ["On my way!", pg.name+" has left and is heading to you"],
+    arrived:  ["Photographer arrived", pg.name+" is at "+b.area],
+    shooting: ["Shoot in progress", "Session started — enjoy!"],
+    delivered:["Gallery delivered", "Your edited photos are ready to download"]
+  }[b.status];
+  if(msg) notify(msg[0], msg[1], {for:"customer", icon:"cam"});
+  const auto = {
+    enroute:"I'm heading over now — see you shortly!",
+    arrived:"I've arrived, I'm at the entrance 👋",
+    shooting:"Let's do this. Tell me if there's anything specific you want covered.",
+    delivered:"Gallery's up! 148 edited shots. Hope you love them ❤️"
+  }[b.status];
+  if(auto){ (S.chats[b.id]=S.chats[b.id]||[]).push({from:"pg",text:auto,at:Date.now()}); }
+  save(); render();
+}
+
+function cancelBooking(b){
+  b.status="cancelled";
+  const req=S.requests.find(r=>r.id===b.requestId); if(req)req.status="cancelled";
+  save(); notify("Booking cancelled","Refund of "+inr(b.total)+" initiated",{for:"customer",icon:"x"}); render();
+}
+
+function sendChat(bookingId, from, text){
+  if(!text.trim())return;
+  (S.chats[bookingId]=S.chats[bookingId]||[]).push({from, text:text.trim(), at:Date.now()});
+  save(); render();
+  if(from==="customer"){
+    setTimeout(()=>{
+      const replies=["Got it 👍","Sure, no problem.","Noted — I'll plan for that.","Yes, that works for me.","Perfect. See you then!","I'll bring an extra lens for that."];
+      (S.chats[bookingId]=S.chats[bookingId]||[]).push({from:"pg",text:pick(replies),at:Date.now()});
+      save(); render();
+    }, rint(1400,2800));
+  }
+}
+
+function rateBooking(b, stars, text){
+  b.rated = {stars, text, at:Date.now()};
+  const pg = S.photographers.find(p=>p.id===b.photographerId);
+  if(pg){
+    pg.reviews.unshift({by:cust().name, stars, text: text||"Great shoot.", at:Date.now()});
+    pg.jobs += 1;
+    pg.rating = +clamp((pg.rating*9 + stars)/10, 1, 5).toFixed(2);
+  }
+  save(); notify("Thanks for rating!","Your review helps other customers",{for:"customer",icon:"star"}); render();
+}
+
+/* expire old live requests */
+function sweep(){
+  let dirty=false;
+  S.requests.forEach(r=>{
+    if(r.status==="live" && Date.now()>r.expiresAt){
+      r.status = r.offers.length ? "awaiting" : "expired";   // offers exist → still choosable
+      dirty=true;
+      if(r.offers.length) notify("Broadcast closed", r.offers.length+" photographer"+(r.offers.length>1?"s are":" is")+" waiting on you", {for:"customer",icon:"clock"});
+    }
+  });
+  if(dirty){save(); render();}
+}
+
+/* ============================================================
+   SHARED UI PIECES
+   ============================================================ */
+function topbar(title, sub, right=""){
+  return `<div class="topbar">
+    <button class="iconbtn" onclick="pop()">${icon("back",18)}</button>
+    <div class="grow"><div class="h3 truncate">${esc(title)}</div>${sub?`<div class="xs muted2 truncate">${esc(sub)}</div>`:""}</div>
+    ${right}
+  </div>`;
+}
+
+function pgCardHtml(pg, opts={}){
+  return `<div class="card tap" onclick="push('pgDetail',{id:'${pg.id}'${opts.reqId?",reqId:'"+opts.reqId+"'":""}})">
+    <div class="row gap12">
+      ${avatarHtml(pg,"av-48",pg.online)}
+      <div class="grow">
+        <div class="row gap6">
+          <span class="bold truncate">${esc(pg.name)}</span>
+          ${pg.verified?`<span title="Verified">${icon("shield",13,"var(--blue)")}</span>`:""}
+        </div>
+        <div class="row gap6 xs muted mt4">
+          ${starsHtml(pg.rating,10)} <span class="bold" style="color:var(--accent-2)">${pg.rating}</span>
+          <span class="muted2">·</span><span>${pg.jobs} shoots</span>
+          <span class="muted2">·</span><span>${pg.distance} km</span>
+        </div>
+      </div>
+      <div class="stack" style="align-items:flex-end">
+        <div class="bold sm">${inr(catById(pg.cats[0]).base*pg.priceMult)}</div>
+        <div class="xs muted2">from / 2h</div>
+      </div>
+    </div>
+    <div class="pstrip mt12">${pg.portfolio.slice(0,5).map(i=>photoTile(pg.id,i)).join("")}</div>
+  </div>`;
+}
+
+function mapSvg(pins, opts={}){
+  const W=380,H=250;
+  const roads=[];
+  for(let i=1;i<6;i++) roads.push(`<line x1="0" y1="${i*H/6}" x2="${W}" y2="${i*H/6}" stroke="#1a2230" stroke-width="${i%2?9:5}"/>`);
+  for(let i=1;i<7;i++) roads.push(`<line x1="${i*W/7}" y1="0" x2="${i*W/7}" y2="${H}" stroke="#1a2230" stroke-width="${i%3?5:9}"/>`);
+  const blocks=[];
+  for(let r=0;r<6;r++)for(let c=0;c<7;c++){
+    if((r*7+c)%3===0) blocks.push(`<rect x="${c*W/7+7}" y="${r*H/6+6}" width="${W/7-14}" height="${H/6-12}" rx="3" fill="#131a24"/>`);
+  }
+  const you = `<g transform="translate(${W/2},${H/2})">
+      <circle r="26" fill="rgba(77,141,255,.13)"/>
+      <circle r="9" fill="var(--blue)" stroke="#0e131a" stroke-width="3"/>
+      <text y="-20" text-anchor="middle" font-size="9" font-weight="700" fill="#8fb6ff">You</text></g>`;
+  const pinEls = pins.map(p=>{
+    const x = clamp(W/2 + (p.x-140)*0.9, 24, W-24);
+    const y = clamp(H/2 + (p.y-150)*0.62, 22, H-16);
+    const c = p.color||"var(--accent)";
+    return `<g class="map-pin" transform="translate(${x},${y})" onclick="${p.onclick||""}">
+      <circle class="halo" r="7" fill="${c}" opacity=".5"/>
+      <circle r="13" fill="${c}" stroke="#0e131a" stroke-width="2.5"/>
+      <text y="4" text-anchor="middle" font-size="10" font-weight="800" fill="#fff">${esc(p.label||"")}</text>
+    </g>`;
+  }).join("");
+  return `<div class="mapwrap"><svg viewBox="0 0 ${W} ${H}">
+    <rect width="${W}" height="${H}" fill="#0e131a"/>${blocks.join("")}${roads.join("")}${pinEls}${opts.hideYou?"":you}
+  </svg>${opts.caption?`<div class="xs muted2" style="position:absolute;bottom:8px;left:10px;background:rgba(10,10,15,.8);padding:4px 8px;border-radius:8px">${esc(opts.caption)}</div>`:""}</div>`;
+}
+
+function statusChip(st){
+  const m={
+    live:["Finding photographers","accent"], awaiting:["Offers waiting","accent"],
+    booked:["Booked","green"], expired:["Expired",""], cancelled:["Cancelled","red"],
+    confirmed:["Confirmed","green"], enroute:["On the way","accent"],
+    arrived:["Arrived","blue"], shooting:["Shooting now","purple"], delivered:["Delivered","green"]
+  }[st]||[st,""];
+  return `<span class="chip ${m[1]}">${m[0]}</span>`;
+}
+
+/* ============================================================
+   CUSTOMER — HOME
+   ============================================================ */
+function vCustHome(){
+  const liveReqs = S.requests.filter(r=>r.status==="live"||r.status==="awaiting");
+  const activeBk = S.bookings.filter(b=>["confirmed","enroute","arrived","shooting"].includes(b.status));
+  const online = S.photographers.filter(p=>p.online);
+  const top = S.photographers.slice().sort((a,b)=>b.rating-a.rating).slice(0,4);
+
+  return `
+  <div class="pad" style="padding-bottom:6px">
+    <div class="between">
+      <div class="grow" style="cursor:pointer" onclick="push('setArea')">
+        <div class="xs muted2 row gap6" style="font-weight:700;letter-spacing:.6px">${icon("pin",12,"var(--accent)")} DELIVERING TO</div>
+        <div class="row gap6" style="font-weight:750;font-size:16px;margin-top:2px">
+          ${esc(cust().area)} <span class="muted2" style="font-size:11px">▾</span>
+        </div>
+      </div>
+      <button class="iconbtn" onclick="push('notifs')" style="position:relative">
+        ${icon("bell",17)}
+        ${unreadCount()?`<i style="position:absolute;top:6px;right:7px;width:7px;height:7px;border-radius:50%;background:var(--red)"></i>`:""}
+      </button>
+      ${avatarHtml({id:"cust",name:cust().name},"av-40")}
+    </div>
+  </div>
+
+  ${activeBk.length?`<div class="pad" style="padding-top:6px;padding-bottom:0">
+    ${activeBk.map(b=>liveTrackerCard(b)).join("")}
+  </div>`:""}
+
+  ${liveReqs.length?`<div class="pad" style="padding-top:12px;padding-bottom:0">
+    ${liveReqs.map(r=>liveRequestCard(r)).join("")}
+  </div>`:""}
+
+  <div class="pad">
+    <div class="h1">Need a photographer<br><span class="accent">right now?</span></div>
+    <div class="sm muted mt8">${online.length} pros online near ${esc(cust().area)} · average response ${Math.round(online.reduce((a,p)=>a+p.responseMin,0)/Math.max(online.length,1))} min</div>
+
+    <button class="btn primary block mt16" onclick="startRequest()">
+      ${icon("bolt",18,"#fff",2.2)} Book a photographer
+    </button>
+
+    <div class="grid3 mt12">
+      ${URGENCY.slice(0,3).map(u=>`
+        <button class="u-card" onclick="startRequest('${u.id}')" style="padding:11px">
+          <div class="u-em">${u.emoji}</div>
+          <div class="u-t" style="font-size:12.5px">${u.label}</div>
+          <div class="u-s">${u.surge>1?`${Math.round((u.surge-1)*100)}% surge`:"no surge"}</div>
+        </button>`).join("")}
+    </div>
+  </div>
+
+  <div class="pad" style="padding-top:0">
+    <div class="sec-title">What are you shooting?</div>
+    <div class="hscroll">
+      ${CATEGORIES.map(c=>`
+        <button class="card tap" style="width:96px;padding:12px 8px;text-align:center" onclick="startRequest(null,'${c.id}')">
+          <div style="font-size:24px">${c.emoji}</div>
+          <div class="xs bold mt8">${c.name}</div>
+          <div class="xs muted2" style="margin-top:2px">${inr(c.base)}+</div>
+        </button>`).join("")}
+    </div>
+  </div>
+
+  <div class="pad" style="padding-top:4px">
+    <div class="sec-title">Online near you</div>
+    ${mapSvg(online.slice(0,7).map(p=>({x:p.x,y:p.y,label:p.name[0],onclick:`push('pgDetail',{id:'${p.id}'})`})),{caption:online.length+" photographers online"})}
+  </div>
+
+  <div class="pad" style="padding-top:4px">
+    <div class="between mb12">
+      <div class="sec-title" style="margin:0">Top rated</div>
+      <button class="xs accent bold" onclick="go('explore')">See all →</button>
+    </div>
+    <div class="stack gap10">${top.map(p=>pgCardHtml(p)).join("")}</div>
+  </div>
+
+  <div class="pad" style="padding-top:0">
+    <div class="card" style="background:linear-gradient(135deg,rgba(255,90,31,.12),rgba(166,124,255,.10));border-color:rgba(255,90,31,.25)">
+      <div class="row gap12">
+        <div style="font-size:26px">🛡️</div>
+        <div class="grow">
+          <div class="bold sm">SnapNow Guarantee</div>
+          <div class="xs muted mt4">No-show? Full refund + we dispatch a backup pro free. Every photographer is ID-verified and portfolio-reviewed.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div style="height:24px"></div>`;
+}
+
+function liveRequestCard(r){
+  const left = r.expiresAt-Date.now();
+  const cat = catById(r.category);
+  return `<div class="card tap mb12" style="border-color:rgba(255,90,31,.35);background:linear-gradient(135deg,rgba(255,90,31,.10),transparent)"
+      onclick="push('matching',{id:'${r.id}'})">
+    <div class="between">
+      <div class="row gap8">
+        <span style="font-size:18px">${cat.emoji}</span>
+        <div>
+          <div class="bold sm">${cat.name} · ${esc(r.area)}</div>
+          <div class="xs muted2">${dayStr(r.startAt)} ${clockStr(new Date(r.startAt))} · ${r.hours}h</div>
+        </div>
+      </div>
+      <div class="stack" style="align-items:flex-end">
+        <div class="bold accent timer" data-countdown="${r.expiresAt}">${mmss(left)}</div>
+        <div class="xs muted2">${r.status==="live"?"searching":"pick one"}</div>
+      </div>
+    </div>
+    <div class="row gap8 mt12">
+      <div class="grow progress"><i style="width:${clamp(r.offers.length/5*100,6,100)}%"></i></div>
+      <div class="xs bold ${r.offers.length?"green":"muted2"}">${r.offers.length} accepted</div>
+    </div>
+    ${r.offers.length?`<div class="row gap6 mt12">
+      ${r.offers.slice(0,5).map(o=>{const p=S.photographers.find(x=>x.id===o.photographerId);return avatarHtml(p,"av-40")}).join("")}
+      <div class="grow"></div>
+      <span class="chip accent">View offers →</span>
+    </div>`:`<div class="xs muted mt8 blink">${icon("bolt",11,"var(--accent)")} Pinging ${r.pinged.length} photographers nearby…</div>`}
+  </div>`;
+}
+
+function liveTrackerCard(b){
+  const pg=S.photographers.find(p=>p.id===b.photographerId);
+  const steps=["confirmed","enroute","arrived","shooting"];
+  const i=steps.indexOf(b.status);
+  return `<div class="card tap mb12" style="border-color:rgba(40,199,111,.3);background:linear-gradient(135deg,rgba(40,199,111,.09),transparent)"
+      onclick="push('booking',{id:'${b.id}'})">
+    <div class="row gap12">
+      ${avatarHtml(pg,"av-48",true)}
+      <div class="grow">
+        <div class="bold sm">${esc(pg.name)}</div>
+        <div class="xs muted mt4">${b.status==="enroute"?`Arriving in ~${b.etaMin} min`:b.status==="arrived"?"Has arrived at your location":b.status==="shooting"?"Shoot in progress":dayStr(b.startAt)+" at "+clockStr(new Date(b.startAt))}</div>
+      </div>
+      ${statusChip(b.status)}
+    </div>
+    <div class="row gap4 mt12">
+      ${steps.map((s,k)=>`<div class="grow progress"><i style="width:${k<=i?100:0}%"></i></div>`).join("")}
+    </div>
+    <div class="row gap8 mt12">
+      <button class="btn sm grow" onclick="event.stopPropagation();push('chat',{id:'${b.id}'})">${icon("chat",14)} Message</button>
+      <button class="btn sm grow" onclick="event.stopPropagation();push('booking',{id:'${b.id}'})">${icon("pin",14)} Track</button>
+    </div>
+  </div>`;
+}
+
+function unreadCount(){ return Math.max(0, S.notifs.filter(n=>!n.for||n.for===S.role).length - (S.seenNotifs||0)); }
+
+/* ---------- explore ---------- */
+function vCustExplore(){
+  const f = S.filter||{cat:"all",sort:"rating",online:false};
+  let list = S.photographers.slice();
+  if(f.cat!=="all") list=list.filter(p=>p.cats.includes(f.cat));
+  if(f.online) list=list.filter(p=>p.online);
+  if(f.q) list=list.filter(p=>p.name.toLowerCase().includes(f.q.toLowerCase())||p.bio.toLowerCase().includes(f.q.toLowerCase()));
+  list.sort((a,b)=> f.sort==="rating"? b.rating-a.rating : f.sort==="price"? (a.priceMult-b.priceMult) : (a.distance-b.distance));
+
+  return `<div class="pad" style="position:sticky;top:0;z-index:20;background:rgba(10,10,15,.94);backdrop-filter:blur(12px);border-bottom:1px solid var(--border-soft)">
+    <div class="h2 mb12">Explore photographers</div>
+    <div class="row gap8">
+      <div class="row grow" style="background:var(--surface);border:1px solid var(--border);border-radius:13px;padding:0 12px">
+        ${icon("search",16,"var(--muted-2)")}
+        <input id="exploreSearch" class="grow" style="background:none;border:0;outline:none;padding:11px 8px" placeholder="Search name or style"
+          value="${esc(f.q||"")}" oninput="setFilter('q',this.value)">
+      </div>
+      <button class="iconbtn" style="${f.online?"border-color:var(--green);color:var(--green)":""}" onclick="setFilter('online',${!f.online})">${icon("power",16)}</button>
+    </div>
+    <div class="hscroll mt12" style="padding-bottom:2px">
+      <button class="chip ${f.cat==="all"?"accent":""}" onclick="setFilter('cat','all')">All</button>
+      ${CATEGORIES.map(c=>`<button class="chip ${f.cat===c.id?"accent":""}" onclick="setFilter('cat','${c.id}')">${c.emoji} ${c.name}</button>`).join("")}
+    </div>
+    <div class="row gap6 mt8">
+      <span class="xs muted2 bold">SORT</span>
+      ${[["rating","Top rated"],["price","Price"],["dist","Nearest"]].map(([k,l])=>
+        `<button class="chip ${f.sort===k?"accent":""}" onclick="setFilter('sort','${k}')">${l}</button>`).join("")}
+    </div>
+  </div>
+  <div class="pad stack gap10">
+    <div class="xs muted2">${list.length} photographer${list.length===1?"":"s"}</div>
+    ${list.length?list.map(p=>pgCardHtml(p)).join(""):`<div class="empty"><div class="e-ic">🔍</div>No matches. Try clearing filters.</div>`}
+  </div><div style="height:20px"></div>`;
+}
+function setFilter(k,v){ S.filter=Object.assign({cat:"all",sort:"rating",online:false},S.filter,{[k]:v}); save(); render(); }
+
+/* ============================================================
+   CUSTOMER — NEW REQUEST
+   ============================================================ */
+function startRequest(urgency,category){
+  S.draft = {
+    category: category||"event",
+    urgency: urgency||"1h",
+    hours: 2,
+    area: cust().area,
+    address: "",
+    budget: 6000,
+    notes: "",
+    deliverables: ["Edited photos"],
+    customDate: "",
+    step: 1
+  };
+  save(); push("newRequest");
+}
+function setDraft(k,v){ S.draft[k]=v; save(); render(); }
+function toggleDeliverable(d){
+  const a=S.draft.deliverables;
+  const i=a.indexOf(d); i<0?a.push(d):a.splice(i,1);
+  save(); render();
+}
+const DELIVERABLES=["Edited photos","RAW files","Same-day preview","Video reel","Drone shots","Prints"];
+
+function vNewRequest(){
+  const d=S.draft; if(!d){ pop(); return ""; }
+  const cat=catById(d.category), urg=urgById(d.urgency);
+  const startAt = d.customDate? new Date(d.customDate).getTime() : Date.now()+urg.mins*60000;
+  const est = Math.round(cat.base*(d.hours/2)*urg.surge);
+  const matching = S.photographers.filter(p=>p.cats.includes(d.category));
+  const onlineMatch = matching.filter(p=>p.online).length;
+
+  return `${topbar("New shoot request","Step "+d.step+" of 3")}
+  <div class="pad">
+    <div class="row gap4 mb16">${[1,2,3].map(i=>`<div class="grow progress"><i style="width:${d.step>=i?100:0}%"></i></div>`).join("")}</div>
+
+    ${d.step===1?`
+      <div class="h2 mb4">When do you need them?</div>
+      <div class="sm muted mb16">Faster slots cost more — same as surge pricing.</div>
+      <div class="urgency">
+        ${URGENCY.map(u=>`
+          <button class="u-card ${d.urgency===u.id?"on":""}" onclick="setDraft('urgency','${u.id}')">
+            ${u.surge>1?`<span class="u-surge">+${Math.round((u.surge-1)*100)}%</span>`:""}
+            <div class="u-em">${u.emoji}</div>
+            <div class="u-t">${u.label}</div>
+            <div class="u-s">${u.sub}</div>
+          </button>`).join("")}
+      </div>
+      ${d.urgency==="pick"?`
+        <div class="field mt16"><label>Date &amp; time</label>
+          <input class="input" type="datetime-local" value="${esc(d.customDate)}" onchange="setDraft('customDate',this.value)">
+        </div>`:""}
+      <div class="field mt16">
+        <label>How long is the shoot?</label>
+        <div class="row gap8">
+          ${[1,2,3,4,6,8].map(h=>`<button class="chip ${d.hours===h?"accent":""}" style="padding:9px 13px" onclick="setDraft('hours',${h})">${h}h</button>`).join("")}
+        </div>
+      </div>
+      <div class="card mt16" style="background:var(--surface-2)">
+        <div class="kv"><span>Arrives</span><span>${dayStr(startAt)}, ${clockStr(new Date(startAt))}</span></div>
+        <div class="kv"><span>Surge multiplier</span><span class="${urg.surge>1?"accent":"green"}">${urg.surge}×</span></div>
+      </div>
+      <button class="btn primary block mt20" onclick="setDraft('step',2)">Continue</button>
+
+    `:d.step===2?`
+      <div class="h2 mb4">What are we shooting?</div>
+      <div class="sm muted mb16">This decides which photographers get pinged.</div>
+      <div class="grid3" style="gap:8px">
+        ${CATEGORIES.map(c=>`
+          <button class="u-card ${d.category===c.id?"on":""}" style="text-align:center;padding:12px 6px" onclick="setDraft('category','${c.id}')">
+            <div style="font-size:21px">${c.emoji}</div>
+            <div class="u-t" style="font-size:11.5px;margin-top:5px">${c.name}</div>
+          </button>`).join("")}
+      </div>
+      <div class="field mt20"><label>Deliverables</label>
+        <div class="row gap6" style="flex-wrap:wrap">
+          ${DELIVERABLES.map(x=>`<button class="chip ${d.deliverables.includes(x)?"accent":""}" onclick="toggleDeliverable('${x}')">${d.deliverables.includes(x)?"✓ ":""}${x}</button>`).join("")}
+        </div>
+      </div>
+      <div class="card mt16" style="background:var(--surface-2)">
+        <div class="row gap8"><span class="grow sm">${onlineMatch} of ${matching.length} ${cat.name.toLowerCase()} photographers are online right now</span>${icon("bolt",18,"var(--accent)")}</div>
+      </div>
+      <div class="row gap10 mt20">
+        <button class="btn grow" onclick="setDraft('step',1)">Back</button>
+        <button class="btn primary grow" onclick="setDraft('step',3)">Continue</button>
+      </div>
+
+    `:`
+      <div class="h2 mb4">Where &amp; how much?</div>
+      <div class="sm muted mb16">Photographers see this before they accept.</div>
+      <div class="field"><label>Area</label>
+        <select class="input" onchange="setDraft('area',this.value)">
+          ${AREAS.map(a=>`<option ${d.area===a?"selected":""}>${a}</option>`).join("")}
+        </select>
+      </div>
+      <div class="field"><label>Address / venue</label>
+        <input class="input" placeholder="e.g. Rooftop, 12th Main, near Metro" value="${esc(d.address)}" oninput="S.draft.address=this.value">
+      </div>
+      <div class="field">
+        <label>Your budget — ${inr(d.budget)}</label>
+        <input type="range" min="1000" max="40000" step="500" value="${d.budget}" style="width:100%;accent-color:var(--accent)" oninput="setDraft('budget',+this.value)">
+        <div class="between xs muted2"><span>₹1,000</span><span>Suggested ${inr(est)}</span><span>₹40,000</span></div>
+      </div>
+      <div class="field"><label>Notes for the photographer</label>
+        <textarea class="input" placeholder="Anything they should know — vibe, guest count, indoor/outdoor, must-have shots…" oninput="S.draft.notes=this.value">${esc(d.notes)}</textarea>
+      </div>
+      <div class="card" style="background:var(--surface-2)">
+        <div class="kv"><span>${cat.emoji} ${cat.name}</span><span>${d.hours} hours</span></div>
+        <div class="kv"><span>Starts</span><span>${dayStr(startAt)}, ${clockStr(new Date(startAt))}</span></div>
+        <div class="kv"><span>Estimated range</span><span>${inr(est*0.8)} – ${inr(est*1.5)}</span></div>
+      </div>
+      <div class="row gap10 mt20">
+        <button class="btn grow" onclick="setDraft('step',2)">Back</button>
+        <button class="btn primary grow" onclick="submitRequest()">${icon("bolt",17,"#fff")} Send request</button>
+      </div>
+    `}
+  </div><div style="height:24px"></div>`;
+}
+
+function submitRequest(){
+  const r = createRequest(S.draft);
+  S.draft=null; S.stack=[{name:"matching",props:{id:r.id}}];
+  save(); render(); scrollTop();
+}
+
+/* ============================================================
+   CUSTOMER — MATCHING / OFFERS
+   ============================================================ */
+function vMatching(props){
+  const r = S.requests.find(x=>x.id===props.id);
+  if(!r) return `${topbar("Request")}<div class="empty">Request not found.</div>`;
+  const cat=catById(r.category);
+  const searching = r.status==="live";
+  const offers = r.offers.slice().sort((a,b)=>{
+    const s=S.offerSort||"best";
+    const pa=S.photographers.find(p=>p.id===a.photographerId), pb=S.photographers.find(p=>p.id===b.photographerId);
+    if(s==="price")return a.price-b.price;
+    if(s==="eta")return a.etaMin-b.etaMin;
+    if(s==="rating")return pb.rating-pa.rating;
+    return (pb.rating*1000-b.price/50)-(pa.rating*1000-a.price/50);
+  });
+
+  if(r.status==="booked"){
+    const b=S.bookings.find(x=>x.id===r.bookingId);
+    return `${topbar("Booked")}<div class="pad">${b?bookingBody(b):""}</div>`;
+  }
+
+  return `${topbar(cat.name+" shoot", esc(r.area)+" · "+dayStr(r.startAt)+" "+clockStr(new Date(r.startAt)))}
+  <div class="pad">
+    ${searching?`
+      <div class="radar">
+        <div class="ring"></div><div class="ring" style="animation-delay:.85s"></div><div class="ring" style="animation-delay:1.7s"></div>
+        <div class="core">${icon("cam",28,"#fff",2)}</div>
+        ${r.offers.slice(0,6).map((o,i)=>{
+          const p=S.photographers.find(x=>x.id===o.photographerId);
+          const a=(i/6)*Math.PI*2, R=78;
+          const h=hueOf(p.id);
+          return `<div class="sat" style="transform:translate(${Math.cos(a)*R}px,${Math.sin(a)*R}px);background:linear-gradient(135deg,hsl(${h} 65% 45%),hsl(${(h+45)%360} 60% 32%))">${esc(p.name[0])}</div>`;
+        }).join("")}
+      </div>
+      <div class="center">
+        <div class="h2">${r.offers.length? r.offers.length+" photographer"+(r.offers.length>1?"s":"")+" accepted" : "Pinging photographers…"}</div>
+        <div class="sm muted mt4">Request sent to ${r.pinged.length} pros in ${esc(r.area)}</div>
+        <div class="row gap8 mt12" style="justify-content:center">
+          <span class="chip accent timer" data-countdown="${r.expiresAt}">${mmss(r.expiresAt-Date.now())} left</span>
+          <button class="chip red" onclick="cancelRequest('${r.id}')">Cancel</button>
+        </div>
+      </div>
+    `:`
+      <div class="between mb12">
+        <div><div class="h2">${offers.length} offer${offers.length===1?"":"s"}</div><div class="xs muted2">Pick one to book</div></div>
+        <span class="chip">${r.hours}h · ${cat.emoji}</span>
+      </div>
+    `}
+
+    ${offers.length?`
+      <div class="row gap6 mt16 mb12" style="overflow-x:auto">
+        <span class="xs muted2 bold" style="flex:0 0 auto">SORT</span>
+        ${[["best","Best match"],["price","Cheapest"],["eta","Fastest"],["rating","Top rated"]].map(([k,l])=>
+          `<button class="chip ${(S.offerSort||"best")===k?"accent":""}" style="flex:0 0 auto" onclick="S.offerSort='${k}';save();render()">${l}</button>`).join("")}
+      </div>
+      <div class="stack gap10">
+        ${offers.map((o,i)=>offerCard(r,o,i===0&&(S.offerSort||"best")==="best")).join("")}
+      </div>`:
+      searching?"":`<div class="empty"><div class="e-ic">😕</div>No one accepted in time.<div class="mt12"><button class="btn sm primary" onclick="rebroadcast('${r.id}')">Broadcast again</button></div></div>`}
+
+    ${searching?`<div class="mt20">
+      <div class="sec-title">Who's being pinged</div>
+      ${mapSvg(r.pinged.slice(0,8).map(id=>{
+        const p=S.photographers.find(x=>x.id===id);
+        const has=r.offers.some(o=>o.photographerId===id);
+        return {x:p.x,y:p.y,label:p.name[0],color:has?"var(--green)":"var(--muted-2)",onclick:`push('pgDetail',{id:'${p.id}'})`};
+      }),{caption:"green = accepted"})}
+    </div>`:""}
+
+    <div class="card mt16">
+      <div class="sec-title">Your request</div>
+      <div class="kv"><span>Type</span><span>${cat.emoji} ${cat.name}</span></div>
+      <div class="kv"><span>When</span><span>${dayStr(r.startAt)}, ${clockStr(new Date(r.startAt))}</span></div>
+      <div class="kv"><span>Duration</span><span>${r.hours} hours</span></div>
+      <div class="kv"><span>Location</span><span>${esc(r.address||r.area)}</span></div>
+      <div class="kv"><span>Budget</span><span>${inr(r.budget)}</span></div>
+      ${r.deliverables.length?`<div class="kv"><span>Deliverables</span><span style="text-align:right;max-width:60%">${r.deliverables.map(esc).join(", ")}</span></div>`:""}
+      ${r.notes?`<div class="mt8 xs muted" style="line-height:1.5">"${esc(r.notes)}"</div>`:""}
+    </div>
+  </div><div style="height:24px"></div>`;
+}
+
+function offerCard(r,o,isBest){
+  const p=S.photographers.find(x=>x.id===o.photographerId);
+  const overBudget = o.price>r.budget;
+  return `<div class="card offer" style="${isBest?"border-color:rgba(255,90,31,.4)":""}">
+    ${isBest?`<div class="chip accent mb12" style="font-size:10px">⭐ BEST MATCH</div>`:""}
+    <div class="row gap12" onclick="push('pgDetail',{id:'${p.id}',reqId:'${r.id}'})" style="cursor:pointer">
+      ${avatarHtml(p,"av-56",p.online)}
+      <div class="grow">
+        <div class="row gap6"><span class="bold">${esc(p.name)}</span>${p.verified?icon("shield",12,"var(--blue)"):""}</div>
+        <div class="row gap6 xs muted mt4">${starsHtml(p.rating,10)}<span class="bold" style="color:var(--accent-2)">${p.rating}</span><span class="muted2">·</span>${p.jobs} shoots</div>
+        <div class="row gap6 mt8">
+          <span class="chip" style="font-size:10px">${icon("clock",10)} ~${o.etaMin} min away</span>
+          <span class="chip" style="font-size:10px">${p.distance} km</span>
+        </div>
+      </div>
+      <div class="stack" style="align-items:flex-end">
+        <div class="h3 ${overBudget?"":"green"}">${inr(o.price)}</div>
+        <div class="xs muted2">${overBudget?`${inr(o.price-r.budget)} over`:"in budget"}</div>
+      </div>
+    </div>
+    <div class="pstrip mt12">${p.portfolio.slice(0,4).map(i=>photoTile(p.id,i)).join("")}</div>
+    ${o.note?`<div class="xs muted mt12" style="line-height:1.5;padding:9px 11px;background:var(--surface-2);border-radius:11px">"${esc(o.note)}"</div>`:""}
+    <div class="row gap8 mt12">
+      <button class="btn sm grow ghost" onclick="push('pgDetail',{id:'${p.id}',reqId:'${r.id}'})">View portfolio</button>
+      <button class="btn sm primary grow" onclick="push('checkout',{reqId:'${r.id}',offerId:'${o.id}'})">Book ${inr(o.price)}</button>
+    </div>
+  </div>`;
+}
+
+function cancelRequest(id){
+  const r=S.requests.find(x=>x.id===id); if(!r)return;
+  if(!confirm("Cancel this request?"))return;
+  r.status="cancelled"; save(); notify("Request cancelled","",{for:"customer",icon:"x"}); pop();
+}
+function rebroadcast(id){
+  const r=S.requests.find(x=>x.id===id); if(!r)return;
+  r.status="live"; r.expiresAt=Date.now()+BROADCAST_MS; save(); scheduleSimOffers(r); render();
+}
+
+/* ============================================================
+   CUSTOMER — PHOTOGRAPHER PROFILE
+   ============================================================ */
+function vPgDetail(props){
+  const p=S.photographers.find(x=>x.id===props.id);
+  if(!p)return `${topbar("Photographer")}<div class="empty">Not found.</div>`;
+  const req = props.reqId? S.requests.find(r=>r.id===props.reqId):null;
+  const offer = req? req.offers.find(o=>o.photographerId===p.id):null;
+  const tab = S.pgTab||"work";
+  const avg = p.reviews.reduce((a,r)=>a+r.stars,0)/Math.max(p.reviews.length,1);
+
+  return `${topbar(p.name, p.area+" · "+p.distance+" km away")}
+  <div style="position:relative">
+    <div class="ph" style="${photoBg(p.id,99)};height:150px"><div class="grain"></div></div>
+    <div style="position:absolute;left:18px;bottom:-28px">${avatarHtml(p,"av-72",p.online)}</div>
+  </div>
+  <div class="pad" style="padding-top:36px">
+    <div class="between">
+      <div>
+        <div class="row gap6"><span class="h2">${esc(p.name)}</span>${p.verified?icon("shield",15,"var(--blue)"):""}</div>
+        <div class="row gap6 sm mt4">${starsHtml(p.rating,12)}<span class="bold" style="color:var(--accent-2)">${p.rating}</span>
+          <span class="muted2">·</span><span class="muted">${p.jobs} shoots</span></div>
+      </div>
+      ${p.online?`<span class="chip green">● Online</span>`:`<span class="chip">Offline</span>`}
+    </div>
+    <div class="sm muted mt12" style="line-height:1.55">${esc(p.bio)}</div>
+
+    <div class="grid3 mt16">
+      <div class="stat center"><div class="s-v">${p.years}y</div><div class="s-l">Experience</div></div>
+      <div class="stat center"><div class="s-v">${p.responseMin}m</div><div class="s-l">Avg response</div></div>
+      <div class="stat center"><div class="s-v">${p.distance}km</div><div class="s-l">Away</div></div>
+    </div>
+
+    <div class="row gap6 mt16" style="flex-wrap:wrap">
+      ${p.cats.map(c=>`<span class="chip accent">${catById(c).emoji} ${catById(c).name}</span>`).join("")}
+    </div>
+
+    <div class="row gap8 mt20" style="background:var(--surface);padding:4px;border-radius:14px">
+      ${[["work","Work"],["reviews","Reviews ("+p.reviews.length+")"],["about","About"]].map(([k,l])=>
+        `<button class="grow" style="padding:9px;border-radius:11px;font-size:13px;font-weight:700;${tab===k?"background:var(--surface-3);color:var(--text)":"color:var(--muted-2)"}"
+          onclick="S.pgTab='${k}';save();render()">${l}</button>`).join("")}
+    </div>
+
+    <div class="mt16">
+      ${tab==="work"?`<div class="pgrid">${p.portfolio.map(i=>photoTile(p.id,i)).join("")}</div>`
+      :tab==="reviews"?`
+        <div class="card mb12 row gap16" style="align-items:center">
+          <div class="center"><div style="font-size:32px;font-weight:800;letter-spacing:-1px">${avg.toFixed(1)}</div>${starsHtml(avg,11)}<div class="xs muted2 mt4">${p.reviews.length} reviews</div></div>
+          <div class="grow stack gap4">
+            ${[5,4,3,2,1].map(s=>{const n=p.reviews.filter(r=>r.stars===s).length;const pc=n/Math.max(p.reviews.length,1)*100;
+              return `<div class="row gap8"><span class="xs muted2" style="width:8px">${s}</span><div class="grow progress"><i style="width:${pc}%"></i></div></div>`}).join("")}
+          </div>
+        </div>
+        <div class="stack gap10">
+        ${p.reviews.map(r=>`<div class="card">
+          <div class="between"><div class="row gap8">${avatarHtml({id:r.by,name:r.by},"av-40")}<div><div class="bold sm">${esc(r.by)}</div><div class="xs muted2">${timeAgo(r.at)}</div></div></div>${starsHtml(r.stars,11)}</div>
+          <div class="sm muted mt8" style="line-height:1.5">${esc(r.text)}</div></div>`).join("")}
+        </div>`
+      :`
+        <div class="card mb12"><div class="sec-title">Gear</div>
+          <div class="row gap6" style="flex-wrap:wrap">${p.gear.map(g=>`<span class="chip">${esc(g)}</span>`).join("")}</div></div>
+        <div class="card mb12"><div class="sec-title">Known for</div>
+          <div class="row gap6" style="flex-wrap:wrap">${p.traits.map(t=>`<span class="chip purple">${esc(t)}</span>`).join("")}</div></div>
+        <div class="card"><div class="sec-title">Packages</div>
+          ${[["1 hour",1],["2 hours (popular)",2],["4 hours",4],["Full day (8h)",8]].map(([l,h])=>
+            `<div class="kv"><span>${l}</span><span>${inr(catById(p.cats[0]).base*(h/2)*p.priceMult)}</span></div>`).join("")}
+        </div>
+        <div class="card mt12"><div class="sec-title">Based in</div>
+          ${mapSvg([{x:p.x,y:p.y,label:p.name[0]}],{caption:p.area+" · "+p.distance+" km from you"})}</div>`}
+    </div>
+  </div>
+  <div style="height:88px"></div>
+  <div style="position:sticky;bottom:0;padding:12px 18px 16px;background:linear-gradient(transparent,var(--bg) 26%);">
+    ${offer?`
+      <div class="row gap10">
+        <div class="stack"><div class="xs muted2">Their quote</div><div class="h3">${inr(offer.price)}</div></div>
+        <button class="btn primary grow" onclick="push('checkout',{reqId:'${req.id}',offerId:'${offer.id}'})">Book ${esc(p.name.split(" ")[0])}</button>
+      </div>`:`
+      <button class="btn primary block" onclick="startRequest(null,'${p.cats[0]}')">${icon("bolt",17,"#fff")} Request a shoot like this</button>`}
+  </div>`;
+}
+
+/* ============================================================
+   CUSTOMER — CHECKOUT
+   ============================================================ */
+function vCheckout(props){
+  const r=S.requests.find(x=>x.id===props.reqId);
+  const o=r&&r.offers.find(x=>x.id===props.offerId);
+  if(!r||!o)return `${topbar("Checkout")}<div class="empty">Offer no longer available.</div>`;
+  const p=S.photographers.find(x=>x.id===o.photographerId);
+  const f=feeBreakdown(o.price);
+  const pm=S.payMethod||"upi";
+  const methods=[["upi","UPI","Pay via any UPI app","⚡"],["card","Card","Visa •••• 4291","💳"],["wallet","SnapNow Wallet",inr(cust().wallet)+" available","🪙"],["cash","Pay on arrival","Cash / card to photographer","💵"]];
+  const walletShort = pm==="wallet" && cust().wallet<f.total;
+
+  return `${topbar("Confirm & pay", esc(p.name))}
+  <div class="pad">
+    <div class="card">
+      <div class="row gap12">
+        ${avatarHtml(p,"av-56",p.online)}
+        <div class="grow">
+          <div class="bold">${esc(p.name)}</div>
+          <div class="row gap6 xs muted mt4">${starsHtml(p.rating,10)}<span class="bold" style="color:var(--accent-2)">${p.rating}</span><span class="muted2">·</span>arrives in ~${o.etaMin} min</div>
+        </div>
+      </div>
+      <div class="divider"></div>
+      <div class="kv"><span>Shoot</span><span>${catById(r.category).emoji} ${catById(r.category).name}</span></div>
+      <div class="kv"><span>When</span><span>${dayStr(r.startAt)}, ${clockStr(new Date(r.startAt))}</span></div>
+      <div class="kv"><span>Duration</span><span>${r.hours} hours</span></div>
+      <div class="kv"><span>Where</span><span style="text-align:right;max-width:60%">${esc(r.address||r.area)}</span></div>
+    </div>
+
+    <div class="sec-title mt20">Payment method</div>
+    <div class="stack gap8">
+      ${methods.map(([k,t,s,e])=>`
+        <button class="card tap row gap12" style="${pm===k?"border-color:var(--accent);background:var(--accent-soft)":""}" onclick="S.payMethod='${k}';save();render()">
+          <span style="font-size:20px">${e}</span>
+          <div class="grow" style="text-align:left"><div class="bold sm">${t}</div><div class="xs muted2">${s}</div></div>
+          <span style="width:18px;height:18px;border-radius:50%;border:2px solid ${pm===k?"var(--accent)":"var(--border)"};display:grid;place-items:center">
+            ${pm===k?'<i style="width:8px;height:8px;border-radius:50%;background:var(--accent)"></i>':""}</span>
+        </button>`).join("")}
+    </div>
+
+    <div class="card mt20">
+      <div class="sec-title">Bill</div>
+      <div class="kv"><span>Photographer fee (${r.hours}h)</span><span>${inr(f.amount)}</span></div>
+      <div class="kv"><span>Travel</span><span>${inr(f.travel)}</span></div>
+      <div class="kv"><span>Platform fee (8%)</span><span>${inr(f.platform)}</span></div>
+      <div class="kv"><span>GST (18%)</span><span>${inr(f.gst)}</span></div>
+      <div class="kv" style="border-top:1px solid var(--border);margin-top:6px;padding-top:12px">
+        <span class="bold" style="color:var(--text)">Total</span><span class="h3">${inr(f.total)}</span></div>
+    </div>
+
+    ${walletShort?`<div class="card mt12" style="border-color:rgba(255,77,94,.35)"><div class="sm" style="color:var(--red)">Wallet balance is short by ${inr(f.total-cust().wallet)}. Pick another method.</div></div>`:""}
+
+    <div class="row gap8 mt12 xs muted2" style="line-height:1.5">
+      ${icon("shield",14,"var(--green)")}<span>Free cancellation up to 30 min before the shoot. Money is held in escrow and released after delivery.</span>
+    </div>
+
+    <button class="btn primary block mt20" ${walletShort?"disabled":""} onclick="doPay('${r.id}','${o.id}')">
+      ${icon("check",17,"#fff")} Pay ${inr(f.total)}
+    </button>
+  </div><div style="height:24px"></div>`;
+}
+
+function doPay(reqId,offerId){
+  const scr=el("screen");
+  scr.innerHTML=`<div class="empty" style="padding-top:150px">
+    <div style="width:64px;height:64px;margin:0 auto 18px;border-radius:50%;border:3px solid var(--surface-3);border-top-color:var(--accent);animation:spin .8s linear infinite"></div>
+    <div class="h3" style="color:var(--text)">Processing payment…</div>
+    <div class="sm muted mt8">Securing your slot</div></div>
+    <style>@keyframes spin{to{transform:rotate(360deg)}}</style>`;
+  setTimeout(()=>{
+    const b=bookOffer(reqId,offerId,S.payMethod||"upi");
+    if(b && (S.payMethod==="wallet")) cust().wallet-=b.total;
+    S.stack=[{name:"success",props:{id:b.id}}]; save(); render();
+  },1500);
+}
+
+function vSuccess(props){
+  const b=S.bookings.find(x=>x.id===props.id);
+  if(!b)return `<div class="empty">Booking not found.</div>`;
+  const p=S.photographers.find(x=>x.id===b.photographerId);
+  return `<div class="pad center" style="padding-top:70px">
+    <div style="width:88px;height:88px;margin:0 auto;border-radius:50%;background:var(--green-soft);display:grid;place-items:center;animation:fadein .5s">
+      ${icon("check",42,"var(--green)",2.6)}</div>
+    <div class="h1 mt20">You're booked!</div>
+    <div class="sm muted mt8">${esc(p.name)} is confirmed for<br>${dayStr(b.startAt)} at ${clockStr(new Date(b.startAt))}</div>
+    <div class="card mt24" style="text-align:left">
+      <div class="row gap12">${avatarHtml(p,"av-48",true)}
+        <div class="grow"><div class="bold sm">${esc(p.name)}</div><div class="xs muted2">${p.rating}★ · ${p.jobs} shoots · ${esc(p.area)}</div></div>
+        <button class="iconbtn" onclick="push('chat',{id:'${b.id}'})">${icon("chat",16)}</button></div>
+      <div class="divider"></div>
+      <div class="kv"><span>Booking ID</span><span style="font-family:monospace">${b.id.slice(-8).toUpperCase()}</span></div>
+      <div class="kv"><span>Paid</span><span class="green">${inr(b.total)}</span></div>
+      <div class="kv"><span>Method</span><span>${({upi:"UPI",card:"Card",wallet:"Wallet",cash:"On arrival"})[b.payMethod]}</span></div>
+    </div>
+    <button class="btn primary block mt20" onclick="S.stack=[{name:'booking',props:{id:'${b.id}'}}];save();render()">Track booking</button>
+    <button class="btn block mt8 ghost" onclick="go('home')">Back to home</button>
+  </div>`;
+}
+
+/* ============================================================
+   CUSTOMER — BOOKING / LIVE TRACKING
+   ============================================================ */
+function bookingBody(b){
+  const p=S.photographers.find(x=>x.id===b.photographerId);
+  const steps=[["confirmed","Booking confirmed","Photographer is locked in"],
+               ["enroute","On the way","Heading to your location"],
+               ["arrived","Arrived","At "+b.area],
+               ["shooting","Shooting","Session in progress"],
+               ["delivered","Gallery delivered","Edited photos ready"]];
+  const i=steps.findIndex(s=>s[0]===b.status);
+  const cancelled=b.status==="cancelled";
+  const pgPos = b.status==="enroute" ? {x:p.x*0.5+140*0.5, y:p.y*0.5+150*0.5} : b.status==="confirmed"? {x:p.x,y:p.y} : {x:140,y:150};
+
+  return `
+  ${!cancelled&&["enroute","arrived","shooting"].includes(b.status)?`
+    <div class="mb16">${mapSvg([{x:pgPos.x,y:pgPos.y,label:p.name[0],color:"var(--accent)"}],
+      {caption: b.status==="enroute"? `${p.name} · ~${b.etaMin} min away` : b.status==="arrived"? `${p.name} has arrived`:"Shoot in progress"})}</div>
+  `:""}
+
+  <div class="card">
+    <div class="row gap12">
+      ${avatarHtml(p,"av-56",p.online)}
+      <div class="grow"><div class="bold">${esc(p.name)}</div>
+        <div class="row gap6 xs muted mt4">${starsHtml(p.rating,10)}<span class="bold" style="color:var(--accent-2)">${p.rating}</span><span class="muted2">·</span>${p.jobs} shoots</div></div>
+      ${statusChip(b.status)}
+    </div>
+    <div class="row gap8 mt12">
+      <button class="btn sm grow" onclick="push('chat',{id:'${b.id}'})">${icon("chat",14)} Message</button>
+      <button class="btn sm grow" onclick="push('pgDetail',{id:'${p.id}'})">Profile</button>
+    </div>
+  </div>
+
+  ${cancelled?`<div class="card mt12" style="border-color:rgba(255,77,94,.35)"><div class="bold sm" style="color:var(--red)">Cancelled</div><div class="xs muted mt4">${inr(b.total)} refunded to source in 3–5 days.</div></div>`:`
+  <div class="card mt12">
+    <div class="sec-title">Status</div>
+    ${steps.map((s,k)=>`
+      <div class="row gap12" style="align-items:flex-start;padding:7px 0">
+        <div class="stack" style="align-items:center;flex:0 0 22px">
+          <div style="width:20px;height:20px;border-radius:50%;display:grid;place-items:center;
+            background:${k<=i?"var(--green-soft)":"var(--surface-2)"};border:1.5px solid ${k<=i?"var(--green)":"var(--border)"}">
+            ${k<i?icon("check",11,"var(--green)",3):k===i?'<i style="width:7px;height:7px;border-radius:50%;background:var(--green)"></i>':""}</div>
+          ${k<steps.length-1?`<div style="width:2px;height:22px;background:${k<i?"var(--green)":"var(--border-soft)"}"></div>`:""}
+        </div>
+        <div class="grow" style="padding-bottom:6px">
+          <div class="sm ${k<=i?"bold":"muted2"}">${s[1]}</div>
+          <div class="xs ${k<=i?"muted":"muted2"}">${s[2]}</div>
+        </div>
+      </div>`).join("")}
+  </div>`}
+
+  <div class="card mt12">
+    <div class="sec-title">Details</div>
+    <div class="kv"><span>Booking ID</span><span style="font-family:monospace">${b.id.slice(-8).toUpperCase()}</span></div>
+    <div class="kv"><span>Shoot</span><span>${catById(b.category).emoji} ${catById(b.category).name}</span></div>
+    <div class="kv"><span>When</span><span>${dayStr(b.startAt)}, ${clockStr(new Date(b.startAt))}</span></div>
+    <div class="kv"><span>Duration</span><span>${b.hours} hours</span></div>
+    <div class="kv"><span>Location</span><span style="text-align:right;max-width:58%">${esc(b.address||b.area)}</span></div>
+    <div class="kv"><span>Total paid</span><span class="bold">${inr(b.total)}</span></div>
+  </div>
+
+  ${b.status==="delivered"&&!b.rated?`
+    <button class="btn primary block mt16" onclick="push('rate',{id:'${b.id}'})">${icon("star",16,"#fff")} Rate your shoot</button>`:""}
+  ${b.rated?`<div class="card mt12"><div class="sec-title">Your rating</div>
+    <div class="row gap8">${starsHtml(b.rated.stars,14)}<span class="sm muted">${esc(b.rated.text||"")}</span></div></div>`:""}
+
+  ${!cancelled&&b.status!=="delivered"?`
+    <div class="row gap8 mt16">
+      <button class="btn grow sm danger" onclick="if(confirm('Cancel this booking?'))cancelBooking(S.bookings.find(x=>x.id==='${b.id}'))">Cancel booking</button>
+      <button class="btn grow sm" onclick="advanceBooking(S.bookings.find(x=>x.id==='${b.id}'))">⏩ Simulate next step</button>
+    </div>
+    <div class="xs muted2 center mt8">"Simulate next step" fast-forwards the photographer's journey so you can see the whole flow.</div>`:""}`;
+}
+
+function vBooking(props){
+  const b=S.bookings.find(x=>x.id===props.id);
+  if(!b)return `${topbar("Booking")}<div class="empty">Not found.</div>`;
+  const p=S.photographers.find(x=>x.id===b.photographerId);
+  return `${topbar("Your booking", esc(p.name)+" · "+dayStr(b.startAt))}
+    <div class="pad">${bookingBody(b)}</div><div style="height:24px"></div>`;
+}
+
+/* ---------- rate ---------- */
+function vRate(props){
+  const b=S.bookings.find(x=>x.id===props.id); if(!b)return `${topbar("Rate")}<div class="empty">Not found.</div>`;
+  const p=S.photographers.find(x=>x.id===b.photographerId);
+  const st=S.rateDraft||{stars:5,text:""};
+  return `${topbar("Rate your shoot")}
+  <div class="pad center">
+    ${avatarHtml(p,"av-72")}
+    <div class="h2 mt12">How was ${esc(p.name.split(" ")[0])}?</div>
+    <div class="sm muted mt4">${catById(b.category).name} · ${dayStr(b.startAt)}</div>
+    <div class="row gap6 mt20" style="justify-content:center">
+      ${[1,2,3,4,5].map(i=>`<button onclick="S.rateDraft=Object.assign({text:''},S.rateDraft,{stars:${i}});save();render()" style="padding:4px">
+        <svg width="38" height="38" viewBox="0 0 24 24" fill="${i<=st.stars?"#ffc857":"#2b2b3a"}"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg></button>`).join("")}
+    </div>
+    <div class="sm accent bold mt8">${["","Poor","Not great","Good","Great","Outstanding"][st.stars]}</div>
+    <textarea class="input mt16" placeholder="Tell others what the experience was like…" oninput="S.rateDraft=Object.assign({stars:5},S.rateDraft,{text:this.value})">${esc(st.text)}</textarea>
+    <button class="btn primary block mt16" onclick="rateBooking(S.bookings.find(x=>x.id==='${b.id}'),(S.rateDraft||{stars:5}).stars,(S.rateDraft||{}).text);S.rateDraft=null;pop()">Submit review</button>
+  </div>`;
+}
+
+/* ============================================================
+   CHAT
+   ============================================================ */
+function vChat(props){
+  const b=S.bookings.find(x=>x.id===props.id);
+  if(!b)return `${topbar("Chat")}<div class="empty">Not found.</div>`;
+  const p=S.photographers.find(x=>x.id===b.photographerId);
+  const msgs=S.chats[b.id]||[];
+  const meIsPg = S.role==="photographer";
+  const other = meIsPg? {name:b.customerName,id:"cust"} : p;
+  return `<div class="topbar">
+      <button class="iconbtn" onclick="pop()">${icon("back",18)}</button>
+      ${avatarHtml(other,"av-40",!meIsPg&&p.online)}
+      <div class="grow"><div class="h3 truncate">${esc(other.name)}</div>
+        <div class="xs ${!meIsPg&&p.online?"green":"muted2"}">${meIsPg?"Customer":(p.online?"Online now":"Offline")}</div></div>
+    </div>
+    <div class="chat-scroll" id="chatScroll">
+      <div class="center xs muted2 mb8">${catById(b.category).emoji} ${catById(b.category).name} · ${dayStr(b.startAt)} ${clockStr(new Date(b.startAt))}</div>
+      ${msgs.map(m=>{
+        const mine = meIsPg ? m.from==="pg" : m.from==="customer";
+        return `<div class="bub ${mine?"me":"them"}">${esc(m.text)}<div class="bub-time">${clockStr(new Date(m.at))}</div></div>`;
+      }).join("")}
+      ${!meIsPg?`<div class="row gap6 mt8" style="flex-wrap:wrap">
+        ${["What time will you arrive?","Can you bring extra lighting?","Is parking available?","Send me a sample edit"].map(q=>
+          `<button class="chip" onclick="sendChat('${b.id}','customer','${q.replace(/'/g,"\\'")}')">${q}</button>`).join("")}
+      </div>`:""}
+    </div>
+    <div class="chat-input">
+      <input id="chatBox" placeholder="Message…" onkeydown="if(event.key==='Enter'){sendChat('${b.id}','${meIsPg?"pg":"customer"}',this.value);this.value=''}">
+      <button class="iconbtn" style="background:var(--accent);border-color:transparent" onclick="const i=el('chatBox');sendChat('${b.id}','${meIsPg?"pg":"customer"}',i.value);i.value=''">${icon("send",16,"#fff")}</button>
+    </div>`;
+}
+
+/* ============================================================
+   CUSTOMER — ACTIVITY / PROFILE / NOTIFS
+   ============================================================ */
+function vCustActivity(){
+  const live=S.requests.filter(r=>["live","awaiting"].includes(r.status));
+  const active=S.bookings.filter(b=>["confirmed","enroute","arrived","shooting"].includes(b.status));
+  const past=S.bookings.filter(b=>["delivered","cancelled"].includes(b.status));
+  const dead=S.requests.filter(r=>["expired","cancelled"].includes(r.status));
+
+  if(!live.length&&!S.bookings.length&&!dead.length)
+    return `<div class="pad"><div class="h2">Activity</div></div>
+      <div class="empty"><div class="e-ic">📷</div>Nothing yet.<div class="sm mt8">Book your first photographer and it'll show up here.</div>
+      <button class="btn primary sm mt16" onclick="startRequest()">Book a photographer</button></div>`;
+
+  return `<div class="pad"><div class="h2 mb16">Activity</div>
+    ${live.length?`<div class="sec-title">Live requests</div>${live.map(r=>liveRequestCard(r)).join("")}`:""}
+    ${active.length?`<div class="sec-title mt16">Upcoming &amp; in progress</div><div class="stack gap10">${active.map(b=>bookingRow(b)).join("")}</div>`:""}
+    ${past.length?`<div class="sec-title mt20">Past</div><div class="stack gap10">${past.map(b=>bookingRow(b)).join("")}</div>`:""}
+    ${dead.length?`<div class="sec-title mt20">Closed requests</div><div class="stack gap10">
+      ${dead.map(r=>`<div class="card row gap12" style="opacity:.65">
+        <span style="font-size:18px">${catById(r.category).emoji}</span>
+        <div class="grow"><div class="sm bold">${catById(r.category).name} · ${esc(r.area)}</div>
+          <div class="xs muted2">${timeAgo(r.createdAt)} · ${r.offers.length} offers</div></div>
+        ${statusChip(r.status)}</div>`).join("")}</div>`:""}
+  </div><div style="height:24px"></div>`;
+}
+
+function bookingRow(b){
+  const p=S.photographers.find(x=>x.id===b.photographerId);
+  return `<div class="card tap row gap12" onclick="push('booking',{id:'${b.id}'})">
+    ${avatarHtml(p,"av-48",p.online)}
+    <div class="grow">
+      <div class="bold sm truncate">${esc(p.name)}</div>
+      <div class="xs muted2">${catById(b.category).emoji} ${catById(b.category).name} · ${dayStr(b.startAt)} ${clockStr(new Date(b.startAt))}</div>
+      <div class="row gap6 mt8">${statusChip(b.status)}<span class="chip" style="font-size:10px">${inr(b.total)}</span></div>
+    </div>
+    <button class="iconbtn" onclick="event.stopPropagation();push('chat',{id:'${b.id}'})">${icon("chat",15)}</button>
+  </div>`;
+}
+
+function vCustProfile(){
+  const spent=S.bookings.filter(b=>b.status!=="cancelled").reduce((a,b)=>a+b.total,0);
+  const done=S.bookings.filter(b=>b.status==="delivered").length;
+  return `<div class="pad">
+    <div class="row gap16 mt8">
+      ${avatarHtml({id:"cust",name:cust().name},"av-72")}
+      <div class="grow"><div class="h2">${esc(cust().name)}</div>
+        <div class="sm muted">${esc(cust().area)} · member since 2024</div>
+        <div class="row gap6 mt8"><span class="chip accent">⭐ SnapNow Plus</span></div></div>
+    </div>
+    <div class="grid3 mt20">
+      <div class="stat center"><div class="s-v">${S.bookings.length}</div><div class="s-l">Bookings</div></div>
+      <div class="stat center"><div class="s-v">${done}</div><div class="s-l">Completed</div></div>
+      <div class="stat center"><div class="s-v" style="font-size:16px">${inr(spent)}</div><div class="s-l">Spent</div></div>
+    </div>
+    <div class="card mt16">
+      <div class="between"><div class="row gap10">${icon("wallet",18,"var(--accent)")}<span class="bold sm">SnapNow Wallet</span></div>
+        <span class="h3">${inr(cust().wallet)}</span></div>
+      <button class="btn sm block mt12" onclick="cust().wallet+=1000;save();render();toast('Added ₹1,000','Wallet topped up','wallet')">Add money</button>
+    </div>
+    <div class="card mt12">
+      ${[["pin","Saved addresses","3 saved"],["card","Payment methods","UPI, 1 card"],["bell","Notifications","All on"],["shield","Trust & safety","ID verified"],["chat","Help & support","24×7 chat"]]
+        .map(([ic,t,s])=>`<div class="row gap12" style="padding:11px 0;border-bottom:1px solid var(--border-soft)">
+          ${icon(ic,17,"var(--muted)")}<div class="grow"><div class="sm bold">${t}</div><div class="xs muted2">${s}</div></div>
+          <span class="muted2">›</span></div>`).join("")}
+    </div>
+    <div class="card mt12">
+      <div class="sec-title">Account</div>
+      <div class="field" style="margin-bottom:10px"><label>Your name</label>
+        <input class="input" value="${esc(cust().name)}" onchange="cust().name=this.value||'Guest';const a=acct();if(a)a.name=cust().name;save();render()"></div>
+      <div class="kv"><span>Mobile</span><span>+91 ${esc((acct()||{}).phone||"—")}</span></div>
+      <div class="kv"><span>Type</span><span>🙋 Customer</span></div>
+      <div class="row gap8 mt12">
+        <button class="btn sm grow" onclick="switchAccount()">Switch account</button>
+        <button class="btn sm grow danger" onclick="logout()">Log out</button>
+      </div>
+    </div>
+    <button class="btn block mt16 danger" onclick="resetAll()">Reset demo data</button>
+  </div><div style="height:24px"></div>`;
+}
+
+function vNotifs(){
+  S.seenNotifs=S.notifs.filter(n=>!n.for||n.for===S.role).length; save();
+  const list=S.notifs.filter(n=>!n.for||n.for===S.role);
+  return `${topbar("Notifications")}
+  <div class="pad">${list.length?`<div class="stack gap8">
+    ${list.map(n=>`<div class="card row gap12">
+      <div class="t-ic" style="background:var(--accent-soft);width:34px;height:34px;flex:0 0 34px;border-radius:11px;display:grid;place-items:center">${icon(n.icon,16,"var(--accent)")}</div>
+      <div class="grow"><div class="sm bold">${esc(n.title)}</div>
+        ${n.sub?`<div class="xs muted mt4">${esc(n.sub)}</div>`:""}
+        <div class="xs muted2 mt4">${timeAgo(n.at)}</div></div>
+    </div>`).join("")}</div>`:`<div class="empty"><div class="e-ic">🔔</div>No notifications yet.</div>`}</div>`;
+}
+
+function vSetArea(){
+  return `${topbar("Set your location")}
+  <div class="pad">
+    <div class="sm muted mb16">Photographers within ~10 km of this area get pinged.</div>
+    <div class="stack gap8">
+      ${AREAS.map(a=>`<button class="card tap row gap12" style="${cust().area===a?"border-color:var(--accent);background:var(--accent-soft)":""}"
+        onclick="cust().area='${a}';save();pop()">
+        ${icon("pin",17,cust().area===a?"var(--accent)":"var(--muted-2)")}
+        <div class="grow" style="text-align:left"><div class="sm bold">${a}</div>
+          <div class="xs muted2">${S.photographers.filter(p=>p.area===a).length} photographers based here</div></div>
+        ${cust().area===a?icon("check",16,"var(--accent)"):""}</button>`).join("")}
+    </div>
+  </div>`;
+}
+
+/* ============================================================
+   PHOTOGRAPHER SIDE
+   ============================================================ */
+function vPgHome(){
+  const me=myPg();
+  const openReqs = S.requests.filter(r=>r.status==="live" && r.pinged.includes(me.id)
+    && !r.offers.some(o=>o.photographerId===me.id) && !r.declined.includes(me.id));
+  const myOffers = S.requests.filter(r=>["live","awaiting"].includes(r.status)&&r.offers.some(o=>o.photographerId===me.id));
+  const myBookings = S.bookings.filter(b=>b.photographerId===me.id&&["confirmed","enroute","arrived","shooting"].includes(b.status));
+  const todayEarn = S.bookings.filter(b=>b.photographerId===me.id&&b.status!=="cancelled").reduce((a,b)=>a+Math.round(b.price*0.85),0);
+
+  return `<div class="pad">
+    <div class="between">
+      <div class="row gap12">${avatarHtml(me,"av-48",me.online)}
+        <div><div class="bold">${esc(me.name)}</div>
+          <div class="row gap6 xs muted mt4">${starsHtml(me.rating,10)}<span class="bold" style="color:var(--accent-2)">${me.rating}</span></div></div></div>
+      <button class="iconbtn" onclick="push('notifs')" style="position:relative">${icon("bell",17)}
+        ${unreadCount()?`<i style="position:absolute;top:6px;right:7px;width:7px;height:7px;border-radius:50%;background:var(--red)"></i>`:""}</button>
+    </div>
+
+    <div class="card mt16" style="${me.online?"border-color:rgba(40,199,111,.35);background:linear-gradient(135deg,rgba(40,199,111,.09),transparent)":""}">
+      <div class="between">
+        <div class="row gap12">${icon("power",20,me.online?"var(--green)":"var(--muted-2)")}
+          <div><div class="bold sm">${me.online?"You're online":"You're offline"}</div>
+            <div class="xs muted2">${me.online?"Receiving request alerts":"You won't get any requests"}</div></div></div>
+        <button onclick="myPg().online=!myPg().online;save();render()"
+          style="width:52px;height:30px;border-radius:15px;background:${me.online?"var(--green)":"var(--surface-3)"};position:relative;transition:.2s">
+          <i style="position:absolute;top:3px;left:${me.online?"25px":"3px"};width:24px;height:24px;border-radius:50%;background:#fff;transition:.2s"></i></button>
+      </div>
+    </div>
+
+    <div class="grid3 mt12">
+      <div class="stat center"><div class="s-v" style="font-size:17px">${inr(todayEarn)}</div><div class="s-l">Earned here</div></div>
+      <div class="stat center"><div class="s-v">${openReqs.length}</div><div class="s-l">New requests</div></div>
+      <div class="stat center"><div class="s-v">${myBookings.length}</div><div class="s-l">Upcoming</div></div>
+    </div>
+
+    ${openReqs.length?`
+      <div class="between mt20 mb12"><div class="sec-title" style="margin:0">🔔 Incoming now</div>
+        <span class="chip red blink">${openReqs.length} live</span></div>
+      <div class="stack gap10">${openReqs.map(r=>reqAlertCard(r,me)).join("")}</div>`:`
+      <div class="card mt20 center" style="padding:28px">
+        <div style="font-size:30px;opacity:.5">📭</div>
+        <div class="sm bold mt8">No live requests</div>
+        <div class="xs muted2 mt4">You'll be alerted the moment a ${me.cats.map(c=>catById(c).name.toLowerCase()).join(" / ")} job is posted near ${esc(me.area)}.</div>
+        <button class="btn sm mt12" onclick="switchAccount()">Log in as a customer to test it</button>
+      </div>`}
+
+    ${myOffers.length?`<div class="sec-title mt20">Waiting on customer</div>
+      <div class="stack gap10">${myOffers.map(r=>{
+        const o=r.offers.find(x=>x.photographerId===me.id);
+        return `<div class="card row gap12"><span style="font-size:18px">${catById(r.category).emoji}</span>
+          <div class="grow"><div class="sm bold">${catById(r.category).name} · ${esc(r.area)}</div>
+            <div class="xs muted2">You quoted ${inr(o.price)} · ${r.offers.length} pros competing</div></div>
+          <span class="chip accent">Pending</span></div>`;
+      }).join("")}</div>`:""}
+
+    ${myBookings.length?`<div class="sec-title mt20">Your jobs</div>
+      <div class="stack gap10">${myBookings.map(b=>pgBookingRow(b)).join("")}</div>`:""}
+  </div><div style="height:24px"></div>`;
+}
+
+function reqAlertCard(r,me){
+  const cat=catById(r.category);
+  const q=quoteFor(me,r);
+  return `<div class="card offer" style="border-color:rgba(255,90,31,.4);background:linear-gradient(135deg,rgba(255,90,31,.09),transparent)">
+    <div class="between">
+      <div class="row gap8"><span style="font-size:20px">${cat.emoji}</span>
+        <div><div class="bold sm">${cat.name} · ${r.hours}h</div>
+          <div class="xs muted2">${esc(r.area)} · ${dayStr(r.startAt)} ${clockStr(new Date(r.startAt))}</div></div></div>
+      <div class="stack" style="align-items:flex-end">
+        <div class="timer accent bold" data-countdown="${r.expiresAt}">${mmss(r.expiresAt-Date.now())}</div>
+        <div class="xs muted2">to respond</div></div>
+    </div>
+    <div class="row gap6 mt12" style="flex-wrap:wrap">
+      <span class="chip" style="font-size:10px">Budget ${inr(r.budget)}</span>
+      <span class="chip green" style="font-size:10px">You'd earn ~${inr(Math.round(q*0.85))}</span>
+      <span class="chip" style="font-size:10px">${r.offers.length} accepted</span>
+    </div>
+    ${r.notes?`<div class="xs muted mt12" style="line-height:1.5;padding:9px 11px;background:var(--surface-2);border-radius:11px">"${esc(r.notes)}"</div>`:""}
+    <div class="row gap8 mt12">
+      <button class="btn sm grow ghost" onclick="declineRequest(S.requests.find(x=>x.id==='${r.id}'),'${me.id}')">Pass</button>
+      <button class="btn sm primary grow" onclick="push('pgQuote',{id:'${r.id}'})">Accept — ${inr(q)}</button>
+    </div>
+  </div>`;
+}
+
+function pgBookingRow(b){
+  return `<div class="card tap row gap12" onclick="push('pgJob',{id:'${b.id}'})">
+    ${avatarHtml({id:"cust",name:b.customerName},"av-48")}
+    <div class="grow"><div class="bold sm">${esc(b.customerName)}</div>
+      <div class="xs muted2">${catById(b.category).emoji} ${catById(b.category).name} · ${dayStr(b.startAt)} ${clockStr(new Date(b.startAt))}</div>
+      <div class="row gap6 mt8">${statusChip(b.status)}<span class="chip green" style="font-size:10px">+${inr(Math.round(b.price*0.85))}</span></div></div>
+    <button class="iconbtn" onclick="event.stopPropagation();push('chat',{id:'${b.id}'})">${icon("chat",15)}</button>
+  </div>`;
+}
+
+function vPgQuote(props){
+  const r=S.requests.find(x=>x.id===props.id); const me=myPg();
+  if(!r)return `${topbar("Request")}<div class="empty">Gone.</div>`;
+  const cat=catById(r.category);
+  const base=quoteFor(me,r);
+  const q=S.quoteDraft||{price:base,eta:rint(10,30),note:""};
+  return `${topbar("Send your quote", cat.name+" · "+esc(r.area))}
+  <div class="pad">
+    <div class="card">
+      <div class="kv"><span>Shoot</span><span>${cat.emoji} ${cat.name}</span></div>
+      <div class="kv"><span>When</span><span>${dayStr(r.startAt)}, ${clockStr(new Date(r.startAt))}</span></div>
+      <div class="kv"><span>Duration</span><span>${r.hours} hours</span></div>
+      <div class="kv"><span>Location</span><span style="text-align:right;max-width:58%">${esc(r.address||r.area)}</span></div>
+      <div class="kv"><span>Customer budget</span><span>${inr(r.budget)}</span></div>
+      <div class="kv"><span>Deliverables</span><span style="text-align:right;max-width:58%">${r.deliverables.map(esc).join(", ")||"—"}</span></div>
+      ${r.notes?`<div class="xs muted mt8" style="line-height:1.5">"${esc(r.notes)}"</div>`:""}
+    </div>
+    <div class="field mt20">
+      <label>Your price — ${inr(q.price)} ${q.price>r.budget?'<span style="color:var(--red)">(over budget)</span>':'<span class="green">(within budget)</span>'}</label>
+      <input type="range" min="500" max="40000" step="250" value="${q.price}" style="width:100%;accent-color:var(--accent)"
+        oninput="S.quoteDraft=Object.assign({eta:${q.eta},note:''},S.quoteDraft,{price:+this.value});save();render()">
+      <div class="between xs muted2"><span>Suggested ${inr(base)}</span><span>You keep ${inr(Math.round(q.price*0.85))} (85%)</span></div>
+    </div>
+    <div class="field"><label>How soon can you be there?</label>
+      <div class="row gap6" style="flex-wrap:wrap">
+        ${[10,15,20,30,45,60].map(m=>`<button class="chip ${q.eta===m?"accent":""}" style="padding:9px 13px"
+          onclick="S.quoteDraft=Object.assign({price:${q.price},note:''},S.quoteDraft,{eta:${m}});save();render()">${m} min</button>`).join("")}
+      </div>
+    </div>
+    <div class="field"><label>Message to customer</label>
+      <textarea class="input" placeholder="Why you're a good fit…" oninput="S.quoteDraft=Object.assign({price:${q.price},eta:${q.eta}},S.quoteDraft,{note:this.value})">${esc(q.note)}</textarea>
+    </div>
+    <button class="btn primary block" onclick="submitQuote('${r.id}')">${icon("check",17,"#fff")} Accept & send quote</button>
+    <button class="btn block mt8 ghost" onclick="declineRequest(S.requests.find(x=>x.id==='${r.id}'),'${me.id}');pop()">Pass on this one</button>
+  </div><div style="height:24px"></div>`;
+}
+
+function submitQuote(reqId){
+  const r=S.requests.find(x=>x.id===reqId); const me=myPg();
+  const q=S.quoteDraft||{price:quoteFor(me,r),eta:20,note:""};
+  addOffer(r,me.id,{price:q.price,etaMin:q.eta,note:q.note||"I'm available for this — happy to take it."});
+  S.quoteDraft=null; save();
+  toast("Quote sent","The customer can now see your offer","check");
+  pop();
+}
+
+function vPgJob(props){
+  const b=S.bookings.find(x=>x.id===props.id);
+  if(!b)return `${topbar("Job")}<div class="empty">Not found.</div>`;
+  const flow=["confirmed","enroute","arrived","shooting","delivered"];
+  const nextLabel={confirmed:"Start travelling",enroute:"I've arrived",arrived:"Start shooting",shooting:"Deliver gallery"}[b.status];
+  return `${topbar("Job details", esc(b.customerName))}
+  <div class="pad">
+    <div class="card">
+      <div class="row gap12">${avatarHtml({id:"cust",name:b.customerName},"av-56")}
+        <div class="grow"><div class="bold">${esc(b.customerName)}</div>
+          <div class="xs muted2">${catById(b.category).emoji} ${catById(b.category).name} · ${b.hours}h</div></div>
+        ${statusChip(b.status)}</div>
+      <div class="row gap8 mt12">
+        <button class="btn sm grow" onclick="push('chat',{id:'${b.id}'})">${icon("chat",14)} Message</button>
+        <button class="btn sm grow" onclick="toast('Navigation','Opening directions to '+'${esc(b.area)}','pin')">${icon("pin",14)} Navigate</button>
+      </div>
+    </div>
+    <div class="card mt12">
+      <div class="sec-title">Booking</div>
+      <div class="kv"><span>When</span><span>${dayStr(b.startAt)}, ${clockStr(new Date(b.startAt))}</span></div>
+      <div class="kv"><span>Where</span><span style="text-align:right;max-width:58%">${esc(b.address||b.area)}</span></div>
+      <div class="kv"><span>Client pays</span><span>${inr(b.total)}</span></div>
+      <div class="kv"><span>Your payout (85%)</span><span class="green bold">${inr(Math.round(b.price*0.85))}</span></div>
+    </div>
+    <div class="mt12">${mapSvg([{x:60,y:60,label:"📍",color:"var(--accent)"}],{caption:b.area+" · "+(b.address||"tap to navigate")})}</div>
+    ${nextLabel?`<button class="btn primary block mt16" onclick="advanceBooking(S.bookings.find(x=>x.id==='${b.id}'))">${nextLabel} →</button>`:
+      `<div class="card mt16 center"><div class="bold sm green">Job complete</div><div class="xs muted2 mt4">Payout released to your account.</div></div>`}
+  </div><div style="height:24px"></div>`;
+}
+
+function vPgRequests(){
+  const me=myPg();
+  const all=S.requests.filter(r=>r.pinged.includes(me.id));
+  const open=all.filter(r=>r.status==="live"&&!r.offers.some(o=>o.photographerId===me.id)&&!r.declined.includes(me.id));
+  const rest=all.filter(r=>!open.includes(r));
+  return `<div class="pad">
+    <div class="h2 mb16">Requests</div>
+    ${open.length?`<div class="sec-title">Live — respond now</div><div class="stack gap10 mb20">${open.map(r=>reqAlertCard(r,me)).join("")}</div>`:
+      `<div class="card center" style="padding:28px"><div style="font-size:30px;opacity:.5">🕘</div>
+       <div class="sm bold mt8">Nothing live right now</div>
+       <div class="xs muted2 mt4">You'll get an alert the moment a matching request comes in.</div></div>`}
+    ${rest.length?`<div class="sec-title mt20">History</div><div class="stack gap8">
+      ${rest.map(r=>{
+        const mine=r.offers.find(o=>o.photographerId===me.id);
+        const won=r.bookingId&&S.bookings.find(b=>b.id===r.bookingId&&b.photographerId===me.id);
+        return `<div class="card row gap12" style="opacity:${won?1:.7}">
+          <span style="font-size:18px">${catById(r.category).emoji}</span>
+          <div class="grow"><div class="sm bold">${catById(r.category).name} · ${esc(r.area)}</div>
+            <div class="xs muted2">${timeAgo(r.createdAt)}${mine?" · you quoted "+inr(mine.price):" · you passed"}</div></div>
+          ${won?`<span class="chip green">Won</span>`:mine?`<span class="chip">Lost</span>`:`<span class="chip">Passed</span>`}</div>`;
+      }).join("")}</div>`:""}
+  </div><div style="height:24px"></div>`;
+}
+
+function vPgEarnings(){
+  const me=myPg();
+  const mine=S.bookings.filter(b=>b.photographerId===me.id&&b.status!=="cancelled");
+  const total=mine.reduce((a,b)=>a+Math.round(b.price*0.85),0);
+  const delivered=mine.filter(b=>b.status==="delivered");
+  const days=Array.from({length:7},(_,i)=>{
+    const d=new Date(Date.now()-(6-i)*864e5);
+    const v=mine.filter(b=>new Date(b.createdAt).toDateString()===d.toDateString()).reduce((a,b)=>a+Math.round(b.price*.85),0)
+      || (i<6? rint(0,9)*500 : 0);
+    return {d,v};
+  });
+  const max=Math.max(...days.map(x=>x.v),1000);
+  return `<div class="pad">
+    <div class="h2 mb16">Earnings</div>
+    <div class="card" style="background:linear-gradient(135deg,rgba(255,90,31,.14),rgba(166,124,255,.10));border-color:rgba(255,90,31,.25)">
+      <div class="xs muted2 bold">AVAILABLE BALANCE</div>
+      <div style="font-size:32px;font-weight:800;letter-spacing:-1.2px;margin-top:4px">${inr(total+me.earnings)}</div>
+      <div class="row gap8 mt12">
+        <button class="btn sm primary grow" onclick="toast('Payout initiated','Money lands in 2 hours','wallet')">Withdraw</button>
+        <button class="btn sm grow">Statement</button>
+      </div>
+    </div>
+    <div class="card mt12">
+      <div class="sec-title">Last 7 days</div>
+      <div class="row gap6" style="align-items:flex-end;height:110px">
+        ${days.map(x=>`<div class="grow stack gap6" style="align-items:center;height:100%;justify-content:flex-end">
+          <div style="width:100%;border-radius:6px 6px 2px 2px;background:linear-gradient(180deg,var(--accent),#ff8a3d);height:${clamp(x.v/max*82,4,82)}%"></div>
+          <div class="xs muted2">${x.d.toLocaleDateString("en-IN",{weekday:"narrow"})}</div></div>`).join("")}
+      </div>
+    </div>
+    <div class="grid2 mt12">
+      <div class="stat"><div class="s-v">${mine.length}</div><div class="s-l">Jobs booked</div></div>
+      <div class="stat"><div class="s-v">${delivered.length}</div><div class="s-l">Delivered</div></div>
+      <div class="stat"><div class="s-v">${me.rating}</div><div class="s-l">Rating</div></div>
+      <div class="stat"><div class="s-v">${me.responseMin}m</div><div class="s-l">Avg response</div></div>
+    </div>
+    ${mine.length?`<div class="sec-title mt20">Payouts</div><div class="stack gap8">
+      ${mine.map(b=>`<div class="card row gap12">
+        <div class="grow"><div class="sm bold">${catById(b.category).name} · ${esc(b.customerName)}</div>
+          <div class="xs muted2">${timeAgo(b.createdAt)} · ${b.status}</div></div>
+        <div class="bold green">+${inr(Math.round(b.price*0.85))}</div></div>`).join("")}</div>`:""}
+  </div><div style="height:24px"></div>`;
+}
+
+function vPgProfile(){
+  const me=myPg();
+  return `<div class="pad">
+    <div class="row gap16 mt8">${avatarHtml(me,"av-72",me.online)}
+      <div class="grow"><div class="h2">${esc(me.name)}</div>
+        <div class="row gap6 sm mt4">${starsHtml(me.rating,12)}<span class="bold" style="color:var(--accent-2)">${me.rating}</span>
+          <span class="muted2">·</span><span class="muted">${me.jobs} shoots</span></div>
+        ${me.verified?`<span class="chip blue mt8">${icon("shield",11)} Verified pro</span>`:""}</div></div>
+    <div class="sm muted mt12">${esc(me.bio)}</div>
+    <div class="card mt16"><div class="sec-title">Specialities</div>
+      <div class="row gap6" style="flex-wrap:wrap">${me.cats.map(c=>`<span class="chip accent">${catById(c).emoji} ${catById(c).name}</span>`).join("")}</div></div>
+    <div class="card mt12"><div class="sec-title">Portfolio</div>
+      <div class="pgrid">${me.portfolio.map(i=>photoTile(me.id,i)).join("")}</div>
+      <button class="btn sm block mt12" onclick="myPg().portfolio.push(myPg().portfolio.length+rint(1,99));save();render();toast('Photo added','Portfolio updated','cam')">+ Add photo</button></div>
+    <div class="card mt12"><div class="sec-title">Gear</div>
+      <div class="row gap6" style="flex-wrap:wrap">${me.gear.map(g=>`<span class="chip">${esc(g)}</span>`).join("")}</div></div>
+    <div class="card mt12">
+      <div class="sec-title">Account</div>
+      <div class="kv"><span>Mobile</span><span>+91 ${esc((acct()||{}).phone||"—")}</span></div>
+      <div class="kv"><span>Type</span><span>📷 Photographer</span></div>
+      <div class="kv"><span>Verification</span><span class="${me.verified?"green":""}">${me.verified?"Verified":"Pending review"}</span></div>
+      <div class="row gap8 mt12">
+        <button class="btn sm grow" onclick="switchAccount()">Switch account</button>
+        <button class="btn sm grow danger" onclick="logout()">Log out</button>
+      </div>
+    </div>
+    <div class="card mt12"><div class="sec-title">Recent reviews</div>
+      ${me.reviews.slice(0,3).map(r=>`<div style="padding:9px 0;border-bottom:1px solid var(--border-soft)">
+        <div class="between"><span class="sm bold">${esc(r.by)}</span>${starsHtml(r.stars,10)}</div>
+        <div class="xs muted mt4">${esc(r.text)}</div></div>`).join("")}</div>
+  </div><div style="height:24px"></div>`;
+}
+
+/* ============================================================
+   AUTH — account type, phone, OTP, signup, login
+   ============================================================ */
+function authGo(step,patch={}){ S.auth=Object.assign({},S.auth,patch,{step}); save(); render(); scrollTop(); }
+
+function vAuth(){
+  const a=S.auth;
+  return ({
+    welcome:vAuthWelcome, phone:vAuthPhone, otp:vAuthOtp,
+    custSetup:vAuthCustSetup, pgSetup:vAuthPgSetup, login:vAuthLogin, admin:vAuthAdmin
+  }[a.step]||vAuthWelcome)();
+}
+
+function vAuthWelcome(){
+  const has=S.accounts.length>0;
+  return `<div class="pad" style="min-height:100%;display:flex;flex-direction:column;padding-top:44px">
+    <div class="center">
+      <div style="width:64px;height:64px;margin:0 auto;border-radius:20px;background:linear-gradient(135deg,var(--accent),#ff8a3d);display:grid;place-items:center;box-shadow:0 14px 34px -8px rgba(255,90,31,.7)">
+        ${icon("cam",32,"#fff",2)}</div>
+      <div class="h1 mt16">SnapNow</div>
+      <div class="sm muted mt4">A photographer at your door in minutes</div>
+    </div>
+
+    <div class="mt24">
+      <div class="sec-title">How will you use SnapNow?</div>
+
+      <button class="card tap" style="width:100%;text-align:left;padding:18px;border-color:${S.auth.type==="customer"?"var(--accent)":"var(--border-soft)"}"
+        onclick="authGo('phone',{type:'customer'})">
+        <div class="row gap14" style="gap:14px">
+          <div style="width:48px;height:48px;flex:0 0 48px;border-radius:15px;background:var(--accent-soft);display:grid;place-items:center;font-size:24px">🙋</div>
+          <div class="grow">
+            <div class="h3">I need a photographer</div>
+            <div class="xs muted mt4" style="line-height:1.45">Post a shoot, get offers from pros nearby, compare and book.</div>
+          </div>
+          <span class="muted2" style="font-size:20px">›</span>
+        </div>
+      </button>
+
+      <button class="card tap mt12" style="width:100%;text-align:left;padding:18px;border-color:${S.auth.type==="photographer"?"var(--accent)":"var(--border-soft)"}"
+        onclick="authGo('phone',{type:'photographer'})">
+        <div class="row gap14" style="gap:14px">
+          <div style="width:48px;height:48px;flex:0 0 48px;border-radius:15px;background:rgba(166,124,255,.16);display:grid;place-items:center;font-size:24px">📷</div>
+          <div class="grow">
+            <div class="h3">I'm a photographer</div>
+            <div class="xs muted mt4" style="line-height:1.45">Get job alerts near you, quote your own price, keep 85% of every booking.</div>
+          </div>
+          <span class="muted2" style="font-size:20px">›</span>
+        </div>
+      </button>
+    </div>
+
+    <div class="row gap8 mt20 xs muted2" style="line-height:1.5">
+      ${icon("shield",15,"var(--green)")}<span>Every account is phone-verified. Photographers are ID-checked and portfolio-reviewed before going live.</span>
+    </div>
+
+    <div style="margin-top:auto;padding-top:24px" class="center">
+      ${has?`<button class="btn block ghost" onclick="authGo('login')">Log in to an existing account</button>`:""}
+      <div class="xs muted2 mt16">By continuing you agree to our Terms &amp; Privacy Policy.</div>
+      <button class="xs muted2 mt12" style="text-decoration:underline" onclick="authGo('admin')">Admin console</button>
+    </div>
+  </div>`;
+}
+
+function vAuthPhone(){
+  const a=S.auth, ok=/^[6-9]\d{9}$/.test(a.phone);
+  const isPg=a.type==="photographer";
+  const existing=S.accounts.find(x=>x.phone===a.phone);
+  return `<div class="topbar"><button class="iconbtn" onclick="authGo('welcome')">${icon("back",18)}</button>
+    <div class="grow"><div class="h3">${isPg?"Photographer sign up":"Create your account"}</div>
+      <div class="xs muted2">${isPg?"Start receiving job alerts":"Book photographers on demand"}</div></div></div>
+  <div class="pad">
+    <div class="h2 mt8">What's your mobile number?</div>
+    <div class="sm muted mt8">We'll send a 4-digit code to verify it.</div>
+    <div class="field mt20"><label>Mobile number</label>
+      <div class="row gap8">
+        <div class="chip" style="padding:13px 14px;border-radius:13px;background:var(--surface)">🇮🇳 +91</div>
+        <input id="authPhone" class="input grow" inputmode="numeric" maxlength="10" placeholder="98765 43210"
+          value="${esc(a.phone)}" oninput="S.auth.phone=this.value.replace(/\\D/g,'').slice(0,10);save();render()">
+      </div>
+      ${a.phone&&!ok?`<div class="xs mt8" style="color:var(--red)">Enter a valid 10-digit Indian mobile number.</div>`:""}
+      ${existing?`<div class="xs mt8" style="color:var(--accent-2)">This number already has ${existing.type==="photographer"?"a photographer":"a customer"} account — we'll log you straight in.</div>`:""}
+    </div>
+    <button class="btn primary block mt8" ${ok?"":"disabled"} onclick="sendOtp()">Send code</button>
+    <div class="xs muted2 center mt16">Demo app — no real SMS is sent.</div>
+  </div>`;
+}
+
+function sendOtp(){
+  const code=String(rint(1000,9999));
+  S.auth.sent=code; S.auth.otp="";
+  authGo("otp");
+  setTimeout(()=>toast("Your SnapNow code is "+code,"Tap 'Autofill' if you'd rather not type it","chat"),500);
+}
+
+function vAuthOtp(){
+  const a=S.auth, ok=a.otp.length===4;
+  return `<div class="topbar"><button class="iconbtn" onclick="authGo('phone')">${icon("back",18)}</button>
+    <div class="grow"><div class="h3">Verify your number</div><div class="xs muted2">+91 ${esc(a.phone)}</div></div></div>
+  <div class="pad">
+    <div class="h2 mt8">Enter the code</div>
+    <div class="sm muted mt8">Sent to +91 ${esc(a.phone)} · <button class="accent bold" onclick="sendOtp()">Resend</button></div>
+    <div class="row gap10 mt24" style="justify-content:center">
+      ${[0,1,2,3].map(i=>`<div style="width:56px;height:64px;border-radius:15px;display:grid;place-items:center;font-size:26px;font-weight:800;
+        background:var(--surface);border:1.5px solid ${a.otp.length===i?"var(--accent)":"var(--border)"}">${esc(a.otp[i]||"")}</div>`).join("")}
+    </div>
+    <input id="authOtp" class="input mt20" inputmode="numeric" maxlength="4" placeholder="4-digit code" style="text-align:center;letter-spacing:8px;font-size:20px"
+      value="${esc(a.otp)}" oninput="S.auth.otp=this.value.replace(/\\D/g,'').slice(0,4);save();render()">
+    <button class="btn block ghost mt8" onclick="S.auth.otp=S.auth.sent;save();render()">Autofill demo code (${esc(S.auth.sent||"")})</button>
+    <button class="btn primary block mt12" ${ok?"":"disabled"} onclick="verifyOtp()">Verify &amp; continue</button>
+    ${a.err?`<div class="xs center mt12" style="color:var(--red)">${esc(a.err)}</div>`:""}
+  </div>`;
+}
+
+function verifyOtp(){
+  const a=S.auth;
+  if(a.otp!==a.sent){ S.auth.err="That code isn't right. Try again."; save(); render(); return; }
+  S.auth.err=null;
+  const existing=S.accounts.find(x=>x.phone===a.phone);
+  if(existing){ loginAs(existing.id); return; }
+  if(a.type==="photographer"){
+    S.auth.draft={name:"",cats:[],years:2,priceMult:1,area:AREAS[0],bio:"",step:1};
+    authGo("pgSetup");
+  } else {
+    S.auth.draft={name:"",area:AREAS[0]};
+    authGo("custSetup");
+  }
+}
+
+function vAuthCustSetup(){
+  const d=S.auth.draft||{name:"",area:AREAS[0]};
+  const ok=d.name.trim().length>1;
+  return `<div class="topbar"><button class="iconbtn" onclick="authGo('welcome')">${icon("back",18)}</button>
+    <div class="grow"><div class="h3">Almost there</div><div class="xs muted2">Customer account</div></div></div>
+  <div class="pad">
+    <div class="h2 mt8">What should we call you?</div>
+    <div class="sm muted mt8">Photographers see this name when you send a request.</div>
+    <div class="field mt20"><label>Your name</label>
+      <input id="setupName" class="input" placeholder="e.g. Nishal Singh" value="${esc(d.name)}"
+        oninput="S.auth.draft.name=this.value;save();render()"></div>
+    <div class="field"><label>Where are you based?</label>
+      <select class="input" onchange="S.auth.draft.area=this.value;save()">
+        ${AREAS.map(x=>`<option ${d.area===x?"selected":""}>${x}</option>`).join("")}</select>
+      <div class="xs muted2 mt8">We'll ping photographers within ~10 km of here. You can change it any time.</div></div>
+    <button class="btn primary block mt8" ${ok?"":"disabled"} onclick="createCustomerAccount()">Create account</button>
+  </div>`;
+}
+
+function createCustomerAccount(){
+  const d=S.auth.draft;
+  const a={ id:uid("acc"), type:"customer", phone:S.auth.phone, name:d.name.trim(), createdAt:Date.now(),
+            customer:{ name:d.name.trim(), area:d.area, wallet:2500 } };
+  S.accounts.push(a); save();
+  loginAs(a.id);
+  setTimeout(()=>toast("Welcome, "+a.name.split(" ")[0]+"!","₹2,500 added to your wallet to try things out","wallet"),600);
+}
+
+function vAuthPgSetup(){
+  const d=S.auth.draft;
+  const step=d.step||1;
+  const canNext = step===1? d.name.trim().length>1 : step===2? d.cats.length>0 : true;
+  return `<div class="topbar">
+    <button class="iconbtn" onclick="${step>1?`S.auth.draft.step=${step-1};save();render()`:`authGo('welcome')`}">${icon("back",18)}</button>
+    <div class="grow"><div class="h3">Photographer profile</div><div class="xs muted2">Step ${step} of 3</div></div></div>
+  <div class="pad">
+    <div class="row gap4 mb16">${[1,2,3].map(i=>`<div class="grow progress"><i style="width:${step>=i?100:0}%"></i></div>`).join("")}</div>
+
+    ${step===1?`
+      <div class="h2">Tell customers who you are</div>
+      <div class="sm muted mt8">This is the top of your public profile.</div>
+      <div class="field mt20"><label>Your name</label>
+        <input id="setupName" class="input" placeholder="e.g. Aarav Mehta" value="${esc(d.name)}" oninput="S.auth.draft.name=this.value;save();render()"></div>
+      <div class="field"><label>Short bio</label>
+        <textarea class="input" placeholder="e.g. Wedding & candid storyteller. I shoot the moments between the poses."
+          oninput="S.auth.draft.bio=this.value">${esc(d.bio)}</textarea></div>
+      <div class="field"><label>Years of experience — ${d.years}</label>
+        <input type="range" min="0" max="20" value="${d.years}" style="width:100%;accent-color:var(--accent)"
+          oninput="S.auth.draft.years=+this.value;save();render()"></div>
+      <button class="btn primary block" ${canNext?"":"disabled"} onclick="S.auth.draft.step=2;save();render()">Continue</button>
+
+    `:step===2?`
+      <div class="h2">What do you shoot?</div>
+      <div class="sm muted mt8">Pick up to 3. You'll only get alerts for these.</div>
+      <div class="grid3 mt20" style="gap:8px">
+        ${CATEGORIES.map(c=>{const on=d.cats.includes(c.id);
+          return `<button class="u-card ${on?"on":""}" style="text-align:center;padding:12px 6px" onclick="togglePgCat('${c.id}')">
+            <div style="font-size:21px">${c.emoji}</div><div class="u-t" style="font-size:11.5px;margin-top:5px">${c.name}</div></button>`}).join("")}
+      </div>
+      <div class="xs muted2 mt12">${d.cats.length}/3 selected</div>
+      <button class="btn primary block mt16" ${canNext?"":"disabled"} onclick="S.auth.draft.step=3;save();render()">Continue</button>
+
+    `:`
+      <div class="h2">Where and how much?</div>
+      <div class="sm muted mt8">You can still quote a custom price on every single job.</div>
+      <div class="field mt20"><label>Base area</label>
+        <select class="input" onchange="S.auth.draft.area=this.value;save()">
+          ${AREAS.map(x=>`<option ${d.area===x?"selected":""}>${x}</option>`).join("")}</select></div>
+      <div class="field"><label>Your rate vs market average — ${Math.round(d.priceMult*100)}%</label>
+        <input type="range" min="0.6" max="1.6" step="0.05" value="${d.priceMult}" style="width:100%;accent-color:var(--accent)"
+          oninput="S.auth.draft.priceMult=+this.value;save();render()">
+        <div class="between xs muted2"><span>Budget</span><span>Market rate</span><span>Premium</span></div></div>
+      <div class="card" style="background:var(--surface-2)">
+        <div class="sec-title">Your starting prices</div>
+        ${(d.cats.length?d.cats:["portrait"]).map(c=>`<div class="kv"><span>${catById(c).emoji} ${catById(c).name} (2h)</span><span>${inr(catById(c).base*d.priceMult)}</span></div>`).join("")}
+        <div class="kv"><span>You keep</span><span class="green bold">85% of every booking</span></div>
+      </div>
+      <div class="card mt12">
+        <div class="row gap12">${icon("shield",20,"var(--green)")}
+          <div class="grow"><div class="sm bold">ID verification</div>
+            <div class="xs muted mt4">In the real app you'd upload an ID and 5 portfolio samples here. We'll auto-approve you for the demo.</div></div></div>
+      </div>
+      <button class="btn primary block mt16" onclick="createPhotographerAccount()">Create photographer account</button>
+    `}
+  </div><div style="height:24px"></div>`;
+}
+
+function togglePgCat(c){
+  const a=S.auth.draft.cats, i=a.indexOf(c);
+  if(i>=0)a.splice(i,1); else if(a.length<3)a.push(c); else toast("Max 3 specialities","Deselect one first","x");
+  save(); render();
+}
+
+function createPhotographerAccount(){
+  const d=S.auth.draft;
+  const seed={ name:d.name.trim(), cats:d.cats.length?d.cats:["portrait"], rating:4.5, jobs:0,
+               years:d.years, price:d.priceMult, bio:d.bio.trim()||"New on SnapNow — ready to shoot." };
+  const pg=makePhotographer(seed, S.photographers.length);
+  pg.id = uid("pg");
+  pg.area = d.area;
+  pg.online = true;
+  pg.reviews = [];
+  pg.jobs = 0;
+  pg.earnings = 0;
+  pg.verified = false;
+  pg.isNew = true;
+  S.photographers.push(pg);
+  const a={ id:uid("acc"), type:"photographer", phone:S.auth.phone, name:pg.name, createdAt:Date.now(), photographerId:pg.id };
+  S.accounts.push(a); save();
+  loginAs(a.id);
+  setTimeout(()=>toast("You're live, "+pg.name.split(" ")[0]+"!","You'll get an alert whenever a matching job is posted","bolt"),600);
+}
+
+function vAuthLogin(){
+  return `<div class="topbar"><button class="iconbtn" onclick="authGo('welcome')">${icon("back",18)}</button>
+    <div class="grow"><div class="h3">Log in</div><div class="xs muted2">Pick a saved account</div></div></div>
+  <div class="pad">
+    ${S.accounts.length?`<div class="stack gap10">
+      ${S.accounts.map(a=>{
+        const pg=a.type==="photographer"?S.photographers.find(p=>p.id===a.photographerId):null;
+        return `<button class="card tap row gap12" style="width:100%;text-align:left" onclick="loginAs('${a.id}')">
+          ${avatarHtml(pg||{id:a.id,name:a.name},"av-48",pg?pg.online:false)}
+          <div class="grow"><div class="bold sm">${esc(a.name)}</div>
+            <div class="xs muted2">+91 ${esc(a.phone)}</div>
+            <div class="row gap6 mt8"><span class="chip ${a.type==="photographer"?"purple":"accent"}" style="font-size:10px">
+              ${a.type==="photographer"?"📷 Photographer":"🙋 Customer"}</span></div></div>
+          <span class="muted2" style="font-size:20px">›</span></button>`;
+      }).join("")}</div>`:`<div class="empty"><div class="e-ic">👤</div>No accounts yet.</div>`}
+    <button class="btn block mt16" onclick="authGo('welcome')">＋ Create a new account</button>
+  </div>`;
+}
+
+function vAuthAdmin(){
+  return `<div class="topbar"><button class="iconbtn" onclick="authGo('welcome')">${icon("back",18)}</button>
+    <div class="grow"><div class="h3">Admin console</div><div class="xs muted2">Internal use</div></div></div>
+  <div class="pad">
+    <div class="center mt20">
+      <div style="width:60px;height:60px;margin:0 auto;border-radius:18px;background:var(--surface-2);display:grid;place-items:center">${icon("trend",28,"var(--accent)")}</div>
+      <div class="h2 mt16">Operations dashboard</div>
+      <div class="sm muted mt8">Marketplace health, supply coverage and revenue.</div>
+    </div>
+    <div class="field mt24"><label>Work email</label><input class="input" value="ops@snapnow.in" readonly></div>
+    <div class="field"><label>Password</label><input class="input" type="password" value="demo1234" readonly></div>
+    <button class="btn primary block" onclick="loginAs('admin')">Open console</button>
+    <div class="xs muted2 center mt12">Pre-filled for the demo.</div>
+  </div>`;
+}
+
+function loginAs(id){
+  S.session=id;
+  S.role = id==="admin" ? "admin" : (S.accounts.find(a=>a.id===id)||{}).type || "customer";
+  S.stack=[]; S.nav[S.role]="home";
+  S.auth={step:"welcome",type:null,phone:"",otp:"",draft:null};
+  save(); render(); scrollTop();
+}
+
+function logout(){
+  if(!confirm("Log out? Your account and bookings stay saved on this device."))return;
+  S.session=null; S.stack=[];
+  S.auth={step: S.accounts.length?"login":"welcome", type:null, phone:"", otp:"", draft:null};
+  save(); render();
+}
+
+function switchAccount(){
+  S.session=null; S.stack=[];
+  S.auth={step:"login",type:null,phone:"",otp:"",draft:null};
+  save(); render();
+}
+
+/* ============================================================
+   ADMIN
+   ============================================================ */
+function vAdminHome(){
+  const bk=S.bookings.filter(b=>b.status!=="cancelled");
+  const gmv=bk.reduce((a,b)=>a+b.total,0);
+  const take=bk.reduce((a,b)=>a+b.fees.platform+Math.round(b.price*0.15),0);
+  const live=S.requests.filter(r=>["live","awaiting"].includes(r.status)).length;
+  const fill=S.requests.length? Math.round(S.requests.filter(r=>r.status==="booked").length/S.requests.length*100):0;
+  const avgOffers=S.requests.length? (S.requests.reduce((a,r)=>a+r.offers.length,0)/S.requests.length).toFixed(1):"0";
+  const online=S.photographers.filter(p=>p.online).length;
+
+  const byCat={};
+  S.requests.forEach(r=>{byCat[r.category]=(byCat[r.category]||0)+1});
+  const catRows=Object.entries(byCat).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  const maxCat=Math.max(...catRows.map(c=>c[1]),1);
+
+  return `<div class="pad">
+    <div class="between mb16"><div><div class="h2">Operations</div><div class="xs muted2">ops@snapnow.in · live marketplace health</div></div>
+      <button class="chip" onclick="logout()">${icon("power",12)} Sign out</button></div>
+
+    <div class="grid2">
+      <div class="stat"><div class="s-v">${inr(gmv)}</div><div class="s-l">GMV</div></div>
+      <div class="stat"><div class="s-v">${inr(take)}</div><div class="s-l">Platform revenue</div></div>
+      <div class="stat"><div class="s-v">${S.requests.length}</div><div class="s-l">Requests</div></div>
+      <div class="stat"><div class="s-v">${bk.length}</div><div class="s-l">Bookings</div></div>
+      <div class="stat"><div class="s-v">${fill}%</div><div class="s-l">Fill rate</div></div>
+      <div class="stat"><div class="s-v">${avgOffers}</div><div class="s-l">Offers / request</div></div>
+    </div>
+
+    <div class="card mt12">
+      <div class="between mb12"><span class="sec-title" style="margin:0">Supply</span>
+        <span class="chip ${online>6?"green":"red"}">${online}/${S.photographers.length} online</span></div>
+      <div class="progress" style="height:8px"><i style="width:${online/S.photographers.length*100}%"></i></div>
+      <div class="row gap8 mt12">
+        <span class="chip accent">${live} live requests</span>
+        <span class="chip">${S.photographers.filter(p=>p.verified).length} verified</span>
+      </div>
+    </div>
+
+    ${catRows.length?`<div class="card mt12"><div class="sec-title">Demand by category</div>
+      ${catRows.map(([c,n])=>`<div class="row gap10 mb8">
+        <span style="width:96px" class="xs">${catById(c).emoji} ${catById(c).name}</span>
+        <div class="grow progress"><i style="width:${n/maxCat*100}%"></i></div>
+        <span class="xs bold" style="width:18px;text-align:right">${n}</span></div>`).join("")}</div>`:""}
+
+    <div class="card mt12"><div class="sec-title">Coverage map</div>
+      ${mapSvg(S.photographers.map(p=>({x:p.x,y:p.y,label:p.name[0],color:p.online?"var(--green)":"var(--muted-2)"})),{caption:"green = online"})}</div>
+
+    <div class="card mt12"><div class="sec-title">Recent requests</div>
+      ${S.requests.length?`<table class="tbl"><thead><tr><th>Type</th><th>Area</th><th>Offers</th><th>Status</th></tr></thead><tbody>
+        ${S.requests.slice(0,10).map(r=>`<tr>
+          <td>${catById(r.category).emoji} ${catById(r.category).name}</td>
+          <td class="muted">${esc(r.area)}</td><td>${r.offers.length}</td>
+          <td>${statusChip(r.status)}</td></tr>`).join("")}
+      </tbody></table>`:`<div class="xs muted2">No requests yet — post one as a customer.</div>`}
+    </div>
+
+    <div class="card mt12"><div class="sec-title">Top photographers</div>
+      <table class="tbl"><thead><tr><th>Name</th><th>Rating</th><th>Jobs</th><th>Earnings</th></tr></thead><tbody>
+      ${S.photographers.slice().sort((a,b)=>b.earnings-a.earnings).slice(0,8).map(p=>`<tr>
+        <td><div class="row gap8">${avatarHtml(p,"av-40")}<span class="bold">${esc(p.name)}</span></div></td>
+        <td>${p.rating}★</td><td>${p.jobs}</td><td class="green">${inr(p.earnings)}</td></tr>`).join("")}
+      </tbody></table></div>
+  </div><div style="height:24px"></div>`;
+}
+
+function vAdminBookings(){
+  return `<div class="pad">
+    <div class="h2 mb16">All bookings</div>
+    ${S.bookings.length?`<div class="stack gap10">${S.bookings.map(b=>{
+      const p=S.photographers.find(x=>x.id===b.photographerId);
+      return `<div class="card">
+        <div class="between"><div class="row gap10">${avatarHtml(p,"av-40")}
+          <div><div class="sm bold">${esc(p.name)} → ${esc(b.customerName)}</div>
+            <div class="xs muted2">${b.id.slice(-8).toUpperCase()} · ${timeAgo(b.createdAt)}</div></div></div>
+          ${statusChip(b.status)}</div>
+        <div class="row gap6 mt12" style="flex-wrap:wrap">
+          <span class="chip" style="font-size:10px">${catById(b.category).emoji} ${catById(b.category).name}</span>
+          <span class="chip" style="font-size:10px">${esc(b.area)}</span>
+          <span class="chip" style="font-size:10px">${inr(b.total)}</span>
+          <span class="chip green" style="font-size:10px">take ${inr(b.fees.platform+Math.round(b.price*0.15))}</span>
+        </div></div>`;
+    }).join("")}</div>`:`<div class="empty"><div class="e-ic">📋</div>No bookings yet.</div>`}
+  </div><div style="height:24px"></div>`;
+}
+
+function vAdminPhotogs(){
+  return `<div class="pad">
+    <div class="h2 mb16">Supply</div>
+    <div class="stack gap10">${S.photographers.map(p=>`
+      <div class="card row gap12">
+        ${avatarHtml(p,"av-48",p.online)}
+        <div class="grow"><div class="row gap6"><span class="bold sm">${esc(p.name)}</span>${p.verified?icon("shield",11,"var(--blue)"):""}</div>
+          <div class="xs muted2">${esc(p.area)} · ${p.rating}★ · ${p.jobs} jobs · ${p.years}y</div>
+          <div class="row gap4 mt8">${p.cats.map(c=>`<span class="chip" style="font-size:9.5px;padding:3px 7px">${catById(c).name}</span>`).join("")}</div></div>
+        <button class="chip ${p.online?"green":""}" onclick="S.photographers.find(x=>x.id==='${p.id}').online=!${p.online};save();render()">${p.online?"Online":"Offline"}</button>
+      </div>`).join("")}</div>
+  </div><div style="height:24px"></div>`;
+}
+
+/* ============================================================
+   ROUTER + CHROME
+   ============================================================ */
+const TABS = {
+  customer:[["home","Home","home"],["explore","Explore","search"],["activity","Activity","list"],["profile","Profile","user"]],
+  photographer:[["home","Dashboard","grid"],["requests","Requests","bolt"],["earnings","Earnings","wallet"],["profile","Profile","user"]],
+  admin:[["home","Overview","trend"],["bookings","Bookings","calendar"],["supply","Supply","cam"]]
+};
+const SCREENS = {
+  "customer:home":vCustHome, "customer:explore":vCustExplore, "customer:activity":vCustActivity, "customer:profile":vCustProfile,
+  "photographer:home":vPgHome, "photographer:requests":vPgRequests, "photographer:earnings":vPgEarnings, "photographer:profile":vPgProfile,
+  "admin:home":vAdminHome, "admin:bookings":vAdminBookings, "admin:supply":vAdminPhotogs
+};
+const STACK_VIEWS = {
+  newRequest:vNewRequest, matching:vMatching, pgDetail:vPgDetail, checkout:vCheckout, success:vSuccess,
+  booking:vBooking, chat:vChat, notifs:vNotifs, setArea:vSetArea, rate:vRate,
+  pgQuote:vPgQuote, pgJob:vPgJob
+};
+
+function renderSidebar(){
+  const box=el("roleSwitch");
+  if(!loggedIn()){
+    box.innerHTML = `<div class="side-card" style="border-color:rgba(255,90,31,.3)">
+      <b>Not signed in</b>Choose an account type on the phone to the right — customer or photographer.</div>`;
+    el("roleLabel").textContent="Account";
+    return;
+  }
+  el("roleLabel").textContent="Signed in as";
+  const a=acct();
+  const pg=a&&a.type==="photographer"?S.photographers.find(p=>p.id===a.photographerId):null;
+  const who = isAdmin()
+    ? {name:"Operations", sub:"Admin console", ic:"trend"}
+    : a.type==="photographer" ? {name:a.name, sub:"Photographer · "+(pg?pg.area:""), ic:"cam"}
+    : {name:a.name, sub:"Customer · "+cust().area, ic:"user"};
+  box.innerHTML = `
+    <div class="role-btn on" style="cursor:default">
+      <span class="ic">${icon(who.ic,18)}</span>
+      <span>${esc(who.name)}<span class="sub">${esc(who.sub)}</span></span>
+    </div>
+    ${S.accounts.length>1||isAdmin()||S.accounts.length?`<button class="role-btn" onclick="switchAccount()">
+      <span class="ic">${icon("user",18)}</span><span>Switch account<span class="sub">Log in as someone else</span></span></button>`:""}
+    <button class="role-btn" onclick="logout()">
+      <span class="ic">${icon("power",18)}</span><span>Log out<span class="sub">Data stays on this device</span></span></button>`;
+}
+
+function renderTabs(){
+  const bar=el("tabbar");
+  const top=S.stack[S.stack.length-1];
+  const hide = !loggedIn() || (top && ["chat","checkout","newRequest","success","rate"].includes(top.name));
+  if(hide){ bar.innerHTML=""; bar.style.display="none"; return; }
+  bar.style.display="flex";
+  const cur=S.nav[S.role];
+  const pgAlerts = S.role==="photographer"
+    ? (function(){const id=myPg().id;return S.requests.filter(r=>r.status==="live"&&r.pinged.includes(id)&&!r.offers.some(o=>o.photographerId===id)&&!r.declined.includes(id)).length})()
+    : 0;
+  const custAlerts = S.role==="customer"
+    ? S.requests.filter(r=>["live","awaiting"].includes(r.status)).length + S.bookings.filter(b=>["confirmed","enroute","arrived","shooting"].includes(b.status)).length
+    : 0;
+  bar.className="tabbar";
+  bar.innerHTML = TABS[S.role].map(([k,label,ic])=>{
+    let badge=0;
+    if(S.role==="photographer"&&(k==="requests"||k==="home"))badge=k==="requests"?pgAlerts:0;
+    if(S.role==="customer"&&k==="activity")badge=custAlerts;
+    return `<button class="tab ${cur===k?"on":""}" onclick="go('${k}')">
+      ${icon(ic,20,cur===k?"var(--accent)":"currentColor",cur===k?2.3:1.9)}
+      <span>${label}</span>${badge?`<i class="badge">${badge}</i>`:""}</button>`;
+  }).join("");
+}
+
+function render(){
+  renderSidebar();
+  el("sbRole").innerHTML = !loggedIn() ? '<span style="opacity:.7">Not signed in</span>'
+    : {customer:"👤 Customer",photographer:"📷 Photographer",admin:"📊 Admin"}[S.role]+' <span style="opacity:.5">▾</span>';
+  const scr=el("screen");
+
+  /* remember focus so typing in a filter box doesn't lose the caret */
+  const act=document.activeElement;
+  const focusId = act && act.id && scr.contains(act) ? act.id : null;
+  const caret = focusId && act.setSelectionRange ? act.selectionStart : null;
+  const top=S.stack[S.stack.length-1];
+  let html;
+  if(!loggedIn()){ S.stack=[]; html = vAuth(); }
+  else if(top && STACK_VIEWS[top.name]) html = STACK_VIEWS[top.name](top.props||{});
+  else { S.stack=[]; html = (SCREENS[S.role+":"+S.nav[S.role]]||vCustHome)(); }
+
+  const isChat = top && top.name==="chat";
+  scr.style.display = isChat?"flex":"block";
+  scr.style.flexDirection = isChat?"column":"";
+  scr.style.overflowY = isChat?"hidden":"auto";
+  scr.innerHTML = html;
+  if(isChat){
+    const cs=$("#chatScroll"); if(cs){cs.style.flex="1";cs.style.overflowY="auto";cs.scrollTop=cs.scrollHeight;}
+  }
+  if(focusId){
+    const n=el(focusId);
+    if(n){ n.focus(); if(caret!=null&&n.setSelectionRange){try{n.setSelectionRange(caret,caret)}catch(e){}} }
+  }
+  renderTabs();
+  paintCountdowns();
+}
+
+/* status-bar pill — account switcher (the only way to switch on a phone screen) */
+function cycleRole(){
+  if(!loggedIn())return;
+  switchAccount();
+}
+
+/* live countdowns without a full re-render */
+function paintCountdowns(){
+  document.querySelectorAll("[data-countdown]").forEach(n=>{
+    const t=+n.dataset.countdown;
+    const left=t-Date.now();
+    n.textContent = (n.classList.contains("chip")? mmss(left)+" left" : mmss(left));
+    if(left<=0)n.textContent="expired";
+  });
+}
+
+/* ============================================================
+   BOOT
+   ============================================================ */
+S = load();
+if(!S.nav) S.nav={customer:"home",photographer:"home",admin:"home"};
+if(!S.stack) S.stack=[];
+render();
+
+setInterval(()=>{ el("clock").textContent = clockStr(); }, 10000);
+el("clock").textContent = clockStr();
+setInterval(paintCountdowns, 1000);
+setInterval(sweep, 3000);
+
+/* resume simulation for any request still live after a reload */
+S.requests.filter(r=>r.status==="live").forEach(r=>{
+  const already=new Set(r.offers.map(o=>o.photographerId));
+  const owned=ownedPgIds();
+  const pool=r.pinged.filter(id=>!owned.has(id)&&!already.has(id));
+  if(pool.length&&r.offers.length<3) scheduleSimOffers(r);
+});
+
+/* first-run welcome */
+if(S.firstRun){
+  S.firstRun=false; save();
+  setTimeout(()=>toast("Welcome to SnapNow","Pick how you'll use the app to get started.","bolt"),900);
+}
+
+/* keyboard: Esc to go back */
+document.addEventListener("keydown",e=>{ if(e.key==="Escape"&&S.stack.length)pop(); });
+
+window.addEventListener("error",e=>console.error("SnapNow error:",e.message));
+</script>
+</body>
+</html>
