@@ -311,7 +311,100 @@ select.input{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xml
 
 table.tbl{width:100%;border-collapse:collapse;font-size:12px}
 table.tbl th{text-align:left;color:var(--muted-2);font-weight:700;font-size:10px;letter-spacing:.8px;text-transform:uppercase;padding:8px 6px;border-bottom:1px solid var(--border)}
-table.tbl td{padding:10px 6px;border-bottom:1px solid var(--border-soft);vertical-align:middle}
+/* ---------- camera shutter & flash transition ---------- */
+#camTransitionOverlay{
+  position:absolute;inset:0;z-index:9999;
+  display:flex;align-items:center;justify-content:center;
+  background:rgba(10,10,15,.92);backdrop-filter:blur(14px);
+  pointer-events:all;overflow:hidden;
+}
+.cam-anim-wrap{
+  display:flex;flex-direction:column;align-items:center;gap:18px;
+  animation:camMorphIn .42s cubic-bezier(.16,1,.3,1) forwards;
+}
+@keyframes camMorphIn{
+  0%{transform:scale(.25) rotate(-20deg);opacity:0}
+  70%{transform:scale(1.12) rotate(4deg);opacity:1}
+  100%{transform:scale(1) rotate(0);opacity:1}
+}
+.cam-retro-body{
+  width:148px;height:110px;background:linear-gradient(145deg,#252535,#14141d);
+  border:2px solid rgba(255,90,31,.7);border-radius:26px;
+  position:relative;display:grid;place-items:center;
+  box-shadow:0 20px 50px rgba(0,0,0,.95),0 0 40px rgba(255,90,31,.35);
+}
+.cam-top-dial{
+  position:absolute;top:-10px;right:22px;width:26px;height:12px;
+  background:linear-gradient(180deg,#ff5a1f,#c43d08);border-radius:5px 5px 0 0;
+  box-shadow:0 -2px 10px rgba(255,90,31,.6);
+}
+.cam-viewfinder-glass{
+  position:absolute;top:12px;left:16px;width:20px;height:15px;
+  background:#090d14;border:1.5px solid rgba(255,255,255,.3);border-radius:4px;
+  box-shadow:inset 0 0 6px rgba(0,229,255,.5);
+}
+.cam-flash-emitter{
+  position:absolute;top:10px;right:18px;width:28px;height:17px;
+  background:#1a1c26;border:1.5px solid rgba(255,255,255,.35);border-radius:5px;
+  display:grid;place-items:center;overflow:hidden;
+}
+.cam-flash-core{
+  width:16px;height:8px;background:#ffc857;border-radius:2px;
+  box-shadow:0 0 12px #ffc857;
+  animation:emitterCharge .45s ease forwards;
+}
+@keyframes emitterCharge{
+  0%{background:#ffc857;box-shadow:0 0 8px #ffc857}
+  75%{background:#ffffff;box-shadow:0 0 30px #fff,0 0 50px var(--accent)}
+  100%{background:#ffffff;box-shadow:0 0 60px #fff}
+}
+.cam-big-lens{
+  width:76px;height:76px;border-radius:50%;
+  background:radial-gradient(circle at 40% 35%,#2e2e40,#0b0c10 75%);
+  border:4px solid #ff5a1f;display:grid;place-items:center;
+  position:relative;box-shadow:0 0 24px rgba(255,90,31,.5),inset 0 0 18px rgba(0,0,0,.9);
+}
+.cam-shutter-iris{
+  width:48px;height:48px;border-radius:50%;
+  background:conic-gradient(from 0deg,#1e1f2b,#101118,#303142,#101118);
+  border:2px solid rgba(255,255,255,.2);position:relative;
+  display:grid;place-items:center;overflow:hidden;
+  animation:shutterSnap .38s cubic-bezier(.6,0,.4,1) forwards;
+  animation-delay:.18s;
+}
+@keyframes shutterSnap{
+  0%{transform:scale(1) rotate(0deg)}
+  60%{transform:scale(.65) rotate(140deg)}
+  100%{transform:scale(0) rotate(220deg)}
+}
+.cam-shutter-center-dot{
+  width:10px;height:10px;border-radius:50%;background:#050608;
+  border:1px solid rgba(255,90,31,.7);
+}
+.cam-anim-status{
+  font-size:12px;font-weight:800;letter-spacing:1.2px;color:#f4f4f7;
+  text-transform:uppercase;display:flex;align-items:center;gap:8px;
+  background:rgba(20,20,28,.8);padding:6px 14px;border-radius:20px;
+  border:1px solid rgba(255,90,31,.3);
+  animation:pulseStatus .5s infinite alternate;
+}
+@keyframes pulseStatus{
+  0%{opacity:.7;transform:scale(.98)}
+  100%{opacity:1;color:var(--accent);transform:scale(1)}
+}
+.bright-white-flash{
+  position:absolute;inset:0;background:#ffffff;
+  opacity:0;pointer-events:none;z-index:10001;
+}
+.bright-white-flash.fire{
+  animation:flashExplode .58s ease-out forwards;
+}
+@keyframes flashExplode{
+  0%{opacity:0}
+  18%{opacity:1}
+  42%{opacity:1}
+  100%{opacity:0}
+}
 
 @media (max-width:900px){
   #sidebar{display:none}
@@ -370,6 +463,27 @@ table.tbl td{padding:10px 6px;border-bottom:1px solid var(--border-soft);vertica
       <div id="toasts"></div>
       <div id="screen"></div>
       <div id="tabbar"></div>
+      <div id="camTransitionOverlay" style="display:none">
+        <div class="cam-anim-wrap">
+          <div class="cam-retro-body">
+            <div class="cam-top-dial"></div>
+            <div class="cam-viewfinder-glass"></div>
+            <div class="cam-flash-emitter">
+              <div class="cam-flash-core"></div>
+            </div>
+            <div class="cam-big-lens">
+              <div class="cam-shutter-iris">
+                <div class="cam-shutter-center-dot"></div>
+              </div>
+            </div>
+          </div>
+          <div class="cam-anim-status">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+            <span>OTP ACCEPTED · FLASH!</span>
+          </div>
+        </div>
+        <div id="camFlashBurst" class="bright-white-flash"></div>
+      </div>
     </div>
   </main>
 </div>
@@ -565,13 +679,14 @@ function makePhotographer(seed,i){
    ============================================================ */
 const KEY = "snappro.v1";
 const LEGACY_KEY = "snapnow.v2";
+const DEV_OTP = "1234";
 var S = null;   /* var (not let) so inline handlers + devtools can always reach it */
 
 function freshState(){
   return {
     accounts:[],                     // [{id,type,phone,name,customer?,photographerId?}]
     session:null,                    // account id, or "admin"
-    auth:{step:"welcome", type:null, phone:"", otp:"", draft:null},
+    auth:{step:"welcome", type:null, phone:"", otp:"", draft:null, loginPhone:"", loginOtp:"1234", loginRole:"customer"},
     role:"customer",                 // derived from the session; kept for the view router
     nav:{customer:"home", photographer:"home", admin:"home"},
     stack:[],                        // modal-ish screens {name,props}
@@ -2073,8 +2188,79 @@ function vPgProfile(){
 }
 
 /* ============================================================
-   AUTH — account type, phone, OTP, signup, login
+   AUTH — camera shutter sound & white flash transition
    ============================================================ */
+function playShutterSound(){
+  try{
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if(!AudioCtx) return;
+    const ctx = new AudioCtx();
+    if(ctx.state === "suspended") ctx.resume();
+
+    // Mirror flip thump (low transient click)
+    const osc = ctx.createOscillator();
+    const gain1 = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(150, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(30, ctx.currentTime + 0.05);
+    gain1.gain.setValueAtTime(0.25, ctx.currentTime);
+    gain1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.05);
+    osc.connect(gain1);
+    gain1.connect(ctx.destination);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.05);
+
+    // Mechanical shutter curtain snap (sharp filtered noise)
+    const len = Math.floor(ctx.sampleRate * 0.08);
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for(let i=0; i<len; i++) data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (len * 0.25));
+    const noise = ctx.createBufferSource();
+    noise.buffer = buf;
+    const filter = ctx.createBiquadFilter();
+    filter.type = "highpass";
+    filter.frequency.value = 1000;
+    const gain2 = ctx.createGain();
+    gain2.gain.setValueAtTime(0.4, ctx.currentTime + 0.04);
+    gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
+    noise.connect(filter);
+    filter.connect(gain2);
+    gain2.connect(ctx.destination);
+    noise.start(ctx.currentTime + 0.04);
+  }catch(e){}
+}
+
+function triggerCameraFlashTransition(callback){
+  const overlay = el("camTransitionOverlay");
+  const flash = el("camFlashBurst");
+  if(!overlay || !flash){
+    if(callback) callback();
+    return;
+  }
+
+  // 1. Show camera morph animation & play realistic shutter click sound
+  overlay.style.display = "flex";
+  playShutterSound();
+
+  // 2. Fire the blinding white flash at 400ms (as the shutter iris snaps shut)
+  setTimeout(()=>{
+    flash.classList.remove("fire");
+    void flash.offsetWidth; // force DOM reflow
+    flash.classList.add("fire");
+  }, 400);
+
+  // 3. At peak flash (540ms, when screen is solid white): swap to the logged-in dashboard
+  setTimeout(()=>{
+    if(callback) callback();
+  }, 540);
+
+  // 4. Clean up after flash dissipates
+  setTimeout(()=>{
+    overlay.style.display = "none";
+    flash.classList.remove("fire");
+  }, 980);
+}
+
 function authGo(step,patch={}){ S.auth=Object.assign({},S.auth,patch,{step}); save(); render(); scrollTop(); }
 
 function vAuth(){
@@ -2086,8 +2272,7 @@ function vAuth(){
 }
 
 function vAuthWelcome(){
-  const has=S.accounts.length>0;
-  return `<div class="pad" style="min-height:100%;display:flex;flex-direction:column;padding-top:44px">
+  return `<div class="pad" style="min-height:100%;display:flex;flex-direction:column;padding-top:36px">
     <div class="center">
       <div style="width:64px;height:64px;margin:0 auto;border-radius:20px;background:linear-gradient(135deg,var(--accent),#ff8a3d);display:grid;place-items:center;box-shadow:0 14px 34px -8px rgba(255,90,31,.7)">
         ${icon("cam",32,"#fff",2)}</div>
@@ -2095,13 +2280,24 @@ function vAuthWelcome(){
       <div class="sm muted mt4">A photographer at your door in minutes</div>
     </div>
 
-    <div class="mt24">
+    <!-- Dev Mode Callout Banner -->
+    <div class="card mt16 mb6" style="background:rgba(255,90,31,.11);border-color:rgba(255,90,31,.35);padding:11px 14px">
+      <div class="between">
+        <div class="row gap8">
+          <span style="font-size:16px">⚡</span>
+          <div class="xs muted"><span class="bold" style="color:#ffab86">Dev OTP Mode:</span> Use code <b style="color:#fff;background:var(--surface-3);padding:1px 5px;border-radius:5px">1234</b></div>
+        </div>
+        <button class="chip accent" style="font-size:10px;padding:4px 9px" onclick="authGo('login')">Log In →</button>
+      </div>
+    </div>
+
+    <div class="mt14">
       <div class="sec-title">How will you use SnapPro?</div>
 
-      <button class="card tap" style="width:100%;text-align:left;padding:18px;border-color:${S.auth.type==="customer"?"var(--accent)":"var(--border-soft)"}"
+      <button class="card tap" style="width:100%;text-align:left;padding:16px;border-color:${S.auth.type==="customer"?"var(--accent)":"var(--border-soft)"}"
         onclick="authGo('phone',{type:'customer'})">
         <div class="row gap14" style="gap:14px">
-          <div style="width:48px;height:48px;flex:0 0 48px;border-radius:15px;background:var(--accent-soft);display:grid;place-items:center;font-size:24px">🙋</div>
+          <div style="width:46px;height:46px;flex:0 0 46px;border-radius:15px;background:var(--accent-soft);display:grid;place-items:center;font-size:22px">🙋</div>
           <div class="grow">
             <div class="h3">I need a photographer</div>
             <div class="xs muted mt4" style="line-height:1.45">Post a shoot, get offers from pros nearby, compare and book.</div>
@@ -2110,27 +2306,29 @@ function vAuthWelcome(){
         </div>
       </button>
 
-      <button class="card tap mt12" style="width:100%;text-align:left;padding:18px;border-color:${S.auth.type==="photographer"?"var(--accent)":"var(--border-soft)"}"
+      <button class="card tap mt10" style="width:100%;text-align:left;padding:16px;border-color:${S.auth.type==="photographer"?"var(--accent)":"var(--border-soft)"}"
         onclick="authGo('phone',{type:'photographer'})">
         <div class="row gap14" style="gap:14px">
-          <div style="width:48px;height:48px;flex:0 0 48px;border-radius:15px;background:rgba(166,124,255,.16);display:grid;place-items:center;font-size:24px">📷</div>
+          <div style="width:46px;height:46px;flex:0 0 46px;border-radius:15px;background:rgba(166,124,255,.16);display:grid;place-items:center;font-size:22px">📷</div>
           <div class="grow">
             <div class="h3">I'm a photographer</div>
-            <div class="xs muted mt4" style="line-height:1.45">Get job alerts near you, quote your own price, keep 85% of every booking.</div>
+            <div class="xs muted mt4" style="line-height:1.45">Get job alerts near you, quote your own price, keep 85% of bookings.</div>
           </div>
           <span class="muted2" style="font-size:20px">›</span>
         </div>
       </button>
     </div>
 
-    <div class="row gap8 mt20 xs muted2" style="line-height:1.5">
-      ${icon("shield",15,"var(--green)")}<span>Every account is phone-verified. Photographers are ID-checked and portfolio-reviewed before going live.</span>
+    <div class="row gap8 mt16 xs muted2" style="line-height:1.45">
+      ${icon("shield",15,"var(--green)")}<span>Phone verified accounts. Photographers are ID-checked and portfolio-reviewed.</span>
     </div>
 
-    <div style="margin-top:auto;padding-top:24px" class="center">
-      ${has?`<button class="btn block ghost" onclick="authGo('login')">Log in to an existing account</button>`:""}
-      <div class="xs muted2 mt16">By continuing you agree to our Terms &amp; Privacy Policy.</div>
-      <button class="xs muted2 mt12" style="text-decoration:underline" onclick="authGo('admin')">Admin console</button>
+    <div style="margin-top:auto;padding-top:20px" class="center">
+      <button class="btn block" style="background:var(--surface-2);border:1px solid var(--border)" onclick="authGo('login')">
+        ${icon("user",16,"var(--accent)")} Log in with Dev OTP
+      </button>
+      <div class="xs muted2 mt12">By continuing you agree to our Terms &amp; Privacy Policy.</div>
+      <button class="xs muted2 mt8" style="text-decoration:underline" onclick="authGo('admin')">Admin console</button>
     </div>
   </div>`;
 }
@@ -2145,7 +2343,15 @@ function vAuthPhone(){
   <div class="pad">
     <div class="h2 mt8">What's your mobile number?</div>
     <div class="sm muted mt8">We'll send a 4-digit code to verify it.</div>
-    <div class="field mt20"><label>Mobile number</label>
+
+    <div class="card mt12 mb8" style="background:rgba(255,90,31,.11);border-color:rgba(255,90,31,.35);padding:10px 14px">
+      <div class="row gap8">
+        <span style="font-size:16px">⚡</span>
+        <div class="xs muted"><span class="bold" style="color:#ffab86">Dev OTP Mode:</span> Use code <b style="color:#fff">1234</b> on the next screen.</div>
+      </div>
+    </div>
+
+    <div class="field mt16"><label>Mobile number</label>
       <div class="row gap8">
         <div class="chip" style="padding:13px 14px;border-radius:13px;background:var(--surface)">🇮🇳 +91</div>
         <input id="authPhone" class="input grow" inputmode="numeric" maxlength="10" placeholder="98765 43210"
@@ -2154,50 +2360,62 @@ function vAuthPhone(){
       ${a.phone&&!ok?`<div class="xs mt8" style="color:var(--red)">Enter a valid 10-digit Indian mobile number.</div>`:""}
       ${existing?`<div class="xs mt8" style="color:var(--accent-2)">This number already has ${existing.type==="photographer"?"a photographer":"a customer"} account — we'll log you straight in.</div>`:""}
     </div>
-    <button class="btn primary block mt8" ${ok?"":"disabled"} onclick="sendOtp()">Send code</button>
-    <div class="xs muted2 center mt16">Demo app — no real SMS is sent.</div>
+    <button class="btn primary block mt8" ${ok?"":"disabled"} onclick="sendOtp()">Send Dev code (1234)</button>
+    <div class="xs muted2 center mt14">Dev OTP is 1234 · Tap autofill or type 1234.</div>
   </div>`;
 }
 
 function sendOtp(){
-  const code=String(rint(1000,9999));
-  S.auth.sent=code; S.auth.otp="";
+  const code="1234";
+  S.auth.sent=code; S.auth.otp="1234";
   authGo("otp");
-  setTimeout(()=>toast("Your SnapPro code is "+code,"Tap 'Autofill' if you'd rather not type it","chat"),500);
+  setTimeout(()=>toast("Your SnapPro code is 1234","Dev OTP autofilled for quick testing","chat"),400);
 }
 
 function vAuthOtp(){
-  const a=S.auth, ok=a.otp.length===4;
+  const a=S.auth, ok=String(a.otp).length===4;
   return `<div class="topbar"><button class="iconbtn" onclick="authGo('phone')">${icon("back",18)}</button>
     <div class="grow"><div class="h3">Verify your number</div><div class="xs muted2">+91 ${esc(a.phone)}</div></div></div>
   <div class="pad">
-    <div class="h2 mt8">Enter the code</div>
+    <div class="h2 mt8">Enter Dev code</div>
     <div class="sm muted mt8">Sent to +91 ${esc(a.phone)} · <button class="accent bold" onclick="sendOtp()">Resend</button></div>
-    <div class="row gap10 mt24" style="justify-content:center">
-      ${[0,1,2,3].map(i=>`<div style="width:56px;height:64px;border-radius:15px;display:grid;place-items:center;font-size:26px;font-weight:800;
-        background:var(--surface);border:1.5px solid ${a.otp.length===i?"var(--accent)":"var(--border)"}">${esc(a.otp[i]||"")}</div>`).join("")}
+
+    <div class="card mt12 mb8" style="background:rgba(255,90,31,.11);border-color:rgba(255,90,31,.35);padding:10px 14px">
+      <div class="row gap8">
+        <span style="font-size:16px">⚡</span>
+        <div class="xs muted"><span class="bold" style="color:#ffab86">Dev OTP Active:</span> Code is <b style="color:#fff;background:var(--surface-3);padding:2px 6px;border-radius:6px">1234</b></div>
+      </div>
     </div>
-    <input id="authOtp" class="input mt20" inputmode="numeric" maxlength="4" placeholder="4-digit code" style="text-align:center;letter-spacing:8px;font-size:20px"
+
+    <div class="row gap10 mt20" style="justify-content:center">
+      ${[0,1,2,3].map(i=>`<div style="width:56px;height:64px;border-radius:15px;display:grid;place-items:center;font-size:26px;font-weight:800;
+        background:var(--surface);border:1.5px solid ${String(a.otp).length===i?"var(--accent)":"var(--border)"}">${esc(String(a.otp)[i]||"")}</div>`).join("")}
+    </div>
+    <input id="authOtp" class="input mt16" inputmode="numeric" maxlength="4" placeholder="4-digit code" style="text-align:center;letter-spacing:8px;font-size:20px"
       value="${esc(a.otp)}" oninput="S.auth.otp=this.value.replace(/\\D/g,'').slice(0,4);save();render()">
-    <button class="btn block ghost mt8" onclick="S.auth.otp=S.auth.sent;save();render()">Autofill demo code (${esc(S.auth.sent||"")})</button>
-    <button class="btn primary block mt12" ${ok?"":"disabled"} onclick="verifyOtp()">Verify &amp; continue</button>
+    <button class="btn block ghost mt8" onclick="S.auth.otp='1234';save();render()">⚡ Autofill Dev code (1234)</button>
+    <button class="btn primary block mt12" ${ok?"":"disabled"} onclick="verifyOtp()">${icon("cam",16,"#fff")} Verify &amp; Continue</button>
     ${a.err?`<div class="xs center mt12" style="color:var(--red)">${esc(a.err)}</div>`:""}
   </div>`;
 }
 
 function verifyOtp(){
   const a=S.auth;
-  if(a.otp!==a.sent){ S.auth.err="That code isn't right. Try again."; save(); render(); return; }
+  if(a.otp!==a.sent && a.otp!=="1234" && a.otp!==DEV_OTP){ S.auth.err="That code isn't right. Dev OTP is 1234."; save(); render(); return; }
   S.auth.err=null;
-  const existing=S.accounts.find(x=>x.phone===a.phone);
-  if(existing){ loginAs(existing.id); return; }
-  if(a.type==="photographer"){
-    S.auth.draft={name:"",cats:[],years:2,priceMult:1,area:AREAS[0],bio:"",step:1};
-    authGo("pgSetup");
-  } else {
-    S.auth.draft={name:"",area:AREAS[0]};
-    authGo("custSetup");
-  }
+
+  // Trigger camera shutter morph and bright white flash!
+  triggerCameraFlashTransition(()=>{
+    const existing=S.accounts.find(x=>x.phone===a.phone);
+    if(existing){ loginAs(existing.id); return; }
+    if(a.type==="photographer"){
+      S.auth.draft={name:"",cats:[],years:2,priceMult:1,area:AREAS[0],bio:"",step:1};
+      authGo("pgSetup");
+    } else {
+      S.auth.draft={name:"",area:AREAS[0]};
+      authGo("custSetup");
+    }
+  });
 }
 
 function vAuthCustSetup(){
@@ -2314,22 +2532,151 @@ function createPhotographerAccount(){
 }
 
 function vAuthLogin(){
-  return `<div class="topbar"><button class="iconbtn" onclick="authGo('welcome')">${icon("back",18)}</button>
-    <div class="grow"><div class="h3">Log in</div><div class="xs muted2">Pick a saved account</div></div></div>
+  const phone = S.auth.loginPhone || "";
+  const otp = S.auth.loginOtp != null ? S.auth.loginOtp : "1234";
+  const role = S.auth.loginRole || "customer";
+  const okPhone = /^[6-9]\d{9}$/.test(phone);
+  const okOtp = String(otp).length === 4;
+
+  return `<div class="topbar">
+    <button class="iconbtn" onclick="authGo('welcome')">${icon("back",18)}</button>
+    <div class="grow"><div class="h3">Log in to SnapPro</div><div class="xs muted2">Instant Dev OTP login</div></div>
+  </div>
   <div class="pad">
-    ${S.accounts.length?`<div class="stack gap10">
-      ${S.accounts.map(a=>{
-        const pg=a.type==="photographer"?S.photographers.find(p=>p.id===a.photographerId):null;
-        return `<button class="card tap row gap12" style="width:100%;text-align:left" onclick="loginAs('${a.id}')">
-          ${avatarHtml(pg||{id:a.id,name:a.name},"av-48",pg?pg.online:false)}
-          <div class="grow"><div class="bold sm">${esc(a.name)}</div>
-            <div class="xs muted2">+91 ${esc(a.phone)}</div>
-            <div class="row gap6 mt8"><span class="chip ${a.type==="photographer"?"purple":"accent"}" style="font-size:10px">
-              ${a.type==="photographer"?"📷 Photographer":"🙋 Customer"}</span></div></div>
-          <span class="muted2" style="font-size:20px">›</span></button>`;
-      }).join("")}</div>`:`<div class="empty"><div class="e-ic">👤</div>No accounts yet.</div>`}
-    <button class="btn block mt16" onclick="authGo('welcome')">＋ Create a new account</button>
-  </div>`;
+    <div class="center mt4 mb14">
+      <div style="width:58px;height:58px;margin:0 auto;border-radius:18px;background:linear-gradient(135deg,var(--accent),#ff8a3d);display:grid;place-items:center;box-shadow:0 12px 28px -6px rgba(255,90,31,.6)">
+        ${icon("cam",28,"#fff",2)}</div>
+      <div class="h2 mt12">Welcome back</div>
+      <div class="sm muted mt4">Enter your number & Dev OTP to access your account</div>
+    </div>
+
+    <!-- Dev Mode Callout Banner -->
+    <div class="card mb14" style="background:rgba(255,90,31,.11);border-color:rgba(255,90,31,.35);padding:12px 14px">
+      <div class="row gap10">
+        <div style="font-size:20px">⚡</div>
+        <div class="grow">
+          <div class="bold sm" style="color:#ffab86">Dev OTP Mode Active</div>
+          <div class="xs muted mt2">Brevo API pending. Use Dev OTP <b style="color:#fff;background:var(--surface-3);padding:2px 6px;border-radius:6px;letter-spacing:1px">1234</b> to log in.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Mobile Number -->
+    <div class="field">
+      <label>Mobile number</label>
+      <div class="row gap8">
+        <div class="chip" style="padding:13px 14px;border-radius:13px;background:var(--surface)">🇮🇳 +91</div>
+        <input id="loginPhone" class="input grow" inputmode="numeric" maxlength="10" placeholder="98765 43210"
+          value="${esc(phone)}" oninput="S.auth.loginPhone=this.value.replace(/\\D/g,'').slice(0,10);save();render()">
+      </div>
+      ${phone && !okPhone ? `<div class="xs mt6" style="color:var(--red)">Enter a valid 10-digit mobile number</div>` : ''}
+    </div>
+
+    <!-- Role Selection -->
+    <div class="field mt10">
+      <label>Log in as</label>
+      <div class="grid2">
+        <button type="button" class="card tap row gap8" style="padding:11px;${role==='customer'?'border-color:var(--accent);background:var(--accent-soft)':''}"
+          onclick="S.auth.loginRole='customer';save();render()">
+          <span style="font-size:18px">🙋</span>
+          <div style="text-align:left"><div class="bold sm">Customer</div><div class="xs muted2">Book pros</div></div>
+        </button>
+        <button type="button" class="card tap row gap8" style="padding:11px;${role==='photographer'?'border-color:var(--accent);background:rgba(166,124,255,.16)':''}"
+          onclick="S.auth.loginRole='photographer';save();render()">
+          <span style="font-size:18px">📷</span>
+          <div style="text-align:left"><div class="bold sm">Photographer</div><div class="xs muted2">Get jobs</div></div>
+        </button>
+      </div>
+    </div>
+
+    <!-- Dev OTP -->
+    <div class="field mt14">
+      <div class="between mb6">
+        <label style="margin:0">Dev OTP (Code: 1234)</label>
+        <button type="button" class="xs accent bold" onclick="S.auth.loginOtp='1234';save();render();">⚡ Autofill 1234</button>
+      </div>
+      <div class="row gap10 mt8" style="justify-content:center">
+        ${[0,1,2,3].map(i=>`<div style="width:54px;height:60px;border-radius:14px;display:grid;place-items:center;font-size:24px;font-weight:800;
+          background:var(--surface);border:1.5px solid ${String(otp).length===i?'var(--accent)':'var(--border)'}">${esc(String(otp)[i]||'')}</div>`).join('')}
+      </div>
+      <input id="loginOtp" class="input mt10" inputmode="numeric" maxlength="4" placeholder="Enter 1234"
+        style="text-align:center;letter-spacing:6px;font-size:18px;font-weight:700"
+        value="${esc(otp)}" oninput="S.auth.loginOtp=this.value.replace(/\\D/g,'').slice(0,4);save();render()">
+    </div>
+
+    <!-- Login Button -->
+    <button class="btn primary block mt14" id="btnLogin" ${okPhone&&okOtp?'':'disabled'} onclick="submitLogin()">
+      ${icon("cam",18,"#fff")} Log In
+    </button>
+
+    ${S.accounts.length?`
+      <div class="divider mt20"></div>
+      <div class="sec-title">Or 1-tap log in as saved user</div>
+      <div class="stack gap8">
+        ${S.accounts.map(a=>{
+          const pg = a.type==='photographer'?S.photographers.find(p=>p.id===a.photographerId):null;
+          return `<button class="card tap row gap10" style="padding:10px 12px;width:100%;text-align:left" onclick="quickLogin('${a.id}')">
+            ${avatarHtml(pg||{id:a.id,name:a.name},"av-40",pg?pg.online:false)}
+            <div class="grow">
+              <div class="bold sm">${esc(a.name)}</div>
+              <div class="xs muted2">+91 ${esc(a.phone)} · ${a.type==='photographer'?'📷 Photographer':'🙋 Customer'}</div>
+            </div>
+            <span class="muted2">›</span>
+          </button>`;
+        }).join('')}
+      </div>
+    `:''}
+
+    <div class="center mt20">
+      <button class="xs muted2" onclick="authGo('welcome')">Don't have an account? <span class="accent bold">Sign up here</span></button>
+    </div>
+  </div><div style="height:24px"></div>`;
+}
+
+function submitLogin(){
+  const phone = (S.auth.loginPhone || "").trim();
+  const otp = String(S.auth.loginOtp || "").trim();
+  const role = S.auth.loginRole || "customer";
+
+  if(!/^[6-9]\d{9}$/.test(phone)){
+    toast("Invalid Number","Enter a valid 10-digit mobile number","x");
+    return;
+  }
+  if(otp !== "1234" && otp !== (S.auth.sent||"") && otp !== DEV_OTP){
+    toast("Incorrect OTP","Dev OTP is 1234. Use 1234 to log in.","x");
+    return;
+  }
+
+  // Trigger camera shutter morph and bright white flash!
+  triggerCameraFlashTransition(()=>{
+    let a = S.accounts.find(x=>x.phone===phone);
+    if(!a){
+      if(role==="photographer"){
+        const seed = { name:"Photographer "+phone.slice(-4), cats:["portrait","event"], rating:4.8, jobs:8, years:3, price:1.0, bio:"On-demand shooter on SnapPro." };
+        const pg = makePhotographer(seed, S.photographers.length);
+        pg.id = uid("pg");
+        pg.area = AREAS[0];
+        pg.online = true;
+        S.photographers.push(pg);
+        a = { id:uid("acc"), type:"photographer", phone, name:pg.name, createdAt:Date.now(), photographerId:pg.id };
+      } else {
+        a = { id:uid("acc"), type:"customer", phone, name:"Customer "+phone.slice(-4), createdAt:Date.now(), customer:{ name:"Customer "+phone.slice(-4), area:AREAS[0], wallet:2500 } };
+      }
+      S.accounts.push(a);
+    }
+    S.auth.loginPhone = "";
+    S.auth.loginOtp = "1234";
+    loginAs(a.id);
+    setTimeout(()=>toast("Welcome to SnapPro!","Camera loaded and ready","cam"), 250);
+  });
+}
+
+function quickLogin(id){
+  triggerCameraFlashTransition(()=>{
+    loginAs(id);
+    const a = S.accounts.find(x=>x.id===id);
+    if(a) setTimeout(()=>toast("Welcome back, "+a.name.split(" ")[0]+"!","Camera loaded and ready","cam"), 250);
+  });
 }
 
 function vAuthAdmin(){
