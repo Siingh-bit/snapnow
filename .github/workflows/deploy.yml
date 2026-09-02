@@ -13,16 +13,26 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Prepare connection details
+        id: prep
+        run: |
+          RAW_SERVER="${{ secrets.FTP_SERVER }}"
+          CLEAN_SERVER=$(echo "$RAW_SERVER" | sed -e 's|^[a-zA-Z0-9]*://||' -e 's|/.*$||' -e 's|:[0-9]*$||' | tr -d '[:space:]')
+          if [ -z "$CLEAN_SERVER" ]; then
+            CLEAN_SERVER="ftp.snappro.in"
+          fi
+          echo "server=$CLEAN_SERVER" >> $GITHUB_OUTPUT
+
       - name: Backup live index.html to index-old.html
         run: |
           curl -s https://snappro.in/index.html -o index-old.html
-          curl -s --ftp-pasv -T index-old.html -u "${{ secrets.FTP_USERNAME }}:${{ secrets.FTP_PASSWORD }}" "ftp://${{ secrets.FTP_SERVER }}/public_html/index-old.html" || curl -s --ftp-pasv -T index-old.html -u "${{ secrets.FTP_USERNAME }}:${{ secrets.FTP_PASSWORD }}" "ftp://${{ secrets.FTP_SERVER }}/index-old.html" || true
+          curl -s --ftp-pasv -T index-old.html -u "${{ secrets.FTP_USERNAME }}:${{ secrets.FTP_PASSWORD }}" "ftp://${{ steps.prep.outputs.server }}/public_html/index-old.html" || true
           rm -f index-old.html
 
       - name: Sync files to Hostinger
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
-          server: ${{ secrets.FTP_SERVER }}
+          server: ${{ steps.prep.outputs.server }}
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
           server-dir: public_html/
