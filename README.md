@@ -27,6 +27,14 @@ python3 -m http.server 8000
 
 ---
 
+## Hosting & Deployment
+
+The live site at **[snappro.in](https://snappro.in)** is hosted on **Hostinger shared hosting** (hPanel).
+
+Deployments are automated via GitHub Actions ([`.github/workflows/deploy.yml`](.github/workflows/deploy.yml)) using [SamKirkland/FTP-Deploy-Action](https://github.com/SamKirkland/FTP-Deploy-Action). Every push to `main` automatically syncs `index.html` to Hostinger's `public_html/` web root.
+
+---
+
 ## The core loop
 
 1. **Post a request** — pick urgency (right now / 1h / 3h / later today / tomorrow / custom date),
