@@ -311,124 +311,88 @@ select.input{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xml
 
 table.tbl{width:100%;border-collapse:collapse;font-size:12px}
 table.tbl th{text-align:left;color:var(--muted-2);font-weight:700;font-size:10px;letter-spacing:.8px;text-transform:uppercase;padding:8px 6px;border-bottom:1px solid var(--border)}
-/* ---------- camera shutter & flash transition ---------- */
-#camTransitionOverlay{
-  position:fixed;inset:0;z-index:999999;
-  display:flex;align-items:center;justify-content:center;
-  background:rgba(5,5,10,.94);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
-  pointer-events:all;overflow:hidden;
+/* ---------- OTP digits -> camera morph, shutter & flash ---------- */
+#camFx{position:fixed;inset:0;z-index:2147483000;overflow:hidden;pointer-events:all;font-family:var(--ff)}
+#camFx .fx-scrim{position:absolute;inset:0;background:rgba(6,6,11,0);transition:background .4s ease,backdrop-filter .4s ease}
+#camFx.dim .fx-scrim{background:rgba(6,6,11,.93);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+
+/* clones of the real OTP digit boxes, flown from their true positions */
+#camFx .fx-cell{
+  position:absolute;display:grid;place-items:center;
+  font-size:26px;font-weight:800;color:var(--text);
+  background:var(--surface);border:1.5px solid var(--accent);border-radius:15px;
+  box-shadow:0 8px 26px rgba(0,0,0,.5);
+  transition:transform .54s cubic-bezier(.66,0,.34,1),
+             opacity .26s ease .3s,
+             border-radius .54s ease,
+             background .54s ease,
+             box-shadow .54s ease;
+  will-change:transform,opacity;
 }
-.cam-anim-wrap{
-  display:flex;flex-direction:column;align-items:center;gap:18px;
-  animation:camMorphIn .45s cubic-bezier(.175,.885,.32,1.275) forwards;
+#camFx .fx-cell span{transition:opacity .2s ease}
+#camFx.converge .fx-cell span{opacity:0}
+
+/* the camera the digits become */
+#camFx .fx-cam{
+  position:absolute;left:50%;top:50%;
+  transform:translate(-50%,-50%) scale(.18);opacity:0;
+  display:flex;flex-direction:column;align-items:center;gap:16px;
+  transition:transform .52s cubic-bezier(.2,1.28,.34,1),opacity .28s ease;
+  will-change:transform,opacity;
 }
-@keyframes camMorphIn{
-  0%{transform:scale(0.15) rotate(-30deg);opacity:0}
-  70%{transform:scale(1.15) rotate(6deg);opacity:1}
-  100%{transform:scale(1) rotate(0deg);opacity:1}
-}
-.cam-badge-tag{
-  font-size:11px;font-weight:800;letter-spacing:1.5px;color:var(--accent);
-  background:rgba(255,90,31,.15);border:1px solid rgba(255,90,31,.4);
+#camFx.cam-in .fx-cam{opacity:1;transform:translate(-50%,-50%) scale(1)}
+
+#camFx .fx-tag{
+  font-size:10.5px;font-weight:800;letter-spacing:1.6px;color:var(--accent);
+  background:rgba(255,90,31,.15);border:1px solid rgba(255,90,31,.42);
   padding:4px 14px;border-radius:999px;text-transform:uppercase;
 }
-.cam-retro-body{
-  width:160px;height:118px;background:linear-gradient(145deg,#252535,#12121a);
-  border:2.5px solid rgba(255,90,31,.85);border-radius:28px;
+#camFx .fx-body{
+  width:168px;height:124px;background:linear-gradient(145deg,#252535,#12121a);
+  border:2.5px solid rgba(255,90,31,.9);border-radius:30px;
   position:relative;display:grid;place-items:center;
-  box-shadow:0 24px 60px rgba(0,0,0,.95),0 0 50px rgba(255,90,31,.45);
+  box-shadow:0 26px 64px rgba(0,0,0,.95),0 0 54px rgba(255,90,31,.42);
 }
-.cam-top-plate{
-  position:absolute;top:-12px;left:0;right:0;height:12px;
+#camFx .fx-shutterbtn{
+  position:absolute;top:-11px;left:30px;width:20px;height:11px;
+  background:linear-gradient(180deg,#ff5a1f,#c43d08);border-radius:5px 5px 0 0;
+  box-shadow:0 -2px 9px rgba(255,90,31,.65);transition:transform .13s ease;
 }
-.cam-shutter-btn{
-  position:absolute;top:0;left:28px;width:18px;height:10px;
-  background:linear-gradient(180deg,#ff5a1f,#c43d08);border-radius:4px 4px 0 0;
-  box-shadow:0 -2px 8px rgba(255,90,31,.6);
-  animation:btnPress .3s ease .15s;
+#camFx.snap .fx-shutterbtn{transform:translateY(6px)}
+#camFx .fx-dial{position:absolute;top:-10px;right:28px;width:28px;height:10px;background:linear-gradient(180deg,#8b8b9e,#44444f);border-radius:5px 5px 0 0}
+#camFx .fx-vf{position:absolute;top:13px;left:17px;width:24px;height:17px;background:#090d14;border:1.5px solid rgba(255,255,255,.34);border-radius:5px;display:grid;place-items:center}
+#camFx .fx-vf i{width:6px;height:6px;border-radius:50%;background:#00e5ff;box-shadow:0 0 7px #00e5ff}
+#camFx .fx-emitter{position:absolute;top:12px;right:17px;width:32px;height:19px;background:#1a1c26;border:1.5px solid rgba(255,255,255,.38);border-radius:6px;display:grid;place-items:center;overflow:hidden}
+#camFx .fx-emitter i{width:19px;height:9px;border-radius:2px;background:#ffc857;box-shadow:0 0 12px #ffc857;transition:background .24s ease,box-shadow .24s ease}
+#camFx.charge .fx-emitter i{background:#fff;box-shadow:0 0 34px #fff,0 0 62px var(--accent)}
+#camFx .fx-lens{
+  width:86px;height:86px;border-radius:50%;
+  background:radial-gradient(circle at 40% 34%,#2c2c3e,#0a0a0f 74%);
+  border:4.5px solid var(--accent);display:grid;place-items:center;position:relative;
+  box-shadow:0 0 32px rgba(255,90,31,.5),inset 0 0 22px rgba(0,0,0,.95);
 }
-@keyframes btnPress{
-  0%,100%{transform:translateY(0)}
-  50%{transform:translateY(4px)}
-}
-.cam-top-dial{
-  position:absolute;top:0;right:26px;width:26px;height:11px;
-  background:linear-gradient(180deg,#888,#444);border-radius:4px 4px 0 0;
-}
-.cam-viewfinder-glass{
-  position:absolute;top:12px;left:16px;width:22px;height:16px;
-  background:#090d14;border:1.5px solid rgba(255,255,255,.35);border-radius:5px;
-  display:grid;place-items:center;
-  box-shadow:inset 0 0 6px rgba(0,229,255,.5);
-}
-.cam-vf-dot{
-  width:6px;height:6px;border-radius:50%;background:#00e5ff;box-shadow:0 0 6px #00e5ff;
-}
-.cam-flash-emitter{
-  position:absolute;top:11px;right:16px;width:30px;height:18px;
-  background:#1a1c26;border:1.5px solid rgba(255,255,255,.4);border-radius:6px;
-  display:grid;place-items:center;overflow:hidden;
-}
-.cam-flash-core{
-  width:18px;height:9px;background:#ffc857;border-radius:2px;
-  box-shadow:0 0 14px #ffc857;
-  animation:emitterCharge .42s ease forwards;
-}
-@keyframes emitterCharge{
-  0%{background:#ffc857;box-shadow:0 0 8px #ffc857}
-  70%{background:#ffffff;box-shadow:0 0 35px #fff,0 0 60px var(--accent)}
-  100%{background:#ffffff;box-shadow:0 0 80px #fff}
-}
-.cam-big-lens{
-  width:82px;height:82px;border-radius:50%;
-  background:radial-gradient(circle at 40% 35%,#2c2c3e,#0a0a0f 75%);
-  border:4.5px solid #ff5a1f;display:grid;place-items:center;
-  position:relative;box-shadow:0 0 30px rgba(255,90,31,.5),inset 0 0 20px rgba(0,0,0,.95);
-}
-.cam-lens-glare{
-  position:absolute;top:10px;left:14px;width:20px;height:10px;border-radius:50%;
-  background:rgba(255,255,255,.45);transform:rotate(-35deg);pointer-events:none;
-}
-.cam-shutter-iris{
-  width:52px;height:52px;border-radius:50%;
+#camFx .fx-glare{position:absolute;top:11px;left:15px;width:21px;height:10px;border-radius:50%;background:rgba(255,255,255,.42);transform:rotate(-35deg);pointer-events:none}
+#camFx .fx-iris{
+  width:56px;height:56px;border-radius:50%;
   background:conic-gradient(from 0deg,#1c1d28,#0e0f16,#2c2d3c,#0e0f16);
-  border:2px solid rgba(255,255,255,.25);position:relative;
-  display:grid;place-items:center;overflow:hidden;
-  animation:shutterSnap .35s cubic-bezier(.6,0,.4,1) forwards;
-  animation-delay:.18s;
+  border:2px solid rgba(255,255,255,.24);display:grid;place-items:center;
+  transition:transform .28s cubic-bezier(.6,0,.35,1);
 }
-@keyframes shutterSnap{
-  0%{transform:scale(1) rotate(0deg)}
-  50%{transform:scale(.6) rotate(120deg)}
-  100%{transform:scale(0) rotate(240deg)}
+#camFx.snap .fx-iris{transform:scale(0) rotate(210deg)}
+#camFx .fx-iris i{width:11px;height:11px;border-radius:50%;background:var(--accent);box-shadow:0 0 11px var(--accent)}
+#camFx .fx-status{
+  font-size:12.5px;font-weight:800;letter-spacing:1.4px;color:#f4f4f7;text-transform:uppercase;
+  display:flex;align-items:center;gap:8px;background:rgba(20,20,28,.85);
+  padding:8px 18px;border-radius:24px;border:1px solid rgba(255,90,31,.4);
 }
-.cam-shutter-center-dot{
-  width:10px;height:10px;border-radius:50%;background:#ff5a1f;
-  box-shadow:0 0 10px #ff5a1f;
-}
-.cam-anim-status{
-  font-size:13px;font-weight:800;letter-spacing:1.4px;color:#f4f4f7;
-  text-transform:uppercase;display:flex;align-items:center;gap:8px;
-  background:rgba(20,20,28,.85);padding:8px 18px;border-radius:24px;
-  border:1px solid rgba(255,90,31,.4);
-  animation:pulseStatus .45s infinite alternate;
-}
-@keyframes pulseStatus{
-  0%{opacity:.7;transform:scale(.98)}
-  100%{opacity:1;color:var(--accent);transform:scale(1)}
-}
-.bright-white-flash{
-  position:fixed;inset:0;background:#ffffff;
-  opacity:0;pointer-events:none;z-index:1000000;
-}
-.bright-white-flash.fire{
-  animation:flashExplode .65s ease-out forwards;
-}
-@keyframes flashExplode{
-  0%{opacity:0}
-  15%{opacity:1}
-  45%{opacity:1}
-  100%{opacity:0}
+#camFx .fx-flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none}
+#camFx.flash .fx-flash{animation:fxFlash .95s ease-out forwards}
+@keyframes fxFlash{0%{opacity:0}7%{opacity:1}44%{opacity:1}100%{opacity:0}}
+
+@media (prefers-reduced-motion:reduce){
+  #camFx .fx-cell,#camFx .fx-cam,#camFx .fx-iris,#camFx .fx-shutterbtn,#camFx .fx-emitter i,#camFx .fx-scrim{transition-duration:.01ms!important}
+  #camFx.flash .fx-flash{animation:fxFlashSoft .45s ease-out forwards}
+  @keyframes fxFlashSoft{0%{opacity:0}20%{opacity:.55}100%{opacity:0}}
 }
 
 @media (max-width:900px){
@@ -2194,106 +2158,147 @@ function vPgProfile(){
 /* ============================================================
    AUTH — camera shutter sound & white flash transition
    ============================================================ */
-function playShutterSound(){
+/* one shared AudioContext — creating one per shutter leaks and browsers cap them */
+var _fxAudio = null;
+function fxAudioCtx(){
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if(!AC) return null;
   try{
-    const AudioCtx = window.AudioContext || window.webkitAudioContext;
-    if(!AudioCtx) return;
-    const ctx = new AudioCtx();
-    if(ctx.state === "suspended") ctx.resume();
+    if(!_fxAudio || _fxAudio.state === "closed") _fxAudio = new AC();
+    if(_fxAudio.state === "suspended") _fxAudio.resume().catch(()=>{});
+    return _fxAudio;
+  }catch(e){ return null; }
+}
 
-    // Mirror flip thump (low transient click)
-    const osc = ctx.createOscillator();
-    const gain1 = ctx.createGain();
+function playShutterSound(){
+  const ctx = fxAudioCtx(); if(!ctx) return;
+  try{
+    const t = ctx.currentTime;
+
+    /* mirror flip — low thump */
+    const osc = ctx.createOscillator(), g1 = ctx.createGain();
     osc.type = "sine";
-    osc.frequency.setValueAtTime(150, ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(30, ctx.currentTime + 0.05);
-    gain1.gain.setValueAtTime(0.25, ctx.currentTime);
-    gain1.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.05);
-    osc.connect(gain1);
-    gain1.connect(ctx.destination);
-    osc.start(ctx.currentTime);
-    osc.stop(ctx.currentTime + 0.05);
+    osc.frequency.setValueAtTime(150, t);
+    osc.frequency.exponentialRampToValueAtTime(30, t + 0.05);
+    g1.gain.setValueAtTime(0.22, t);
+    g1.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
+    osc.connect(g1); g1.connect(ctx.destination);
+    osc.start(t); osc.stop(t + 0.06);
 
-    // Mechanical shutter curtain snap (sharp filtered noise)
+    /* curtain snap — filtered noise burst */
     const len = Math.floor(ctx.sampleRate * 0.08);
     const buf = ctx.createBuffer(1, len, ctx.sampleRate);
     const data = buf.getChannelData(0);
-    for(let i=0; i<len; i++) data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (len * 0.25));
-    const noise = ctx.createBufferSource();
-    noise.buffer = buf;
-    const filter = ctx.createBiquadFilter();
-    filter.type = "highpass";
-    filter.frequency.value = 1000;
-    const gain2 = ctx.createGain();
-    gain2.gain.setValueAtTime(0.4, ctx.currentTime + 0.04);
-    gain2.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
-    noise.connect(filter);
-    filter.connect(gain2);
-    gain2.connect(ctx.destination);
-    noise.start(ctx.currentTime + 0.04);
+    for(let i = 0; i < len; i++) data[i] = (Math.random()*2 - 1) * Math.exp(-i / (len * 0.25));
+    const noise = ctx.createBufferSource(); noise.buffer = buf;
+    const hp = ctx.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 1000;
+    const g2 = ctx.createGain();
+    g2.gain.setValueAtTime(0.36, t + 0.04);
+    g2.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+    noise.connect(hp); hp.connect(g2); g2.connect(ctx.destination);
+    noise.start(t + 0.04); noise.stop(t + 0.14);
   }catch(e){}
 }
 
-function triggerCameraFlashTransition(callback){
-  let overlay = el("camTransitionOverlay");
-  let flash = el("camFlashBurst");
+/* timers from a previous run, so a re-trigger never double-fires */
+var _fxTimers = [];
+function fxClearTimers(){ _fxTimers.forEach(clearTimeout); _fxTimers = []; }
+function fxAt(ms, fn){ _fxTimers.push(setTimeout(fn, ms)); }
 
-  if(!overlay){
-    overlay = document.createElement("div");
-    overlay.id = "camTransitionOverlay";
-    overlay.innerHTML = `
-      <div class="cam-anim-wrap">
-        <div class="cam-badge-tag">DEV OTP ACCEPTED</div>
-        <div class="cam-retro-body">
-          <div class="cam-top-plate">
-            <div class="cam-shutter-btn"></div>
-            <div class="cam-top-dial"></div>
-          </div>
-          <div class="cam-viewfinder-glass"><div class="cam-vf-dot"></div></div>
-          <div class="cam-flash-emitter"><div class="cam-flash-core"></div></div>
-          <div class="cam-big-lens">
-            <div class="cam-lens-glare"></div>
-            <div class="cam-shutter-iris"><div class="cam-shutter-center-dot"></div></div>
-          </div>
-        </div>
-        <div class="cam-anim-status">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-          <span>SNAPPING YOUR SHOT…</span>
-        </div>
-      </div>
-      <div id="camFlashBurst" class="bright-white-flash"></div>`;
-    document.body.appendChild(overlay);
-    flash = el("camFlashBurst");
+/*
+  The OTP digits physically become the camera:
+  the four real digit boxes are cloned at their exact on-screen positions,
+  fly to the centre while their numbers fade, and the camera grows out of
+  where they merged. Then the shutter snaps and the screen flashes white.
+  Rebuilt from scratch on every call, so it always replays.
+*/
+function triggerCameraFlashTransition(callback, opts){
+  opts = opts || {};
+  fxClearTimers();
+  const prev = el("camFx"); if(prev) prev.remove();
+
+  const reduced = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  let done = false;
+  const fire = ()=>{ if(done) return; done = true; try{ if(callback) callback(); }catch(e){ console.error("SnapPro login transition:", e); } };
+
+  const fx = document.createElement("div");
+  fx.id = "camFx";
+  fx.setAttribute("role","status");
+  fx.setAttribute("aria-live","polite");
+  fx.setAttribute("aria-label","Signing you in");
+  fx.innerHTML =
+    '<div class="fx-scrim"></div>' +
+    '<div class="fx-cam">' +
+      '<div class="fx-tag">' + esc(opts.tag || "Code verified") + '</div>' +
+      '<div class="fx-body">' +
+        '<div class="fx-shutterbtn"></div><div class="fx-dial"></div>' +
+        '<div class="fx-vf"><i></i></div>' +
+        '<div class="fx-emitter"><i></i></div>' +
+        '<div class="fx-lens"><div class="fx-glare"></div><div class="fx-iris"><i></i></div></div>' +
+      '</div>' +
+      '<div class="fx-status">' +
+        '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>' +
+        '<span>' + esc(opts.status || "Say cheese…") + '</span>' +
+      '</div>' +
+    '</div>' +
+    '<div class="fx-flash"></div>';
+  document.body.appendChild(fx);
+
+  /* clone the live digit boxes where they actually sit on screen */
+  const cells = Array.prototype.slice.call(document.querySelectorAll(".otp-cell"));
+  const clones = [];
+  cells.forEach(function(c){
+    const r = c.getBoundingClientRect();
+    if(!r.width || !r.height) return;
+    const d = document.createElement("div");
+    d.className = "fx-cell";
+    d.style.left = r.left + "px"; d.style.top = r.top + "px";
+    d.style.width = r.width + "px"; d.style.height = r.height + "px";
+    d.innerHTML = "<span>" + esc((c.textContent || "").trim()) + "</span>";
+    fx.appendChild(d);
+    clones.push({node: d, rect: r});
+  });
+
+  const cx = window.innerWidth / 2, cy = window.innerHeight / 2;
+
+  /* reduced motion: no flying, no blinding strobe — just a soft wash */
+  if(reduced){
+    fx.classList.add("dim","cam-in");
+    clones.forEach(function(c){ c.node.style.opacity = "0"; });
+    fxAt(140, function(){ fx.classList.add("charge"); });
+    fxAt(230, function(){ fx.classList.add("snap"); playShutterSound(); });
+    fxAt(300, function(){ fx.classList.add("flash"); });
+    fxAt(420, fire);
+    fxAt(800, function(){ const n = el("camFx"); if(n) n.remove(); });
+    return;
   }
 
-  // 1. Reveal camera overlay & play realistic mechanical shutter click
-  overlay.style.display = "flex";
-  overlay.style.opacity = "1";
-  playShutterSound();
+  requestAnimationFrame(function(){
+    fx.classList.add("dim");
+    /* digits converge on the centre and dissolve into the camera's footprint */
+    clones.forEach(function(c, i){
+      const dx = cx - (c.rect.left + c.rect.width / 2);
+      const dy = cy - (c.rect.top + c.rect.height / 2);
+      const spread = (i - (clones.length - 1) / 2);
+      c.node.style.transform = "translate(" + dx + "px," + dy + "px) scale(.34) rotate(" + (spread * 24) + "deg)";
+      c.node.style.borderRadius = "50%";
+      c.node.style.background = "var(--accent)";
+      c.node.style.boxShadow = "0 0 34px rgba(255,90,31,.75)";
+      c.node.style.opacity = "0";
+    });
+    fx.classList.add("converge");
+  });
 
-  // 2. Fire blinding white screen flash at 380ms
-  setTimeout(()=>{
-    if(flash){
-      flash.classList.remove("fire");
-      void flash.offsetWidth; // force reflow
-      flash.classList.add("fire");
-    }
-  }, 380);
+  fxAt(430, function(){ fx.classList.add("cam-in"); clones.forEach(function(c){ c.node.remove(); }); });
+  fxAt(700, function(){ fx.classList.add("charge"); });
+  fxAt(870, function(){ fx.classList.add("snap"); playShutterSound(); });
+  fxAt(990, function(){ fx.classList.add("flash"); });
+  /* log in while the screen is pure white, so the app is already there when it fades */
+  fxAt(1120, fire);
+  fxAt(1900, function(){ const n = el("camFx"); if(n) n.remove(); });
 
-  // 3. At peak white burst (500ms): execute the login callback & route to home dashboard
-  setTimeout(()=>{
-    try{
-      if(callback) callback();
-    }catch(e){
-      console.error("Login transition error:", e);
-    }
-  }, 500);
-
-  // 4. Clean up after flash dissipates
-  setTimeout(()=>{
-    if(overlay) overlay.style.display = "none";
-    if(flash) flash.classList.remove("fire");
-  }, 950);
+  /* safety net: never strand the user behind the overlay */
+  fxAt(3200, function(){ fire(); const n = el("camFx"); if(n) n.remove(); });
 }
 
 function authGo(step,patch={}){ S.auth=Object.assign({},S.auth,patch,{step}); save(); render(); scrollTop(); }
@@ -2413,9 +2418,6 @@ function vAuthPhone(){
             style="border:0;background:none;padding:13px 4px;box-shadow:none"
             value="${esc(a.email)}" oninput="S.auth.email=this.value.trim();save();render()">
         </div>
-        <div class="row gap6 mt6">
-          <button type="button" class="xs chip" onclick="S.auth.email='prathmesh@gmail.com';save();render()">prathmesh@gmail.com</button>
-        </div>
         ${a.email&&!okEmail?`<div class="xs mt6" style="color:var(--red)">Enter a valid email address.</div>`:""}
       </div>
     `}
@@ -2452,7 +2454,7 @@ function vAuthOtp(){
     </div>
 
     <div class="row gap10 mt20" style="justify-content:center">
-      ${[0,1,2,3].map(i=>`<div style="width:56px;height:64px;border-radius:15px;display:grid;place-items:center;font-size:26px;font-weight:800;
+      ${[0,1,2,3].map(i=>`<div class="otp-cell" style="width:56px;height:64px;border-radius:15px;display:grid;place-items:center;font-size:26px;font-weight:800;
         background:var(--surface);border:1.5px solid ${String(a.otp).length===i?"var(--accent)":"var(--border)"}">${esc(String(a.otp)[i]||"")}</div>`).join("")}
     </div>
     <input id="authOtp" class="input mt16" inputmode="numeric" maxlength="4" placeholder="4-digit code" style="text-align:center;letter-spacing:8px;font-size:20px"
@@ -2663,7 +2665,6 @@ function vAuthLogin(){
             value="${esc(email)}" oninput="S.auth.loginEmail=this.value.trim();save();render()">
         </div>
         <div class="row gap6 mt6" style="flex-wrap:wrap">
-          <button type="button" class="xs chip" onclick="S.auth.loginEmail='prathmesh@gmail.com';save();render()">prathmesh@gmail.com</button>
           <button type="button" class="xs chip" onclick="S.auth.loginEmail='dev@snappro.in';save();render()">dev@snappro.in</button>
         </div>
         ${email && !okEmail ? `<div class="xs mt6" style="color:var(--red)">Enter a valid email address</div>` : ''}
@@ -3117,33 +3118,5 @@ if(S.firstRun){
 document.addEventListener("keydown",e=>{ if(e.key==="Escape"&&S.stack.length)pop(); });
 
 </script>
-<div id="camTransitionOverlay" style="display:none">
-  <div class="cam-anim-wrap">
-    <div class="cam-badge-tag">DEV OTP ACCEPTED</div>
-    <div class="cam-retro-body">
-      <div class="cam-top-plate">
-        <div class="cam-shutter-btn"></div>
-        <div class="cam-top-dial"></div>
-      </div>
-      <div class="cam-viewfinder-glass">
-        <div class="cam-vf-dot"></div>
-      </div>
-      <div class="cam-flash-emitter">
-        <div class="cam-flash-core"></div>
-      </div>
-      <div class="cam-big-lens">
-        <div class="cam-lens-glare"></div>
-        <div class="cam-shutter-iris">
-          <div class="cam-shutter-center-dot"></div>
-        </div>
-      </div>
-    </div>
-    <div class="cam-anim-status">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-      <span>SNAPPING YOUR SHOT…</span>
-    </div>
-  </div>
-  <div id="camFlashBurst" class="bright-white-flash"></div>
-</div>
 </body>
 </html>
