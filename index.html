@@ -144,9 +144,9 @@ input,select,textarea{font-family:inherit;font-size:inherit;color:inherit}
 .between{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .grow{flex:1;min-width:0}
 .stack{display:flex;flex-direction:column}
-.gap6{gap:6px}.gap8{gap:8px}.gap10{gap:10px}.gap12{gap:12px}.gap16{gap:16px}
-.mt4{margin-top:4px}.mt8{margin-top:8px}.mt12{margin-top:12px}.mt16{margin-top:16px}.mt20{margin-top:20px}.mt24{margin-top:24px}
-.mb4{margin-bottom:4px}.mb8{margin-bottom:8px}.mb12{margin-bottom:12px}.mb16{margin-bottom:16px}
+.gap4{gap:4px}.gap6{gap:6px}.gap8{gap:8px}.gap10{gap:10px}.gap12{gap:12px}.gap16{gap:16px}
+.mt2{margin-top:2px}.mt4{margin-top:4px}.mt6{margin-top:6px}.mt8{margin-top:8px}.mt10{margin-top:10px}.mt12{margin-top:12px}.mt14{margin-top:14px}.mt16{margin-top:16px}.mt20{margin-top:20px}.mt24{margin-top:24px}
+.mb4{margin-bottom:4px}.mb6{margin-bottom:6px}.mb8{margin-bottom:8px}.mb12{margin-bottom:12px}.mb14{margin-bottom:14px}.mb16{margin-bottom:16px}.mb20{margin-bottom:20px}
 .h1{font-size:24px;font-weight:800;letter-spacing:-.7px;line-height:1.2}
 .h2{font-size:18px;font-weight:750;letter-spacing:-.4px}
 .h3{font-size:15px;font-weight:700;letter-spacing:-.2px}
@@ -2460,7 +2460,7 @@ function vAuthOtp(){
     <input id="authOtp" class="input mt16" inputmode="numeric" maxlength="4" placeholder="4-digit code" style="text-align:center;letter-spacing:8px;font-size:20px"
       value="${esc(a.otp)}" oninput="S.auth.otp=this.value.replace(/\\D/g,'').slice(0,4);save();render()">
     <button class="btn block ghost mt8" onclick="S.auth.otp='1234';save();render()">⚡ Autofill Dev code (1234)</button>
-    <button class="btn primary block mt12" ${ok?"":"disabled"} onclick="verifyOtp()">${icon("cam",16,"#fff")} Verify &amp; Continue (with Flash)</button>
+    <button class="btn primary block mt12" ${ok?"":"disabled"} onclick="verifyOtp()">${icon("cam",16,"#fff")} Verify &amp; Continue</button>
     ${a.err?`<div class="xs center mt12" style="color:var(--red)">${esc(a.err)}</div>`:""}
   </div>`;
 }
@@ -2705,16 +2705,16 @@ function vAuthLogin(){
 
     <!-- Login Button with Camera Icon -->
     <button class="btn primary block mt12" id="btnLogin" ${okCred&&okOtp?'':'disabled'} onclick="submitLogin()">
-      ${icon("cam",18,"#fff")} Log In (Watch Camera Flash)
+      ${icon("cam",18,"#fff")} Log In
     </button>
 
     <!-- 1-Tap Google Login -->
-    <button class="card tap row gap10 mt10" style="width:100%;text-align:left;padding:12px 14px;border-color:rgba(255,255,255,.2)"
+    <button class="card tap row gap10 mt12" style="width:100%;text-align:left;padding:12px 14px;border-color:rgba(255,255,255,.2)"
       onclick="loginWithGoogle('${role}')">
       <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#EA4335" d="M12 5c1.6 0 3 .6 4.1 1.6l3.1-3.1C17.3 1.7 14.8 1 12 1 7.5 1 3.7 3.6 1.9 7.3l3.7 2.9C6.5 7.4 9 5 12 5z"/><path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.6h6.5c-.3 1.5-1.1 2.8-2.4 3.7l3.7 2.9c2.2-2 3.7-5 3.7-8.9z"/><path fill="#FBBC05" d="M5.6 14.8c-.2-.7-.4-1.5-.4-2.8s.2-2.1.4-2.8L1.9 6.3C.7 8.7 0 10.3 0 12s.7 3.3 1.9 5.7l3.7-2.9z"/><path fill="#34A853" d="M12 23c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3 0-5.5-2.4-6.4-5.2L1.9 16C3.7 20.4 7.5 23 12 23z"/></svg>
       <div class="grow">
         <div class="bold sm">Continue with Google (1-Tap)</div>
-        <div class="xs muted2">Instant Gmail login with flash effect</div>
+        <div class="xs muted2">Instant Gmail login</div>
       </div>
       <span class="muted2">›</span>
     </button>
