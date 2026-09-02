@@ -313,96 +313,121 @@ table.tbl{width:100%;border-collapse:collapse;font-size:12px}
 table.tbl th{text-align:left;color:var(--muted-2);font-weight:700;font-size:10px;letter-spacing:.8px;text-transform:uppercase;padding:8px 6px;border-bottom:1px solid var(--border)}
 /* ---------- camera shutter & flash transition ---------- */
 #camTransitionOverlay{
-  position:absolute;inset:0;z-index:9999;
+  position:fixed;inset:0;z-index:999999;
   display:flex;align-items:center;justify-content:center;
-  background:rgba(10,10,15,.92);backdrop-filter:blur(14px);
+  background:rgba(5,5,10,.94);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
   pointer-events:all;overflow:hidden;
 }
 .cam-anim-wrap{
   display:flex;flex-direction:column;align-items:center;gap:18px;
-  animation:camMorphIn .42s cubic-bezier(.16,1,.3,1) forwards;
+  animation:camMorphIn .45s cubic-bezier(.175,.885,.32,1.275) forwards;
 }
 @keyframes camMorphIn{
-  0%{transform:scale(.25) rotate(-20deg);opacity:0}
-  70%{transform:scale(1.12) rotate(4deg);opacity:1}
-  100%{transform:scale(1) rotate(0);opacity:1}
+  0%{transform:scale(0.15) rotate(-30deg);opacity:0}
+  70%{transform:scale(1.15) rotate(6deg);opacity:1}
+  100%{transform:scale(1) rotate(0deg);opacity:1}
+}
+.cam-badge-tag{
+  font-size:11px;font-weight:800;letter-spacing:1.5px;color:var(--accent);
+  background:rgba(255,90,31,.15);border:1px solid rgba(255,90,31,.4);
+  padding:4px 14px;border-radius:999px;text-transform:uppercase;
 }
 .cam-retro-body{
-  width:148px;height:110px;background:linear-gradient(145deg,#252535,#14141d);
-  border:2px solid rgba(255,90,31,.7);border-radius:26px;
+  width:160px;height:118px;background:linear-gradient(145deg,#252535,#12121a);
+  border:2.5px solid rgba(255,90,31,.85);border-radius:28px;
   position:relative;display:grid;place-items:center;
-  box-shadow:0 20px 50px rgba(0,0,0,.95),0 0 40px rgba(255,90,31,.35);
+  box-shadow:0 24px 60px rgba(0,0,0,.95),0 0 50px rgba(255,90,31,.45);
+}
+.cam-top-plate{
+  position:absolute;top:-12px;left:0;right:0;height:12px;
+}
+.cam-shutter-btn{
+  position:absolute;top:0;left:28px;width:18px;height:10px;
+  background:linear-gradient(180deg,#ff5a1f,#c43d08);border-radius:4px 4px 0 0;
+  box-shadow:0 -2px 8px rgba(255,90,31,.6);
+  animation:btnPress .3s ease .15s;
+}
+@keyframes btnPress{
+  0%,100%{transform:translateY(0)}
+  50%{transform:translateY(4px)}
 }
 .cam-top-dial{
-  position:absolute;top:-10px;right:22px;width:26px;height:12px;
-  background:linear-gradient(180deg,#ff5a1f,#c43d08);border-radius:5px 5px 0 0;
-  box-shadow:0 -2px 10px rgba(255,90,31,.6);
+  position:absolute;top:0;right:26px;width:26px;height:11px;
+  background:linear-gradient(180deg,#888,#444);border-radius:4px 4px 0 0;
 }
 .cam-viewfinder-glass{
-  position:absolute;top:12px;left:16px;width:20px;height:15px;
-  background:#090d14;border:1.5px solid rgba(255,255,255,.3);border-radius:4px;
+  position:absolute;top:12px;left:16px;width:22px;height:16px;
+  background:#090d14;border:1.5px solid rgba(255,255,255,.35);border-radius:5px;
+  display:grid;place-items:center;
   box-shadow:inset 0 0 6px rgba(0,229,255,.5);
 }
+.cam-vf-dot{
+  width:6px;height:6px;border-radius:50%;background:#00e5ff;box-shadow:0 0 6px #00e5ff;
+}
 .cam-flash-emitter{
-  position:absolute;top:10px;right:18px;width:28px;height:17px;
-  background:#1a1c26;border:1.5px solid rgba(255,255,255,.35);border-radius:5px;
+  position:absolute;top:11px;right:16px;width:30px;height:18px;
+  background:#1a1c26;border:1.5px solid rgba(255,255,255,.4);border-radius:6px;
   display:grid;place-items:center;overflow:hidden;
 }
 .cam-flash-core{
-  width:16px;height:8px;background:#ffc857;border-radius:2px;
-  box-shadow:0 0 12px #ffc857;
-  animation:emitterCharge .45s ease forwards;
+  width:18px;height:9px;background:#ffc857;border-radius:2px;
+  box-shadow:0 0 14px #ffc857;
+  animation:emitterCharge .42s ease forwards;
 }
 @keyframes emitterCharge{
   0%{background:#ffc857;box-shadow:0 0 8px #ffc857}
-  75%{background:#ffffff;box-shadow:0 0 30px #fff,0 0 50px var(--accent)}
-  100%{background:#ffffff;box-shadow:0 0 60px #fff}
+  70%{background:#ffffff;box-shadow:0 0 35px #fff,0 0 60px var(--accent)}
+  100%{background:#ffffff;box-shadow:0 0 80px #fff}
 }
 .cam-big-lens{
-  width:76px;height:76px;border-radius:50%;
-  background:radial-gradient(circle at 40% 35%,#2e2e40,#0b0c10 75%);
-  border:4px solid #ff5a1f;display:grid;place-items:center;
-  position:relative;box-shadow:0 0 24px rgba(255,90,31,.5),inset 0 0 18px rgba(0,0,0,.9);
+  width:82px;height:82px;border-radius:50%;
+  background:radial-gradient(circle at 40% 35%,#2c2c3e,#0a0a0f 75%);
+  border:4.5px solid #ff5a1f;display:grid;place-items:center;
+  position:relative;box-shadow:0 0 30px rgba(255,90,31,.5),inset 0 0 20px rgba(0,0,0,.95);
+}
+.cam-lens-glare{
+  position:absolute;top:10px;left:14px;width:20px;height:10px;border-radius:50%;
+  background:rgba(255,255,255,.45);transform:rotate(-35deg);pointer-events:none;
 }
 .cam-shutter-iris{
-  width:48px;height:48px;border-radius:50%;
-  background:conic-gradient(from 0deg,#1e1f2b,#101118,#303142,#101118);
-  border:2px solid rgba(255,255,255,.2);position:relative;
+  width:52px;height:52px;border-radius:50%;
+  background:conic-gradient(from 0deg,#1c1d28,#0e0f16,#2c2d3c,#0e0f16);
+  border:2px solid rgba(255,255,255,.25);position:relative;
   display:grid;place-items:center;overflow:hidden;
-  animation:shutterSnap .38s cubic-bezier(.6,0,.4,1) forwards;
+  animation:shutterSnap .35s cubic-bezier(.6,0,.4,1) forwards;
   animation-delay:.18s;
 }
 @keyframes shutterSnap{
   0%{transform:scale(1) rotate(0deg)}
-  60%{transform:scale(.65) rotate(140deg)}
-  100%{transform:scale(0) rotate(220deg)}
+  50%{transform:scale(.6) rotate(120deg)}
+  100%{transform:scale(0) rotate(240deg)}
 }
 .cam-shutter-center-dot{
-  width:10px;height:10px;border-radius:50%;background:#050608;
-  border:1px solid rgba(255,90,31,.7);
+  width:10px;height:10px;border-radius:50%;background:#ff5a1f;
+  box-shadow:0 0 10px #ff5a1f;
 }
 .cam-anim-status{
-  font-size:12px;font-weight:800;letter-spacing:1.2px;color:#f4f4f7;
+  font-size:13px;font-weight:800;letter-spacing:1.4px;color:#f4f4f7;
   text-transform:uppercase;display:flex;align-items:center;gap:8px;
-  background:rgba(20,20,28,.8);padding:6px 14px;border-radius:20px;
-  border:1px solid rgba(255,90,31,.3);
-  animation:pulseStatus .5s infinite alternate;
+  background:rgba(20,20,28,.85);padding:8px 18px;border-radius:24px;
+  border:1px solid rgba(255,90,31,.4);
+  animation:pulseStatus .45s infinite alternate;
 }
 @keyframes pulseStatus{
   0%{opacity:.7;transform:scale(.98)}
   100%{opacity:1;color:var(--accent);transform:scale(1)}
 }
 .bright-white-flash{
-  position:absolute;inset:0;background:#ffffff;
-  opacity:0;pointer-events:none;z-index:10001;
+  position:fixed;inset:0;background:#ffffff;
+  opacity:0;pointer-events:none;z-index:1000000;
 }
 .bright-white-flash.fire{
-  animation:flashExplode .58s ease-out forwards;
+  animation:flashExplode .65s ease-out forwards;
 }
 @keyframes flashExplode{
   0%{opacity:0}
-  18%{opacity:1}
-  42%{opacity:1}
+  15%{opacity:1}
+  45%{opacity:1}
   100%{opacity:0}
 }
 
@@ -463,27 +488,6 @@ table.tbl th{text-align:left;color:var(--muted-2);font-weight:700;font-size:10px
       <div id="toasts"></div>
       <div id="screen"></div>
       <div id="tabbar"></div>
-      <div id="camTransitionOverlay" style="display:none">
-        <div class="cam-anim-wrap">
-          <div class="cam-retro-body">
-            <div class="cam-top-dial"></div>
-            <div class="cam-viewfinder-glass"></div>
-            <div class="cam-flash-emitter">
-              <div class="cam-flash-core"></div>
-            </div>
-            <div class="cam-big-lens">
-              <div class="cam-shutter-iris">
-                <div class="cam-shutter-center-dot"></div>
-              </div>
-            </div>
-          </div>
-          <div class="cam-anim-status">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-            <span>OTP ACCEPTED · FLASH!</span>
-          </div>
-        </div>
-        <div id="camFlashBurst" class="bright-white-flash"></div>
-      </div>
     </div>
   </main>
 </div>
@@ -686,7 +690,7 @@ function freshState(){
   return {
     accounts:[],                     // [{id,type,phone,name,customer?,photographerId?}]
     session:null,                    // account id, or "admin"
-    auth:{step:"welcome", type:null, phone:"", otp:"", draft:null, loginPhone:"", loginOtp:"1234", loginRole:"customer"},
+    auth:{step:"welcome", type:null, method:"phone", phone:"", email:"", otp:"", draft:null, loginMethod:"phone", loginPhone:"", loginEmail:"", loginOtp:"1234", loginRole:"customer"},
     role:"customer",                 // derived from the session; kept for the view router
     nav:{customer:"home", photographer:"home", admin:"home"},
     stack:[],                        // modal-ish screens {name,props}
@@ -2231,34 +2235,65 @@ function playShutterSound(){
 }
 
 function triggerCameraFlashTransition(callback){
-  const overlay = el("camTransitionOverlay");
-  const flash = el("camFlashBurst");
-  if(!overlay || !flash){
-    if(callback) callback();
-    return;
+  let overlay = el("camTransitionOverlay");
+  let flash = el("camFlashBurst");
+
+  if(!overlay){
+    overlay = document.createElement("div");
+    overlay.id = "camTransitionOverlay";
+    overlay.innerHTML = `
+      <div class="cam-anim-wrap">
+        <div class="cam-badge-tag">DEV OTP ACCEPTED</div>
+        <div class="cam-retro-body">
+          <div class="cam-top-plate">
+            <div class="cam-shutter-btn"></div>
+            <div class="cam-top-dial"></div>
+          </div>
+          <div class="cam-viewfinder-glass"><div class="cam-vf-dot"></div></div>
+          <div class="cam-flash-emitter"><div class="cam-flash-core"></div></div>
+          <div class="cam-big-lens">
+            <div class="cam-lens-glare"></div>
+            <div class="cam-shutter-iris"><div class="cam-shutter-center-dot"></div></div>
+          </div>
+        </div>
+        <div class="cam-anim-status">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+          <span>SNAPPING YOUR SHOT…</span>
+        </div>
+      </div>
+      <div id="camFlashBurst" class="bright-white-flash"></div>`;
+    document.body.appendChild(overlay);
+    flash = el("camFlashBurst");
   }
 
-  // 1. Show camera morph animation & play realistic shutter click sound
+  // 1. Reveal camera overlay & play realistic mechanical shutter click
   overlay.style.display = "flex";
+  overlay.style.opacity = "1";
   playShutterSound();
 
-  // 2. Fire the blinding white flash at 400ms (as the shutter iris snaps shut)
+  // 2. Fire blinding white screen flash at 380ms
   setTimeout(()=>{
-    flash.classList.remove("fire");
-    void flash.offsetWidth; // force DOM reflow
-    flash.classList.add("fire");
-  }, 400);
+    if(flash){
+      flash.classList.remove("fire");
+      void flash.offsetWidth; // force reflow
+      flash.classList.add("fire");
+    }
+  }, 380);
 
-  // 3. At peak flash (540ms, when screen is solid white): swap to the logged-in dashboard
+  // 3. At peak white burst (500ms): execute the login callback & route to home dashboard
   setTimeout(()=>{
-    if(callback) callback();
-  }, 540);
+    try{
+      if(callback) callback();
+    }catch(e){
+      console.error("Login transition error:", e);
+    }
+  }, 500);
 
   // 4. Clean up after flash dissipates
   setTimeout(()=>{
-    overlay.style.display = "none";
-    flash.classList.remove("fire");
-  }, 980);
+    if(overlay) overlay.style.display = "none";
+    if(flash) flash.classList.remove("fire");
+  }, 950);
 }
 
 function authGo(step,patch={}){ S.auth=Object.assign({},S.auth,patch,{step}); save(); render(); scrollTop(); }
@@ -2272,96 +2307,124 @@ function vAuth(){
 }
 
 function vAuthWelcome(){
-  return `<div class="pad" style="min-height:100%;display:flex;flex-direction:column;padding-top:36px">
+  return `<div class="pad" style="min-height:100%;display:flex;flex-direction:column;padding-top:28px">
     <div class="center">
       <div style="width:64px;height:64px;margin:0 auto;border-radius:20px;background:linear-gradient(135deg,var(--accent),#ff8a3d);display:grid;place-items:center;box-shadow:0 14px 34px -8px rgba(255,90,31,.7)">
         ${icon("cam",32,"#fff",2)}</div>
       <div class="h1 mt16">SnapPro</div>
-      <div class="sm muted mt4">A photographer at your door in minutes</div>
+      <div class="sm muted mt4">On-demand photographers in minutes</div>
     </div>
 
     <!-- Dev Mode Callout Banner -->
-    <div class="card mt16 mb6" style="background:rgba(255,90,31,.11);border-color:rgba(255,90,31,.35);padding:11px 14px">
+    <div class="card mt16 mb4" style="background:rgba(255,90,31,.12);border-color:rgba(255,90,31,.4);padding:11px 14px">
       <div class="between">
         <div class="row gap8">
-          <span style="font-size:16px">⚡</span>
-          <div class="xs muted"><span class="bold" style="color:#ffab86">Dev OTP Mode:</span> Use code <b style="color:#fff;background:var(--surface-3);padding:1px 5px;border-radius:5px">1234</b></div>
+          <span style="font-size:18px">⚡</span>
+          <div class="xs muted"><span class="bold" style="color:#ffab86">Dev OTP:</span> Use <b style="color:#fff;background:var(--surface-3);padding:2px 6px;border-radius:6px">1234</b> (Phone or Gmail)</div>
         </div>
         <button class="chip accent" style="font-size:10px;padding:4px 9px" onclick="authGo('login')">Log In →</button>
       </div>
     </div>
 
-    <div class="mt14">
-      <div class="sec-title">How will you use SnapPro?</div>
+    <!-- Quick 1-Tap Google Login -->
+    <button class="card tap row gap10 mt8 mb12" style="width:100%;text-align:left;padding:12px 14px;border-color:rgba(255,255,255,.2)" onclick="loginWithGoogle('customer')">
+      <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#EA4335" d="M12 5c1.6 0 3 .6 4.1 1.6l3.1-3.1C17.3 1.7 14.8 1 12 1 7.5 1 3.7 3.6 1.9 7.3l3.7 2.9C6.5 7.4 9 5 12 5z"/><path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.6h6.5c-.3 1.5-1.1 2.8-2.4 3.7l3.7 2.9c2.2-2 3.7-5 3.7-8.9z"/><path fill="#FBBC05" d="M5.6 14.8c-.2-.7-.4-1.5-.4-2.8s.2-2.1.4-2.8L1.9 6.3C.7 8.7 0 10.3 0 12s.7 3.3 1.9 5.7l3.7-2.9z"/><path fill="#34A853" d="M12 23c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3 0-5.5-2.4-6.4-5.2L1.9 16C3.7 20.4 7.5 23 12 23z"/></svg>
+      <div class="grow">
+        <div class="bold sm">Continue with Google (Gmail)</div>
+        <div class="xs muted2">Instant Dev 1-tap login with camera flash</div>
+      </div>
+      <span class="muted2">›</span>
+    </button>
 
-      <button class="card tap" style="width:100%;text-align:left;padding:16px;border-color:${S.auth.type==="customer"?"var(--accent)":"var(--border-soft)"}"
-        onclick="authGo('phone',{type:'customer'})">
-        <div class="row gap14" style="gap:14px">
-          <div style="width:46px;height:46px;flex:0 0 46px;border-radius:15px;background:var(--accent-soft);display:grid;place-items:center;font-size:22px">🙋</div>
-          <div class="grow">
-            <div class="h3">I need a photographer</div>
-            <div class="xs muted mt4" style="line-height:1.45">Post a shoot, get offers from pros nearby, compare and book.</div>
-          </div>
-          <span class="muted2" style="font-size:20px">›</span>
-        </div>
+    <div class="sec-title">Or sign up with role</div>
+    <div class="grid2 gap10">
+      <button class="card tap" style="text-align:left;padding:14px;border-color:${S.auth.type==='customer'?'var(--accent)':'var(--border-soft)'}"
+        onclick="authGo('phone',{type:'customer',method:'phone'})">
+        <div style="font-size:24px">🙋</div>
+        <div class="bold sm mt6">Need a pro</div>
+        <div class="xs muted mt2">Book shoots</div>
       </button>
-
-      <button class="card tap mt10" style="width:100%;text-align:left;padding:16px;border-color:${S.auth.type==="photographer"?"var(--accent)":"var(--border-soft)"}"
-        onclick="authGo('phone',{type:'photographer'})">
-        <div class="row gap14" style="gap:14px">
-          <div style="width:46px;height:46px;flex:0 0 46px;border-radius:15px;background:rgba(166,124,255,.16);display:grid;place-items:center;font-size:22px">📷</div>
-          <div class="grow">
-            <div class="h3">I'm a photographer</div>
-            <div class="xs muted mt4" style="line-height:1.45">Get job alerts near you, quote your own price, keep 85% of bookings.</div>
-          </div>
-          <span class="muted2" style="font-size:20px">›</span>
-        </div>
+      <button class="card tap" style="text-align:left;padding:14px;border-color:${S.auth.type==='photographer'?'var(--accent)':'var(--border-soft)'}"
+        onclick="authGo('phone',{type:'photographer',method:'phone'})">
+        <div style="font-size:24px">📷</div>
+        <div class="bold sm mt6">Photographer</div>
+        <div class="xs muted mt2">Receive jobs</div>
       </button>
-    </div>
-
-    <div class="row gap8 mt16 xs muted2" style="line-height:1.45">
-      ${icon("shield",15,"var(--green)")}<span>Phone verified accounts. Photographers are ID-checked and portfolio-reviewed.</span>
     </div>
 
     <div style="margin-top:auto;padding-top:20px" class="center">
-      <button class="btn block" style="background:var(--surface-2);border:1px solid var(--border)" onclick="authGo('login')">
-        ${icon("user",16,"var(--accent)")} Log in with Dev OTP
+      <button class="btn block primary" onclick="authGo('login')">
+        ${icon("cam",16,"#fff")} Log in with Phone or Gmail
       </button>
-      <div class="xs muted2 mt12">By continuing you agree to our Terms &amp; Privacy Policy.</div>
-      <button class="xs muted2 mt8" style="text-decoration:underline" onclick="authGo('admin')">Admin console</button>
+      <div class="row gap8 mt12 center" style="justify-content:center">
+        <button class="xs muted2" onclick="triggerCameraFlashTransition(()=>{toast('Camera Flash Preview!','Animation working 100%','cam');})">⚡ Test Camera Animation</button>
+        <span class="muted2">·</span>
+        <button class="xs muted2" style="text-decoration:underline" onclick="authGo('admin')">Admin console</button>
+      </div>
     </div>
   </div>`;
 }
 
 function vAuthPhone(){
-  const a=S.auth, ok=/^[6-9]\d{9}$/.test(a.phone);
-  const isPg=a.type==="photographer";
-  const existing=S.accounts.find(x=>x.phone===a.phone);
+  const a = S.auth;
+  const method = a.method || "phone";
+  const okPhone = /^[6-9]\d{9}$/.test(a.phone);
+  const okEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a.email);
+  const ok = method === "phone" ? okPhone : okEmail;
+  const isPg = a.type === "photographer";
+
   return `<div class="topbar"><button class="iconbtn" onclick="authGo('welcome')">${icon("back",18)}</button>
     <div class="grow"><div class="h3">${isPg?"Photographer sign up":"Create your account"}</div>
       <div class="xs muted2">${isPg?"Start receiving job alerts":"Book photographers on demand"}</div></div></div>
   <div class="pad">
-    <div class="h2 mt8">What's your mobile number?</div>
-    <div class="sm muted mt8">We'll send a 4-digit code to verify it.</div>
+    <div class="h2 mt8">Sign up for SnapPro</div>
+    <div class="sm muted mt4">Use your mobile number or Gmail address</div>
 
-    <div class="card mt12 mb8" style="background:rgba(255,90,31,.11);border-color:rgba(255,90,31,.35);padding:10px 14px">
+    <!-- Method toggle: Phone or Gmail -->
+    <div class="row gap8 mt16 mb12" style="background:var(--surface);padding:4px;border-radius:14px;border:1px solid var(--border)">
+      <button type="button" class="grow" style="padding:9px;border-radius:10px;font-size:12.5px;font-weight:700;${method==='phone'?'background:var(--accent);color:#fff':'color:var(--muted)'}"
+        onclick="S.auth.method='phone';save();render()">📱 Mobile Number</button>
+      <button type="button" class="grow" style="padding:9px;border-radius:10px;font-size:12.5px;font-weight:700;${method==='email'?'background:var(--accent);color:#fff':'color:var(--muted)'}"
+        onclick="S.auth.method='email';save();render()">✉️ Gmail / Email</button>
+    </div>
+
+    <!-- Dev Mode Banner -->
+    <div class="card mb14" style="background:rgba(255,90,31,.11);border-color:rgba(255,90,31,.35);padding:10px 14px">
       <div class="row gap8">
         <span style="font-size:16px">⚡</span>
-        <div class="xs muted"><span class="bold" style="color:#ffab86">Dev OTP Mode:</span> Use code <b style="color:#fff">1234</b> on the next screen.</div>
+        <div class="xs muted"><span class="bold" style="color:#ffab86">Dev OTP Mode:</span> Code is <b style="color:#fff">1234</b> on the next screen.</div>
       </div>
     </div>
 
-    <div class="field mt16"><label>Mobile number</label>
-      <div class="row gap8">
-        <div class="chip" style="padding:13px 14px;border-radius:13px;background:var(--surface)">🇮🇳 +91</div>
-        <input id="authPhone" class="input grow" inputmode="numeric" maxlength="10" placeholder="98765 43210"
-          value="${esc(a.phone)}" oninput="S.auth.phone=this.value.replace(/\\D/g,'').slice(0,10);save();render()">
+    ${method === 'phone' ? `
+      <div class="field mt12"><label>Mobile number</label>
+        <div class="row gap8">
+          <div class="chip" style="padding:13px 14px;border-radius:13px;background:var(--surface)">🇮🇳 +91</div>
+          <input id="authPhone" class="input grow" inputmode="numeric" maxlength="10" placeholder="98765 43210"
+            value="${esc(a.phone)}" oninput="S.auth.phone=this.value.replace(/\\D/g,'').slice(0,10);save();render()">
+        </div>
+        ${a.phone&&!okPhone?`<div class="xs mt6" style="color:var(--red)">Enter a valid 10-digit Indian mobile number.</div>`:""}
       </div>
-      ${a.phone&&!ok?`<div class="xs mt8" style="color:var(--red)">Enter a valid 10-digit Indian mobile number.</div>`:""}
-      ${existing?`<div class="xs mt8" style="color:var(--accent-2)">This number already has ${existing.type==="photographer"?"a photographer":"a customer"} account — we'll log you straight in.</div>`:""}
+    ` : `
+      <div class="field mt12"><label>Gmail or Email address</label>
+        <div class="row gap8" style="background:var(--surface);border:1.5px solid var(--border);border-radius:13px;padding:0 12px;align-items:center">
+          <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#EA4335" d="M12 5c1.6 0 3 .6 4.1 1.6l3.1-3.1C17.3 1.7 14.8 1 12 1 7.5 1 3.7 3.6 1.9 7.3l3.7 2.9C6.5 7.4 9 5 12 5z"/><path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.6h6.5c-.3 1.5-1.1 2.8-2.4 3.7l3.7 2.9c2.2-2 3.7-5 3.7-8.9z"/><path fill="#FBBC05" d="M5.6 14.8c-.2-.7-.4-1.5-.4-2.8s.2-2.1.4-2.8L1.9 6.3C.7 8.7 0 10.3 0 12s.7 3.3 1.9 5.7l3.7-2.9z"/><path fill="#34A853" d="M12 23c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3 0-5.5-2.4-6.4-5.2L1.9 16C3.7 20.4 7.5 23 12 23z"/></svg>
+          <input id="authEmail" class="input grow" type="email" placeholder="you@gmail.com"
+            style="border:0;background:none;padding:13px 4px;box-shadow:none"
+            value="${esc(a.email)}" oninput="S.auth.email=this.value.trim();save();render()">
+        </div>
+        <div class="row gap6 mt6">
+          <button type="button" class="xs chip" onclick="S.auth.email='prathmesh@gmail.com';save();render()">prathmesh@gmail.com</button>
+        </div>
+        ${a.email&&!okEmail?`<div class="xs mt6" style="color:var(--red)">Enter a valid email address.</div>`:""}
+      </div>
+    `}
+
+    <button class="btn primary block mt12" ${ok?"":"disabled"} onclick="sendOtp()">Send Dev code (1234)</button>
+
+    <div class="center mt16">
+      <button class="xs muted2" onclick="authGo('login')">Already registered? <span class="accent bold">Log in here</span></button>
     </div>
-    <button class="btn primary block mt8" ${ok?"":"disabled"} onclick="sendOtp()">Send Dev code (1234)</button>
-    <div class="xs muted2 center mt14">Dev OTP is 1234 · Tap autofill or type 1234.</div>
   </div>`;
 }
 
@@ -2369,20 +2432,21 @@ function sendOtp(){
   const code="1234";
   S.auth.sent=code; S.auth.otp="1234";
   authGo("otp");
-  setTimeout(()=>toast("Your SnapPro code is 1234","Dev OTP autofilled for quick testing","chat"),400);
+  setTimeout(()=>toast("Dev OTP code is 1234","Pre-filled for rapid testing","chat"),400);
 }
 
 function vAuthOtp(){
   const a=S.auth, ok=String(a.otp).length===4;
+  const target = a.method==="email" ? esc(a.email||"your email") : "+91 "+esc(a.phone||"your number");
   return `<div class="topbar"><button class="iconbtn" onclick="authGo('phone')">${icon("back",18)}</button>
-    <div class="grow"><div class="h3">Verify your number</div><div class="xs muted2">+91 ${esc(a.phone)}</div></div></div>
+    <div class="grow"><div class="h3">Verify your ${a.method==="email"?"email":"number"}</div><div class="xs muted2">${target}</div></div></div>
   <div class="pad">
     <div class="h2 mt8">Enter Dev code</div>
-    <div class="sm muted mt8">Sent to +91 ${esc(a.phone)} · <button class="accent bold" onclick="sendOtp()">Resend</button></div>
+    <div class="sm muted mt4">Sent to ${target} · <button class="accent bold" onclick="sendOtp()">Resend</button></div>
 
     <div class="card mt12 mb8" style="background:rgba(255,90,31,.11);border-color:rgba(255,90,31,.35);padding:10px 14px">
       <div class="row gap8">
-        <span style="font-size:16px">⚡</span>
+        <span style="font-size:18px">⚡</span>
         <div class="xs muted"><span class="bold" style="color:#ffab86">Dev OTP Active:</span> Code is <b style="color:#fff;background:var(--surface-3);padding:2px 6px;border-radius:6px">1234</b></div>
       </div>
     </div>
@@ -2394,7 +2458,7 @@ function vAuthOtp(){
     <input id="authOtp" class="input mt16" inputmode="numeric" maxlength="4" placeholder="4-digit code" style="text-align:center;letter-spacing:8px;font-size:20px"
       value="${esc(a.otp)}" oninput="S.auth.otp=this.value.replace(/\\D/g,'').slice(0,4);save();render()">
     <button class="btn block ghost mt8" onclick="S.auth.otp='1234';save();render()">⚡ Autofill Dev code (1234)</button>
-    <button class="btn primary block mt12" ${ok?"":"disabled"} onclick="verifyOtp()">${icon("cam",16,"#fff")} Verify &amp; Continue</button>
+    <button class="btn primary block mt12" ${ok?"":"disabled"} onclick="verifyOtp()">${icon("cam",16,"#fff")} Verify &amp; Continue (with Flash)</button>
     ${a.err?`<div class="xs center mt12" style="color:var(--red)">${esc(a.err)}</div>`:""}
   </div>`;
 }
@@ -2406,7 +2470,7 @@ function verifyOtp(){
 
   // Trigger camera shutter morph and bright white flash!
   triggerCameraFlashTransition(()=>{
-    const existing=S.accounts.find(x=>x.phone===a.phone);
+    const existing = S.accounts.find(x => (a.phone && x.phone === a.phone) || (a.email && x.email && x.email.toLowerCase() === a.email.toLowerCase()));
     if(existing){ loginAs(existing.id); return; }
     if(a.type==="photographer"){
       S.auth.draft={name:"",cats:[],years:2,priceMult:1,area:AREAS[0],bio:"",step:1};
@@ -2439,7 +2503,7 @@ function vAuthCustSetup(){
 
 function createCustomerAccount(){
   const d=S.auth.draft;
-  const a={ id:uid("acc"), type:"customer", phone:S.auth.phone, name:d.name.trim(), createdAt:Date.now(),
+  const a={ id:uid("acc"), type:"customer", phone:S.auth.phone||"9876543210", email:S.auth.email||"", name:d.name.trim(), createdAt:Date.now(),
             customer:{ name:d.name.trim(), area:d.area, wallet:2500 } };
   S.accounts.push(a); save();
   loginAs(a.id);
@@ -2525,52 +2589,86 @@ function createPhotographerAccount(){
   pg.verified = false;
   pg.isNew = true;
   S.photographers.push(pg);
-  const a={ id:uid("acc"), type:"photographer", phone:S.auth.phone, name:pg.name, createdAt:Date.now(), photographerId:pg.id };
+  const a={ id:uid("acc"), type:"photographer", phone:S.auth.phone||"9876543210", email:S.auth.email||"", name:pg.name, createdAt:Date.now(), photographerId:pg.id };
   S.accounts.push(a); save();
   loginAs(a.id);
   setTimeout(()=>toast("You're live, "+pg.name.split(" ")[0]+"!","You'll get an alert whenever a matching job is posted","bolt"),600);
 }
 
 function vAuthLogin(){
+  const method = S.auth.loginMethod || "phone";
   const phone = S.auth.loginPhone || "";
+  const email = S.auth.loginEmail || "";
   const otp = S.auth.loginOtp != null ? S.auth.loginOtp : "1234";
   const role = S.auth.loginRole || "customer";
+
   const okPhone = /^[6-9]\d{9}$/.test(phone);
+  const okEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  const okCred = method === "phone" ? okPhone : okEmail;
   const okOtp = String(otp).length === 4;
 
   return `<div class="topbar">
     <button class="iconbtn" onclick="authGo('welcome')">${icon("back",18)}</button>
-    <div class="grow"><div class="h3">Log in to SnapPro</div><div class="xs muted2">Instant Dev OTP login</div></div>
+    <div class="grow"><div class="h3">Log in to SnapPro</div><div class="xs muted2">Phone or Gmail · Dev OTP</div></div>
   </div>
   <div class="pad">
-    <div class="center mt4 mb14">
+    <div class="center mt2 mb12">
       <div style="width:58px;height:58px;margin:0 auto;border-radius:18px;background:linear-gradient(135deg,var(--accent),#ff8a3d);display:grid;place-items:center;box-shadow:0 12px 28px -6px rgba(255,90,31,.6)">
         ${icon("cam",28,"#fff",2)}</div>
-      <div class="h2 mt12">Welcome back</div>
-      <div class="sm muted mt4">Enter your number & Dev OTP to access your account</div>
+      <div class="h2 mt10">Welcome back</div>
+      <div class="sm muted mt2">Log in with Mobile or Gmail using Dev OTP</div>
+    </div>
+
+    <!-- Login Method Selector: Phone vs Gmail -->
+    <div class="row gap8 mb12" style="background:var(--surface);padding:4px;border-radius:14px;border:1px solid var(--border)">
+      <button type="button" class="grow" style="padding:9px;border-radius:10px;font-size:12.5px;font-weight:700;${method==='phone'?'background:var(--accent);color:#fff':'color:var(--muted)'}"
+        onclick="S.auth.loginMethod='phone';save();render()">
+        📱 Mobile Number
+      </button>
+      <button type="button" class="grow" style="padding:9px;border-radius:10px;font-size:12.5px;font-weight:700;${method==='email'?'background:var(--accent);color:#fff':'color:var(--muted)'}"
+        onclick="S.auth.loginMethod='email';save();render()">
+        ✉️ Gmail / Email
+      </button>
     </div>
 
     <!-- Dev Mode Callout Banner -->
-    <div class="card mb14" style="background:rgba(255,90,31,.11);border-color:rgba(255,90,31,.35);padding:12px 14px">
-      <div class="row gap10">
-        <div style="font-size:20px">⚡</div>
+    <div class="card mb12" style="background:rgba(255,90,31,.11);border-color:rgba(255,90,31,.35);padding:10px 14px">
+      <div class="row gap8">
+        <span style="font-size:18px">⚡</span>
         <div class="grow">
           <div class="bold sm" style="color:#ffab86">Dev OTP Mode Active</div>
-          <div class="xs muted mt2">Brevo API pending. Use Dev OTP <b style="color:#fff;background:var(--surface-3);padding:2px 6px;border-radius:6px;letter-spacing:1px">1234</b> to log in.</div>
+          <div class="xs muted mt2">Use Dev OTP <b style="color:#fff;background:var(--surface-3);padding:2px 6px;border-radius:6px;letter-spacing:1px">1234</b> for instant access.</div>
         </div>
       </div>
     </div>
 
-    <!-- Mobile Number -->
-    <div class="field">
-      <label>Mobile number</label>
-      <div class="row gap8">
-        <div class="chip" style="padding:13px 14px;border-radius:13px;background:var(--surface)">🇮🇳 +91</div>
-        <input id="loginPhone" class="input grow" inputmode="numeric" maxlength="10" placeholder="98765 43210"
-          value="${esc(phone)}" oninput="S.auth.loginPhone=this.value.replace(/\\D/g,'').slice(0,10);save();render()">
+    <!-- Input for Phone or Gmail -->
+    ${method === 'phone' ? `
+      <div class="field">
+        <label>Mobile number</label>
+        <div class="row gap8">
+          <div class="chip" style="padding:13px 14px;border-radius:13px;background:var(--surface)">🇮🇳 +91</div>
+          <input id="loginPhone" class="input grow" inputmode="numeric" maxlength="10" placeholder="98765 43210"
+            value="${esc(phone)}" oninput="S.auth.loginPhone=this.value.replace(/\\D/g,'').slice(0,10);save();render()">
+        </div>
+        ${phone && !okPhone ? `<div class="xs mt6" style="color:var(--red)">Enter a valid 10-digit mobile number</div>` : ''}
       </div>
-      ${phone && !okPhone ? `<div class="xs mt6" style="color:var(--red)">Enter a valid 10-digit mobile number</div>` : ''}
-    </div>
+    ` : `
+      <div class="field">
+        <label>Gmail or Email address</label>
+        <div class="row gap8" style="background:var(--surface);border:1.5px solid var(--border);border-radius:13px;padding:0 12px;align-items:center">
+          <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#EA4335" d="M12 5c1.6 0 3 .6 4.1 1.6l3.1-3.1C17.3 1.7 14.8 1 12 1 7.5 1 3.7 3.6 1.9 7.3l3.7 2.9C6.5 7.4 9 5 12 5z"/><path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.6h6.5c-.3 1.5-1.1 2.8-2.4 3.7l3.7 2.9c2.2-2 3.7-5 3.7-8.9z"/><path fill="#FBBC05" d="M5.6 14.8c-.2-.7-.4-1.5-.4-2.8s.2-2.1.4-2.8L1.9 6.3C.7 8.7 0 10.3 0 12s.7 3.3 1.9 5.7l3.7-2.9z"/><path fill="#34A853" d="M12 23c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3 0-5.5-2.4-6.4-5.2L1.9 16C3.7 20.4 7.5 23 12 23z"/></svg>
+          <input id="loginEmail" class="input grow" type="email" placeholder="you@gmail.com"
+            style="border:0;background:none;padding:12px 4px;box-shadow:none"
+            value="${esc(email)}" oninput="S.auth.loginEmail=this.value.trim();save();render()">
+        </div>
+        <div class="row gap6 mt6" style="flex-wrap:wrap">
+          <button type="button" class="xs chip" onclick="S.auth.loginEmail='prathmesh@gmail.com';save();render()">prathmesh@gmail.com</button>
+          <button type="button" class="xs chip" onclick="S.auth.loginEmail='dev@snappro.in';save();render()">dev@snappro.in</button>
+        </div>
+        ${email && !okEmail ? `<div class="xs mt6" style="color:var(--red)">Enter a valid email address</div>` : ''}
+      </div>
+    `}
 
     <!-- Role Selection -->
     <div class="field mt10">
@@ -2589,37 +2687,57 @@ function vAuthLogin(){
       </div>
     </div>
 
-    <!-- Dev OTP -->
-    <div class="field mt14">
+    <!-- Dev OTP Box -->
+    <div class="field mt12">
       <div class="between mb6">
         <label style="margin:0">Dev OTP (Code: 1234)</label>
         <button type="button" class="xs accent bold" onclick="S.auth.loginOtp='1234';save();render();">⚡ Autofill 1234</button>
       </div>
-      <div class="row gap10 mt8" style="justify-content:center">
-        ${[0,1,2,3].map(i=>`<div style="width:54px;height:60px;border-radius:14px;display:grid;place-items:center;font-size:24px;font-weight:800;
+      <div class="row gap10 mt6" style="justify-content:center">
+        ${[0,1,2,3].map(i=>`<div style="width:52px;height:58px;border-radius:14px;display:grid;place-items:center;font-size:24px;font-weight:800;
           background:var(--surface);border:1.5px solid ${String(otp).length===i?'var(--accent)':'var(--border)'}">${esc(String(otp)[i]||'')}</div>`).join('')}
       </div>
-      <input id="loginOtp" class="input mt10" inputmode="numeric" maxlength="4" placeholder="Enter 1234"
+      <input id="loginOtp" class="input mt8" inputmode="numeric" maxlength="4" placeholder="Enter 1234"
         style="text-align:center;letter-spacing:6px;font-size:18px;font-weight:700"
         value="${esc(otp)}" oninput="S.auth.loginOtp=this.value.replace(/\\D/g,'').slice(0,4);save();render()">
     </div>
 
-    <!-- Login Button -->
-    <button class="btn primary block mt14" id="btnLogin" ${okPhone&&okOtp?'':'disabled'} onclick="submitLogin()">
-      ${icon("cam",18,"#fff")} Log In
+    <!-- Login Button with Camera Icon -->
+    <button class="btn primary block mt12" id="btnLogin" ${okCred&&okOtp?'':'disabled'} onclick="submitLogin()">
+      ${icon("cam",18,"#fff")} Log In (Watch Camera Flash)
     </button>
 
+    <!-- 1-Tap Google Login -->
+    <button class="card tap row gap10 mt10" style="width:100%;text-align:left;padding:12px 14px;border-color:rgba(255,255,255,.2)"
+      onclick="loginWithGoogle('${role}')">
+      <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#EA4335" d="M12 5c1.6 0 3 .6 4.1 1.6l3.1-3.1C17.3 1.7 14.8 1 12 1 7.5 1 3.7 3.6 1.9 7.3l3.7 2.9C6.5 7.4 9 5 12 5z"/><path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.6h6.5c-.3 1.5-1.1 2.8-2.4 3.7l3.7 2.9c2.2-2 3.7-5 3.7-8.9z"/><path fill="#FBBC05" d="M5.6 14.8c-.2-.7-.4-1.5-.4-2.8s.2-2.1.4-2.8L1.9 6.3C.7 8.7 0 10.3 0 12s.7 3.3 1.9 5.7l3.7-2.9z"/><path fill="#34A853" d="M12 23c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3 0-5.5-2.4-6.4-5.2L1.9 16C3.7 20.4 7.5 23 12 23z"/></svg>
+      <div class="grow">
+        <div class="bold sm">Continue with Google (1-Tap)</div>
+        <div class="xs muted2">Instant Gmail login with flash effect</div>
+      </div>
+      <span class="muted2">›</span>
+    </button>
+
+    <!-- Preview Animation directly -->
+    <div class="center mt14">
+      <button class="chip" style="font-size:11.5px;padding:6px 14px;background:var(--surface-2)"
+        onclick="triggerCameraFlashTransition(()=>{toast('Camera Flash Preview!','Animation working 100%','cam');})">
+        ⚡ Preview Camera Flash Animation
+      </button>
+    </div>
+
     ${S.accounts.length?`
-      <div class="divider mt20"></div>
+      <div class="divider mt16"></div>
       <div class="sec-title">Or 1-tap log in as saved user</div>
       <div class="stack gap8">
         ${S.accounts.map(a=>{
           const pg = a.type==='photographer'?S.photographers.find(p=>p.id===a.photographerId):null;
+          const label = a.email ? a.email : "+91 " + a.phone;
           return `<button class="card tap row gap10" style="padding:10px 12px;width:100%;text-align:left" onclick="quickLogin('${a.id}')">
             ${avatarHtml(pg||{id:a.id,name:a.name},"av-40",pg?pg.online:false)}
             <div class="grow">
               <div class="bold sm">${esc(a.name)}</div>
-              <div class="xs muted2">+91 ${esc(a.phone)} · ${a.type==='photographer'?'📷 Photographer':'🙋 Customer'}</div>
+              <div class="xs muted2">${esc(label)} · ${a.type==='photographer'?'📷 Photographer':'🙋 Customer'}</div>
             </div>
             <span class="muted2">›</span>
           </button>`;
@@ -2627,19 +2745,25 @@ function vAuthLogin(){
       </div>
     `:''}
 
-    <div class="center mt20">
+    <div class="center mt16">
       <button class="xs muted2" onclick="authGo('welcome')">Don't have an account? <span class="accent bold">Sign up here</span></button>
     </div>
   </div><div style="height:24px"></div>`;
 }
 
 function submitLogin(){
+  const method = S.auth.loginMethod || "phone";
   const phone = (S.auth.loginPhone || "").trim();
+  const email = (S.auth.loginEmail || "").trim();
   const otp = String(S.auth.loginOtp || "").trim();
   const role = S.auth.loginRole || "customer";
 
-  if(!/^[6-9]\d{9}$/.test(phone)){
+  if(method === "phone" && !/^[6-9]\d{9}$/.test(phone)){
     toast("Invalid Number","Enter a valid 10-digit mobile number","x");
+    return;
+  }
+  if(method === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){
+    toast("Invalid Email","Enter a valid Gmail or email address","x");
     return;
   }
   if(otp !== "1234" && otp !== (S.auth.sent||"") && otp !== DEV_OTP){
@@ -2649,25 +2773,53 @@ function submitLogin(){
 
   // Trigger camera shutter morph and bright white flash!
   triggerCameraFlashTransition(()=>{
-    let a = S.accounts.find(x=>x.phone===phone);
+    let a = S.accounts.find(x => (method==="phone" && x.phone===phone) || (method==="email" && x.email && x.email.toLowerCase()===email.toLowerCase()));
     if(!a){
+      const name = method === "email"
+        ? (email.split('@')[0].replace(/[._]/g,' ').replace(/\b\w/g,c=>c.toUpperCase()))
+        : ("Customer " + phone.slice(-4));
       if(role==="photographer"){
-        const seed = { name:"Photographer "+phone.slice(-4), cats:["portrait","event"], rating:4.8, jobs:8, years:3, price:1.0, bio:"On-demand shooter on SnapPro." };
+        const seed = { name, cats:["portrait","event"], rating:4.8, jobs:8, years:3, price:1.0, bio:"On-demand photographer ready to shoot." };
         const pg = makePhotographer(seed, S.photographers.length);
         pg.id = uid("pg");
         pg.area = AREAS[0];
         pg.online = true;
         S.photographers.push(pg);
-        a = { id:uid("acc"), type:"photographer", phone, name:pg.name, createdAt:Date.now(), photographerId:pg.id };
+        a = { id:uid("acc"), type:"photographer", phone:phone||"9876543210", email:email||"pro@snappro.in", name:pg.name, createdAt:Date.now(), photographerId:pg.id };
       } else {
-        a = { id:uid("acc"), type:"customer", phone, name:"Customer "+phone.slice(-4), createdAt:Date.now(), customer:{ name:"Customer "+phone.slice(-4), area:AREAS[0], wallet:2500 } };
+        a = { id:uid("acc"), type:"customer", phone:phone||"9876543210", email:email||"cust@snappro.in", name, createdAt:Date.now(), customer:{ name, area:AREAS[0], wallet:2500 } };
       }
       S.accounts.push(a);
     }
     S.auth.loginPhone = "";
+    S.auth.loginEmail = "";
     S.auth.loginOtp = "1234";
     loginAs(a.id);
     setTimeout(()=>toast("Welcome to SnapPro!","Camera loaded and ready","cam"), 250);
+  });
+}
+
+function loginWithGoogle(role = "customer"){
+  const email = (S.auth.loginEmail || "user@gmail.com").trim();
+  triggerCameraFlashTransition(()=>{
+    let a = S.accounts.find(x => x.email && x.email.toLowerCase() === email.toLowerCase());
+    if(!a){
+      const name = email.split('@')[0].replace(/[._]/g,' ').replace(/\b\w/g,c=>c.toUpperCase()) || "Google User";
+      if(role==="photographer"){
+        const seed = { name, cats:["portrait","event"], rating:4.9, jobs:14, years:4, price:1.0, bio:"Pro photographer on SnapPro." };
+        const pg = makePhotographer(seed, S.photographers.length);
+        pg.id = uid("pg");
+        pg.area = AREAS[0];
+        pg.online = true;
+        S.photographers.push(pg);
+        a = { id:uid("acc"), type:"photographer", phone:"9876543210", email, name, createdAt:Date.now(), photographerId:pg.id };
+      } else {
+        a = { id:uid("acc"), type:"customer", phone:"9876543210", email, name, createdAt:Date.now(), customer:{ name, area:AREAS[0], wallet:2500 } };
+      }
+      S.accounts.push(a);
+    }
+    loginAs(a.id);
+    setTimeout(()=>toast("Signed in with Google!","Welcome, "+a.name,"cam"), 250);
   });
 }
 
@@ -2964,7 +3116,34 @@ if(S.firstRun){
 /* keyboard: Esc to go back */
 document.addEventListener("keydown",e=>{ if(e.key==="Escape"&&S.stack.length)pop(); });
 
-window.addEventListener("error",e=>console.error("SnapPro error:",e.message));
 </script>
+<div id="camTransitionOverlay" style="display:none">
+  <div class="cam-anim-wrap">
+    <div class="cam-badge-tag">DEV OTP ACCEPTED</div>
+    <div class="cam-retro-body">
+      <div class="cam-top-plate">
+        <div class="cam-shutter-btn"></div>
+        <div class="cam-top-dial"></div>
+      </div>
+      <div class="cam-viewfinder-glass">
+        <div class="cam-vf-dot"></div>
+      </div>
+      <div class="cam-flash-emitter">
+        <div class="cam-flash-core"></div>
+      </div>
+      <div class="cam-big-lens">
+        <div class="cam-lens-glare"></div>
+        <div class="cam-shutter-iris">
+          <div class="cam-shutter-center-dot"></div>
+        </div>
+      </div>
+    </div>
+    <div class="cam-anim-status">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+      <span>SNAPPING YOUR SHOT…</span>
+    </div>
+  </div>
+  <div id="camFlashBurst" class="bright-white-flash"></div>
+</div>
 </body>
 </html>
