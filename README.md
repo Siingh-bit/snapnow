@@ -1,8 +1,10 @@
-# SnapNow
+# SnapPro
 
 **On-demand photographer booking — a photographer at your door in minutes.**
 
-Blinkit and Swiggy Instamart made 10-minute grocery delivery normal. SnapNow applies the same
+**Live at [snappro.in](https://snappro.in)**
+
+Blinkit and Swiggy Instamart made 10-minute grocery delivery normal. SnapPro applies the same
 model to photography: you post a shoot, every matching photographer nearby gets pinged, they
 accept with their own price and ETA, and you pick one. Instead of DMing five photographers on
 Instagram and waiting a day for replies, you get competing offers in under a minute.
@@ -14,7 +16,7 @@ Instagram and waiting a day for replies, you get competing offers in under a min
 
 ## Try it
 
-Open `index.html` in any modern browser. That's it.
+Visit **[snappro.in](https://snappro.in)** or open `index.html` in any modern browser.
 
 Or serve it locally:
 
@@ -98,7 +100,8 @@ One file. No framework, no bundler, no dependencies, no network calls.
 
 - **Rendering** — plain functions returning HTML strings, with a small router over
   `role → tab` plus a navigation stack for pushed screens
-- **State** — a single `S` object serialised to `localStorage` under `snapnow.v2`
+- **State** — a single `S` object serialised to `localStorage` under `snappro.v1`
+  (automatically migrates data from the legacy `snapnow.v2` key)
 - **Imagery** — portfolio "photos" and avatars are deterministic CSS gradients seeded from an FNV-1a
   hash of the photographer's ID, so they're stable across renders and work fully offline
 - **Maps** — hand-drawn SVG street grids with positioned pins; no map SDK or API key

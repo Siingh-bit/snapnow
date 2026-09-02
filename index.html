@@ -2,11 +2,27 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<title>SnapNow — Photographers in minutes</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>SnapPro — On-Demand Photographers in Minutes | snappro.in</title>
+<meta name="description" content="Book a professional photographer in minutes. Post a shoot, get competing offers from verified pros nearby, compare and book — all in one tap.">
+<meta name="theme-color" content="#0a0a0f">
+<link rel="canonical" href="https://snappro.in/">
+<!-- OpenGraph -->
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://snappro.in/">
+<meta property="og:title" content="SnapPro — On-Demand Photographers in Minutes">
+<meta property="og:description" content="Post a shoot, get competing offers from verified photographers nearby, compare portfolios and book — all in under a minute.">
+<meta property="og:site_name" content="SnapPro">
+<!-- Twitter Card -->
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="SnapPro — On-Demand Photographers in Minutes">
+<meta name="twitter:description" content="Book a professional photographer in minutes. Competing offers, verified pros, transparent pricing.">
+<!-- Favicon (embedded SVG — no external request) -->
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%23ff5a1f'/%3E%3Cpath d='M74 38H62l-4-6H42l-4 6H26a4 4 0 0 0-4 4v26a4 4 0 0 0 4 4h48a4 4 0 0 0 4-4V42a4 4 0 0 0-4-4z' fill='none' stroke='%23fff' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='50' cy='52' r='9' fill='none' stroke='%23fff' stroke-width='3.5'/%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%23ff5a1f'/%3E%3Cpath d='M74 38H62l-4-6H42l-4 6H26a4 4 0 0 0-4 4v26a4 4 0 0 0 4 4h48a4 4 0 0 0 4-4V42a4 4 0 0 0-4-4z' fill='none' stroke='%23fff' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='50' cy='52' r='9' fill='none' stroke='%23fff' stroke-width='3.5'/%3E%3C/svg%3E">
 <style>
 /* ============================================================
-   SnapNow — design system
+   SnapPro — design system
    ============================================================ */
 :root{
   --bg:#0a0a0f;
@@ -30,7 +46,7 @@
   --shadow:0 18px 50px -12px rgba(0,0,0,.75);
   --ff:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
 }
-*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
 html,body{margin:0;padding:0;height:100%}
 body{
   background:
@@ -108,7 +124,7 @@ input,select,textarea{font-family:inherit;font-size:inherit;color:inherit}
 }
 .statusbar{
   height:34px;flex:0 0 34px;display:flex;align-items:center;justify-content:space-between;
-  padding:0 22px;font-size:11.5px;font-weight:600;color:var(--muted);
+  padding:0 22px;padding-top:env(safe-area-inset-top);font-size:11.5px;font-weight:600;color:var(--muted);
   border-bottom:1px solid var(--border-soft);
 }
 .statusbar .dots{display:flex;gap:4px;align-items:center}
@@ -116,7 +132,7 @@ input,select,textarea{font-family:inherit;font-size:inherit;color:inherit}
 #screen.no-scroll{overflow:hidden}
 .tabbar{
   flex:0 0 auto;display:flex;border-top:1px solid var(--border-soft);
-  background:rgba(10,10,15,.94);backdrop-filter:blur(10px);padding:6px 4px 10px;
+  background:rgba(10,10,15,.94);backdrop-filter:blur(10px);padding:6px 4px 10px;padding-bottom:calc(10px + env(safe-area-inset-bottom));
 }
 .tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:7px 0;color:var(--muted-2);font-size:10.5px;font-weight:600;border-radius:12px;transition:.15s;position:relative}
 .tab.on{color:var(--accent)}
@@ -314,7 +330,7 @@ table.tbl td{padding:10px 6px;border-bottom:1px solid var(--border-soft);vertica
         </svg>
       </div>
       <div>
-        <div class="brand-name">SnapNow</div>
+        <div class="brand-name">SnapPro</div>
         <div class="brand-tag">Photographers in minutes</div>
       </div>
     </div>
@@ -359,7 +375,7 @@ table.tbl td{padding:10px 6px;border-bottom:1px solid var(--border-soft);vertica
 </div>
 <script>
 /* ============================================================
-   SnapNow — a Blinkit-style, on-demand photographer marketplace
+   SnapPro — a Blinkit-style, on-demand photographer marketplace
    Single-file demo app. State lives in localStorage.
    ============================================================ */
 "use strict";
@@ -547,7 +563,8 @@ function makePhotographer(seed,i){
 /* ============================================================
    STATE
    ============================================================ */
-const KEY = "snapnow.v2";
+const KEY = "snappro.v1";
+const LEGACY_KEY = "snapnow.v2";
 var S = null;   /* var (not let) so inline handlers + devtools can always reach it */
 
 function freshState(){
@@ -581,14 +598,25 @@ function ownedPgIds(){ return new Set(S.accounts.filter(a=>a.type==="photographe
 function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} }
 function load(){
   try{
+    /* try new key first */
     const raw = localStorage.getItem(KEY);
     if(raw){ const p = JSON.parse(raw); if(p && p.photographers && p.photographers.length){ return p; } }
+    /* migrate from legacy key if present */
+    const legacy = localStorage.getItem(LEGACY_KEY);
+    if(legacy){
+      const p = JSON.parse(legacy);
+      if(p && p.photographers && p.photographers.length){
+        localStorage.setItem(KEY, legacy);
+        localStorage.removeItem(LEGACY_KEY);
+        return p;
+      }
+    }
   }catch(e){}
   return freshState();
 }
 function resetAll(){
   if(!confirm("Reset all demo data? This clears requests, bookings and chats."))return;
-  localStorage.removeItem(KEY); S = freshState(); save(); render();
+  localStorage.removeItem(KEY); localStorage.removeItem(LEGACY_KEY); S = freshState(); save(); render();
 }
 function myPg(){
   const a=acct();
@@ -994,7 +1022,7 @@ function vCustHome(){
       <div class="row gap12">
         <div style="font-size:26px">🛡️</div>
         <div class="grow">
-          <div class="bold sm">SnapNow Guarantee</div>
+          <div class="bold sm">SnapPro Guarantee</div>
           <div class="xs muted mt4">No-show? Full refund + we dispatch a backup pro free. Every photographer is ID-verified and portfolio-reviewed.</div>
         </div>
       </div>
@@ -1147,7 +1175,7 @@ function vNewRequest(){
       </div>
       ${d.urgency==="pick"?`
         <div class="field mt16"><label>Date &amp; time</label>
-          <input class="input" type="datetime-local" value="${esc(d.customDate)}" onchange="setDraft('customDate',this.value)">
+          <input class="input" type="datetime-local" value="${esc(d.customDate)}" min="${new Date().toISOString().slice(0,16)}" onchange="setDraft('customDate',this.value)">
         </div>`:""}
       <div class="field mt16">
         <label>How long is the shoot?</label>
@@ -1436,7 +1464,7 @@ function vCheckout(props){
   const p=S.photographers.find(x=>x.id===o.photographerId);
   const f=feeBreakdown(o.price);
   const pm=S.payMethod||"upi";
-  const methods=[["upi","UPI","Pay via any UPI app","⚡"],["card","Card","Visa •••• 4291","💳"],["wallet","SnapNow Wallet",inr(cust().wallet)+" available","🪙"],["cash","Pay on arrival","Cash / card to photographer","💵"]];
+  const methods=[["upi","UPI","Pay via any UPI app","⚡"],["card","Card","Visa •••• 4291","💳"],["wallet","SnapPro Wallet",inr(cust().wallet)+" available","🪙"],["cash","Pay on arrival","Cash / card to photographer","💵"]];
   const walletShort = pm==="wallet" && cust().wallet<f.total;
 
   return `${topbar("Confirm & pay", esc(p.name))}
@@ -1709,7 +1737,7 @@ function vCustProfile(){
       ${avatarHtml({id:"cust",name:cust().name},"av-72")}
       <div class="grow"><div class="h2">${esc(cust().name)}</div>
         <div class="sm muted">${esc(cust().area)} · member since 2024</div>
-        <div class="row gap6 mt8"><span class="chip accent">⭐ SnapNow Plus</span></div></div>
+        <div class="row gap6 mt8"><span class="chip accent">⭐ SnapPro Plus</span></div></div>
     </div>
     <div class="grid3 mt20">
       <div class="stat center"><div class="s-v">${S.bookings.length}</div><div class="s-l">Bookings</div></div>
@@ -1717,7 +1745,7 @@ function vCustProfile(){
       <div class="stat center"><div class="s-v" style="font-size:16px">${inr(spent)}</div><div class="s-l">Spent</div></div>
     </div>
     <div class="card mt16">
-      <div class="between"><div class="row gap10">${icon("wallet",18,"var(--accent)")}<span class="bold sm">SnapNow Wallet</span></div>
+      <div class="between"><div class="row gap10">${icon("wallet",18,"var(--accent)")}<span class="bold sm">SnapPro Wallet</span></div>
         <span class="h3">${inr(cust().wallet)}</span></div>
       <button class="btn sm block mt12" onclick="cust().wallet+=1000;save();render();toast('Added ₹1,000','Wallet topped up','wallet')">Add money</button>
     </div>
@@ -2063,12 +2091,12 @@ function vAuthWelcome(){
     <div class="center">
       <div style="width:64px;height:64px;margin:0 auto;border-radius:20px;background:linear-gradient(135deg,var(--accent),#ff8a3d);display:grid;place-items:center;box-shadow:0 14px 34px -8px rgba(255,90,31,.7)">
         ${icon("cam",32,"#fff",2)}</div>
-      <div class="h1 mt16">SnapNow</div>
+      <div class="h1 mt16">SnapPro</div>
       <div class="sm muted mt4">A photographer at your door in minutes</div>
     </div>
 
     <div class="mt24">
-      <div class="sec-title">How will you use SnapNow?</div>
+      <div class="sec-title">How will you use SnapPro?</div>
 
       <button class="card tap" style="width:100%;text-align:left;padding:18px;border-color:${S.auth.type==="customer"?"var(--accent)":"var(--border-soft)"}"
         onclick="authGo('phone',{type:'customer'})">
@@ -2135,7 +2163,7 @@ function sendOtp(){
   const code=String(rint(1000,9999));
   S.auth.sent=code; S.auth.otp="";
   authGo("otp");
-  setTimeout(()=>toast("Your SnapNow code is "+code,"Tap 'Autofill' if you'd rather not type it","chat"),500);
+  setTimeout(()=>toast("Your SnapPro code is "+code,"Tap 'Autofill' if you'd rather not type it","chat"),500);
 }
 
 function vAuthOtp(){
@@ -2268,7 +2296,7 @@ function togglePgCat(c){
 function createPhotographerAccount(){
   const d=S.auth.draft;
   const seed={ name:d.name.trim(), cats:d.cats.length?d.cats:["portrait"], rating:4.5, jobs:0,
-               years:d.years, price:d.priceMult, bio:d.bio.trim()||"New on SnapNow — ready to shoot." };
+               years:d.years, price:d.priceMult, bio:d.bio.trim()||"New on SnapPro — ready to shoot." };
   const pg=makePhotographer(seed, S.photographers.length);
   pg.id = uid("pg");
   pg.area = d.area;
@@ -2313,7 +2341,7 @@ function vAuthAdmin(){
       <div class="h2 mt16">Operations dashboard</div>
       <div class="sm muted mt8">Marketplace health, supply coverage and revenue.</div>
     </div>
-    <div class="field mt24"><label>Work email</label><input class="input" value="ops@snapnow.in" readonly></div>
+    <div class="field mt24"><label>Work email</label><input class="input" value="ops@snappro.in" readonly></div>
     <div class="field"><label>Password</label><input class="input" type="password" value="demo1234" readonly></div>
     <button class="btn primary block" onclick="loginAs('admin')">Open console</button>
     <div class="xs muted2 center mt12">Pre-filled for the demo.</div>
@@ -2359,7 +2387,7 @@ function vAdminHome(){
   const maxCat=Math.max(...catRows.map(c=>c[1]),1);
 
   return `<div class="pad">
-    <div class="between mb16"><div><div class="h2">Operations</div><div class="xs muted2">ops@snapnow.in · live marketplace health</div></div>
+    <div class="between mb16"><div><div class="h2">Operations</div><div class="xs muted2">ops@snappro.in · live marketplace health</div></div>
       <button class="chip" onclick="logout()">${icon("power",12)} Sign out</button></div>
 
     <div class="grid2">
@@ -2583,13 +2611,13 @@ S.requests.filter(r=>r.status==="live").forEach(r=>{
 /* first-run welcome */
 if(S.firstRun){
   S.firstRun=false; save();
-  setTimeout(()=>toast("Welcome to SnapNow","Pick how you'll use the app to get started.","bolt"),900);
+  setTimeout(()=>toast("Welcome to SnapPro","Pick how you'll use the app to get started.","bolt"),900);
 }
 
 /* keyboard: Esc to go back */
 document.addEventListener("keydown",e=>{ if(e.key==="Escape"&&S.stack.length)pop(); });
 
-window.addEventListener("error",e=>console.error("SnapNow error:",e.message));
+window.addEventListener("error",e=>console.error("SnapPro error:",e.message));
 </script>
 </body>
 </html>
