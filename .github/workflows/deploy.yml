@@ -23,11 +23,10 @@ jobs:
           fi
           echo "server=$CLEAN_SERVER" >> $GITHUB_OUTPUT
 
-      - name: Backup live index.html to index-old.html
+      - name: Prepare rollback backup and clean accidental subfolder
         run: |
           curl -s https://snappro.in/index.html -o index-old.html
-          curl -s --ftp-pasv -T index-old.html -u "${{ secrets.FTP_USERNAME }}:${{ secrets.FTP_PASSWORD }}" "ftp://${{ steps.prep.outputs.server }}/public_html/index-old.html" || true
-          rm -f index-old.html
+          curl -s --ftp-pasv -Q "-DELE public_html/index.html" -Q "-RMD public_html" -u "${{ secrets.FTP_USERNAME }}:${{ secrets.FTP_PASSWORD }}" "ftp://${{ steps.prep.outputs.server }}/" || true
 
       - name: Sync files to Hostinger
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
@@ -35,7 +34,7 @@ jobs:
           server: ${{ steps.prep.outputs.server }}
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
-          server-dir: public_html/
+          server-dir: ./
           exclude: |
             **/.git*
             **/.git*/**
