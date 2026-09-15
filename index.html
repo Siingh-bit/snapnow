@@ -669,14 +669,14 @@ function makePhotographer(seed,i){
    ============================================================ */
 const KEY = "snappro.v1";
 const LEGACY_KEY = "snapnow.v2";
-const DEV_OTP = "1234";
+const DEV_OTP = null; /* retired: codes now come from Supabase */
 var S = null;   /* var (not let) so inline handlers + devtools can always reach it */
 
 function freshState(){
   return {
     accounts:[],                     // [{id,type,phone,name,customer?,photographerId?}]
     session:null,                    // account id, or "admin"
-    auth:{step:"welcome", type:null, method:"phone", phone:"", email:"", otp:"", draft:null, loginMethod:"phone", loginPhone:"", loginEmail:"", loginOtp:"1234", loginRole:"customer"},
+    auth:{step:"welcome", type:null, method:"email", phone:"", email:"", otp:"", draft:null, loginMethod:"email", loginPhone:"", loginEmail:"", loginOtp:"", loginRole:"customer"},
     role:"customer",                 // derived from the session; kept for the view router
     nav:{customer:"home", photographer:"home", admin:"home"},
     stack:[],                        // modal-ish screens {name,props}
@@ -787,6 +787,23 @@ async function initSupabase(){
     sbSession = (data && data.session) || null;
     sb.auth.onAuthStateChange((_evt, sess)=>{ sbSession = sess || null; });
     console.log("SnapPro: Supabase ready. Signed in:", !!sbSession);
+
+    /* a valid Supabase session outranks local state: put the person straight
+       back into their account instead of showing the welcome screen again */
+    if(sbSession && sbSession.user){
+      const uid = sbSession.user.id;
+      const acc = S.accounts.find(x => x.id === uid);
+      if(acc && S.session !== uid){ loginAs(uid); }
+      else if(!acc){
+        /* signed in with Supabase but this device has no local profile yet */
+        S.auth = Object.assign({}, S.auth, {
+          step: "custSetup", type: "customer", method: "email",
+          email: sbSession.user.email || "",
+          draft: { name:"", area:AREAS[0], uid:uid }
+        });
+        save(); render();
+      }
+    }
     sbSync.hydrateFromCloud();
   }catch(e){ sbErr("init", e); }
 }
@@ -2535,23 +2552,13 @@ function vAuthWelcome(){
       <div class="sm muted mt4">On-demand photographers in minutes</div>
     </div>
 
-    <!-- Dev Mode Callout Banner -->
-    <div class="card mt16 mb4" style="background:rgba(255,90,31,.12);border-color:rgba(255,90,31,.4);padding:11px 14px">
-      <div class="between">
-        <div class="row gap8">
-          <span style="font-size:18px">⚡</span>
-          <div class="xs muted"><span class="bold" style="color:#ffab86">Dev OTP:</span> Use <b style="color:#fff;background:var(--surface-3);padding:2px 6px;border-radius:6px">1234</b> (Phone or Gmail)</div>
-        </div>
-        <button class="chip accent" style="font-size:10px;padding:4px 9px" onclick="authGo('login')">Log In →</button>
-      </div>
-    </div>
 
     <!-- Quick 1-Tap Google Login -->
     <button class="card tap row gap10 mt8 mb12" style="width:100%;text-align:left;padding:12px 14px;border-color:rgba(255,255,255,.2)" onclick="loginWithGoogle('customer')">
       <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#EA4335" d="M12 5c1.6 0 3 .6 4.1 1.6l3.1-3.1C17.3 1.7 14.8 1 12 1 7.5 1 3.7 3.6 1.9 7.3l3.7 2.9C6.5 7.4 9 5 12 5z"/><path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.6h6.5c-.3 1.5-1.1 2.8-2.4 3.7l3.7 2.9c2.2-2 3.7-5 3.7-8.9z"/><path fill="#FBBC05" d="M5.6 14.8c-.2-.7-.4-1.5-.4-2.8s.2-2.1.4-2.8L1.9 6.3C.7 8.7 0 10.3 0 12s.7 3.3 1.9 5.7l3.7-2.9z"/><path fill="#34A853" d="M12 23c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3 0-5.5-2.4-6.4-5.2L1.9 16C3.7 20.4 7.5 23 12 23z"/></svg>
       <div class="grow">
-        <div class="bold sm">Continue with Google (Gmail)</div>
-        <div class="xs muted2">Instant Dev 1-tap login with camera flash</div>
+        <div class="bold sm">Continue with Google</div>
+        <div class="xs muted2">Not set up yet — we'll email you a code</div>
       </div>
       <span class="muted2">›</span>
     </button>
@@ -2559,13 +2566,13 @@ function vAuthWelcome(){
     <div class="sec-title">Or sign up with role</div>
     <div class="grid2 gap10">
       <button class="card tap" style="text-align:left;padding:14px;border-color:${S.auth.type==='customer'?'var(--accent)':'var(--border-soft)'}"
-        onclick="authGo('phone',{type:'customer',method:'phone'})">
+        onclick="authGo('phone',{type:'customer',method:'email'})">
         <div style="font-size:24px">🙋</div>
         <div class="bold sm mt6">Need a pro</div>
         <div class="xs muted mt2">Book shoots</div>
       </button>
       <button class="card tap" style="text-align:left;padding:14px;border-color:${S.auth.type==='photographer'?'var(--accent)':'var(--border-soft)'}"
-        onclick="authGo('phone',{type:'photographer',method:'phone'})">
+        onclick="authGo('phone',{type:'photographer',method:'email'})">
         <div style="font-size:24px">📷</div>
         <div class="bold sm mt6">Photographer</div>
         <div class="xs muted mt2">Receive jobs</div>
@@ -2587,7 +2594,7 @@ function vAuthWelcome(){
 
 function vAuthPhone(){
   const a = S.auth;
-  const method = a.method || "phone";
+  const method = a.method || "email";
   const okPhone = /^[6-9]\d{9}$/.test(a.phone);
   const okEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a.email);
   const ok = method === "phone" ? okPhone : okEmail;
@@ -2608,13 +2615,6 @@ function vAuthPhone(){
         onclick="S.auth.method='email';save();render()">✉️ Gmail / Email</button>
     </div>
 
-    <!-- Dev Mode Banner -->
-    <div class="card mb14" style="background:rgba(255,90,31,.11);border-color:rgba(255,90,31,.35);padding:10px 14px">
-      <div class="row gap8">
-        <span style="font-size:16px">⚡</span>
-        <div class="xs muted"><span class="bold" style="color:#ffab86">Dev OTP Mode:</span> Code is <b style="color:#fff">1234</b> on the next screen.</div>
-      </div>
-    </div>
 
     ${method === 'phone' ? `
       <div class="field mt12"><label>Mobile number</label>
@@ -2637,7 +2637,7 @@ function vAuthPhone(){
       </div>
     `}
 
-    <button class="btn primary block mt12" ${ok?"":"disabled"} onclick="sendOtp()">Send Dev code (1234)</button>
+    <button class="btn primary block mt12" ${ok?"":"disabled"} onclick="sendOtp()">Email me a code</button>
 
     <div class="center mt16">
       <button class="xs muted2" onclick="authGo('login')">Already registered? <span class="accent bold">Log in here</span></button>
@@ -2645,55 +2645,97 @@ function vAuthPhone(){
   </div>`;
 }
 
-function sendOtp(){
-  const code="1234";
-  S.auth.sent=code; S.auth.otp="1234";
+async function sendOtp(){
+  const a = S.auth;
+  if((a.method || "email") !== "email"){
+    toast("Phone login coming soon", "Please use email for now", "bell");
+    S.auth.method = "email"; save(); render(); return;
+  }
+  const email = (a.email || "").trim();
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){
+    S.auth.err = "Enter a valid email address."; save(); render(); return;
+  }
+  if(!sb){ S.auth.err = "Can't reach the server. Check your connection."; save(); render(); return; }
+
+  S.auth.busy = true; S.auth.err = null; S.auth.otp = ""; save(); render();
+  const { error } = await sb.auth.signInWithOtp({ email: email, options: { shouldCreateUser: true } });
+  S.auth.busy = false;
+
+  if(error){
+    S.auth.err = error.message || "Couldn't send the code. Try again.";
+    save(); render(); return;
+  }
+  S.auth.sent = "sent"; S.auth.err = null;
   authGo("otp");
-  setTimeout(()=>toast("Dev OTP code is 1234","Pre-filled for rapid testing","chat"),400);
+  toast("Code sent", "Check " + email + " — including spam", "chat");
 }
 
 function vAuthOtp(){
-  const a=S.auth, ok=String(a.otp).length===4;
-  const target = a.method==="email" ? esc(a.email||"your email") : "+91 "+esc(a.phone||"your number");
+  const a = S.auth;
+  const code = String(a.otp || "");
+  const ok = code.length === 6 && !a.busy;
+  const target = esc(a.email || "your email");
   return `<div class="topbar"><button class="iconbtn" onclick="authGo('phone')">${icon("back",18)}</button>
-    <div class="grow"><div class="h3">Verify your ${a.method==="email"?"email":"number"}</div><div class="xs muted2">${target}</div></div></div>
+    <div class="grow"><div class="h3">Check your email</div><div class="xs muted2">${target}</div></div></div>
   <div class="pad">
-    <div class="h2 mt8">Enter Dev code</div>
-    <div class="sm muted mt4">Sent to ${target} · <button class="accent bold" onclick="sendOtp()">Resend</button></div>
+    <div class="h2 mt8">Enter your code</div>
+    <div class="sm muted mt4">We sent a 6-digit code to ${target}.
+      ${a.busy ? '<span class="muted2">Sending…</span>' : `· <button class="accent bold" onclick="sendOtp()">Resend</button>`}</div>
 
-    <div class="card mt12 mb8" style="background:rgba(255,90,31,.11);border-color:rgba(255,90,31,.35);padding:10px 14px">
-      <div class="row gap8">
-        <span style="font-size:18px">⚡</span>
-        <div class="xs muted"><span class="bold" style="color:#ffab86">Dev OTP Active:</span> Code is <b style="color:#fff;background:var(--surface-3);padding:2px 6px;border-radius:6px">1234</b></div>
-      </div>
+    <div class="row gap6 mt20" style="justify-content:center">
+      ${[0,1,2,3,4,5].map(i=>`<div class="otp-cell" style="width:46px;height:58px;border-radius:13px;display:grid;place-items:center;font-size:23px;font-weight:800;
+        background:var(--surface);border:1.5px solid ${code.length===i?"var(--accent)":"var(--border)"}">${esc(code[i]||"")}</div>`).join("")}
     </div>
 
-    <div class="row gap10 mt20" style="justify-content:center">
-      ${[0,1,2,3].map(i=>`<div class="otp-cell" style="width:56px;height:64px;border-radius:15px;display:grid;place-items:center;font-size:26px;font-weight:800;
-        background:var(--surface);border:1.5px solid ${String(a.otp).length===i?"var(--accent)":"var(--border)"}">${esc(String(a.otp)[i]||"")}</div>`).join("")}
-    </div>
-    <input id="authOtp" class="input mt16" inputmode="numeric" maxlength="4" placeholder="4-digit code" style="text-align:center;letter-spacing:8px;font-size:20px"
-      value="${esc(a.otp)}" oninput="S.auth.otp=this.value.replace(/\\D/g,'').slice(0,4);save();render()">
-    <button class="btn block ghost mt8" onclick="S.auth.otp='1234';save();render()">⚡ Autofill Dev code (1234)</button>
-    <button class="btn primary block mt12" ${ok?"":"disabled"} onclick="verifyOtp()">${icon("cam",16,"#fff")} Verify &amp; Continue</button>
+    <input id="authOtp" class="input mt16" inputmode="numeric" maxlength="6" placeholder="6-digit code"
+      style="text-align:center;letter-spacing:8px;font-size:20px" autocomplete="one-time-code"
+      value="${esc(code)}" oninput="S.auth.otp=this.value.replace(/\D/g,'').slice(0,6);S.auth.err=null;save();render()">
+
+    <button class="btn primary block mt12" ${ok?"":"disabled"} onclick="verifyOtp()">
+      ${a.busy ? "Checking…" : icon("cam",16,"#fff") + " Verify &amp; continue"}</button>
+
     ${a.err?`<div class="xs center mt12" style="color:var(--red)">${esc(a.err)}</div>`:""}
+    <div class="xs muted2 center mt16">Codes expire after an hour. Nothing arriving? Check spam, or resend.</div>
   </div>`;
 }
 
-function verifyOtp(){
-  const a=S.auth;
-  if(a.otp!==a.sent && a.otp!=="1234" && a.otp!==DEV_OTP){ S.auth.err="That code isn't right. Dev OTP is 1234."; save(); render(); return; }
-  S.auth.err=null;
+async function verifyOtp(){
+  const a = S.auth;
+  const code = String(a.otp || "").trim();
+  if(code.length !== 6){ S.auth.err = "Enter the 6-digit code."; save(); render(); return; }
+  if(!sb){ S.auth.err = "Can't reach the server."; save(); render(); return; }
 
-  // Trigger camera shutter morph and bright white flash!
+  S.auth.busy = true; S.auth.err = null; save(); render();
+  const { data, error } = await sb.auth.verifyOtp({ email: a.email, token: code, type: "email" });
+  S.auth.busy = false;
+
+  if(error || !data || !data.user){
+    S.auth.err = (error && error.message) || "That code isn't right.";
+    S.auth.otp = ""; save(); render(); return;
+  }
+
+  sbSession = data.session || null;
+  const uid = data.user.id;
+  S.auth.err = null; save();
+
   triggerCameraFlashTransition(()=>{
-    const existing = S.accounts.find(x => (a.phone && x.phone === a.phone) || (a.email && x.email && x.email.toLowerCase() === a.email.toLowerCase()));
-    if(existing){ loginAs(existing.id); return; }
-    if(a.type==="photographer"){
-      S.auth.draft={name:"",cats:[],years:2,priceMult:1,area:AREAS[0],bio:"",step:1};
+    /* account id must equal the Supabase user id, or every row this person
+       writes will be rejected by the auth.uid() row level security checks */
+    let existing = S.accounts.find(x => x.id === uid)
+                || S.accounts.find(x => x.email && a.email && x.email.toLowerCase() === a.email.toLowerCase());
+    if(existing){
+      existing.id = uid;
+      existing.email = a.email;
+      save();
+      loginAs(uid);
+      sbSync.saveProfile(existing);
+      return;
+    }
+    if(a.type === "photographer"){
+      S.auth.draft = { name:"", cats:[], years:2, priceMult:1, area:AREAS[0], bio:"", step:1, uid:uid };
       authGo("pgSetup");
     } else {
-      S.auth.draft={name:"",area:AREAS[0]};
+      S.auth.draft = { name:"", area:AREAS[0], uid:uid };
       authGo("custSetup");
     }
   });
@@ -2720,7 +2762,7 @@ function vAuthCustSetup(){
 
 function createCustomerAccount(){
   const d=S.auth.draft;
-  const a={ id:genUUID(), type:"customer", phone:S.auth.phone||"9876543210", email:S.auth.email||"", name:d.name.trim(), createdAt:Date.now(),
+  const a={ id:(d.uid || genUUID()), type:"customer", phone:S.auth.phone||null, email:S.auth.email||"", name:d.name.trim(), createdAt:Date.now(),
             customer:{ name:d.name.trim(), area:d.area, wallet:2500 } };
   S.accounts.push(a); save();
   sbSync.saveProfile(a);
@@ -2798,7 +2840,7 @@ function createPhotographerAccount(){
   const seed={ name:d.name.trim(), cats:d.cats.length?d.cats:["portrait"], rating:4.5, jobs:0,
                years:d.years, price:d.priceMult, bio:d.bio.trim()||"New on SnapPro — ready to shoot." };
   const pg=makePhotographer(seed, S.photographers.length);
-  const pgId = genUUID();
+  const pgId = d.uid || genUUID();
   pg.id = pgId;
   pg.area = d.area;
   pg.online = true;
@@ -2808,7 +2850,7 @@ function createPhotographerAccount(){
   pg.verified = false;
   pg.isNew = true;
   S.photographers.push(pg);
-  const a={ id:pgId, type:"photographer", phone:S.auth.phone||"9876543210", email:S.auth.email||"", name:pg.name, createdAt:Date.now(), photographerId:pgId };
+  const a={ id:pgId, type:"photographer", phone:S.auth.phone||null, email:S.auth.email||"", name:pg.name, createdAt:Date.now(), photographerId:pgId };
   S.accounts.push(a); save();
   sbSync.saveProfile(a);
   sbSync.savePhotographer(pg);
@@ -2817,10 +2859,10 @@ function createPhotographerAccount(){
 }
 
 function vAuthLogin(){
-  const method = S.auth.loginMethod || "phone";
+  const method = S.auth.loginMethod || "email";
   const phone = S.auth.loginPhone || "";
   const email = S.auth.loginEmail || "";
-  const otp = S.auth.loginOtp != null ? S.auth.loginOtp : "1234";
+  const otp = "";
   const role = S.auth.loginRole || "customer";
 
   const okPhone = /^[6-9]\d{9}$/.test(phone);
@@ -2830,14 +2872,14 @@ function vAuthLogin(){
 
   return `<div class="topbar">
     <button class="iconbtn" onclick="authGo('welcome')">${icon("back",18)}</button>
-    <div class="grow"><div class="h3">Log in to SnapPro</div><div class="xs muted2">Phone or Gmail · Dev OTP</div></div>
+    <div class="grow"><div class="h3">Log in to SnapPro</div><div class="xs muted2">Sign in with your email</div></div>
   </div>
   <div class="pad">
     <div class="center mt2 mb12">
       <div style="width:58px;height:58px;margin:0 auto;border-radius:18px;background:linear-gradient(135deg,var(--accent),#ff8a3d);display:grid;place-items:center;box-shadow:0 12px 28px -6px rgba(255,90,31,.6)">
         ${icon("cam",28,"#fff",2)}</div>
       <div class="h2 mt10">Welcome back</div>
-      <div class="sm muted mt2">Log in with Mobile or Gmail using Dev OTP</div>
+      <div class="sm muted mt2">We'll email you a 6-digit code</div>
     </div>
 
     <!-- Login Method Selector: Phone vs Gmail -->
@@ -2852,16 +2894,6 @@ function vAuthLogin(){
       </button>
     </div>
 
-    <!-- Dev Mode Callout Banner -->
-    <div class="card mb12" style="background:rgba(255,90,31,.11);border-color:rgba(255,90,31,.35);padding:10px 14px">
-      <div class="row gap8">
-        <span style="font-size:18px">⚡</span>
-        <div class="grow">
-          <div class="bold sm" style="color:#ffab86">Dev OTP Mode Active</div>
-          <div class="xs muted mt2">Use Dev OTP <b style="color:#fff;background:var(--surface-3);padding:2px 6px;border-radius:6px;letter-spacing:1px">1234</b> for instant access.</div>
-        </div>
-      </div>
-    </div>
 
     <!-- Input for Phone or Gmail -->
     ${method === 'phone' ? `
@@ -2907,24 +2939,10 @@ function vAuthLogin(){
       </div>
     </div>
 
-    <!-- Dev OTP Box -->
-    <div class="field mt12">
-      <div class="between mb6">
-        <label style="margin:0">Dev OTP (Code: 1234)</label>
-        <button type="button" class="xs accent bold" onclick="S.auth.loginOtp='1234';save();render();">⚡ Autofill 1234</button>
-      </div>
-      <div class="row gap10 mt6" style="justify-content:center">
-        ${[0,1,2,3].map(i=>`<div style="width:52px;height:58px;border-radius:14px;display:grid;place-items:center;font-size:24px;font-weight:800;
-          background:var(--surface);border:1.5px solid ${String(otp).length===i?'var(--accent)':'var(--border)'}">${esc(String(otp)[i]||'')}</div>`).join('')}
-      </div>
-      <input id="loginOtp" class="input mt8" inputmode="numeric" maxlength="4" placeholder="Enter 1234"
-        style="text-align:center;letter-spacing:6px;font-size:18px;font-weight:700"
-        value="${esc(otp)}" oninput="S.auth.loginOtp=this.value.replace(/\\D/g,'').slice(0,4);save();render()">
-    </div>
 
     <!-- Login Button with Camera Icon -->
-    <button class="btn primary block mt12" id="btnLogin" ${okCred&&okOtp?'':'disabled'} onclick="submitLogin()">
-      ${icon("cam",18,"#fff")} Log In
+    <button class="btn primary block mt12" id="btnLogin" ${okCred?'':'disabled'} onclick="submitLogin()">
+      ${icon("cam",18,"#fff")} Email me a code
     </button>
 
     <!-- 1-Tap Google Login -->
@@ -2932,8 +2950,8 @@ function vAuthLogin(){
       onclick="loginWithGoogle('${role}')">
       <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#EA4335" d="M12 5c1.6 0 3 .6 4.1 1.6l3.1-3.1C17.3 1.7 14.8 1 12 1 7.5 1 3.7 3.6 1.9 7.3l3.7 2.9C6.5 7.4 9 5 12 5z"/><path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.6h6.5c-.3 1.5-1.1 2.8-2.4 3.7l3.7 2.9c2.2-2 3.7-5 3.7-8.9z"/><path fill="#FBBC05" d="M5.6 14.8c-.2-.7-.4-1.5-.4-2.8s.2-2.1.4-2.8L1.9 6.3C.7 8.7 0 10.3 0 12s.7 3.3 1.9 5.7l3.7-2.9z"/><path fill="#34A853" d="M12 23c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3 0-5.5-2.4-6.4-5.2L1.9 16C3.7 20.4 7.5 23 12 23z"/></svg>
       <div class="grow">
-        <div class="bold sm">Continue with Google (1-Tap)</div>
-        <div class="xs muted2">Instant Gmail login</div>
+        <div class="bold sm">Continue with Google</div>
+        <div class="xs muted2">Not set up yet — we'll email you a code</div>
       </div>
       <span class="muted2">›</span>
     </button>
@@ -2972,75 +2990,25 @@ function vAuthLogin(){
 }
 
 function submitLogin(){
-  const method = S.auth.loginMethod || "phone";
-  const phone = (S.auth.loginPhone || "").trim();
+  /* one real code path: everything funnels into Supabase email OTP */
   const email = (S.auth.loginEmail || "").trim();
-  const otp = String(S.auth.loginOtp || "").trim();
-  const role = S.auth.loginRole || "customer";
-
-  if(method === "phone" && !/^[6-9]\d{9}$/.test(phone)){
-    toast("Invalid Number","Enter a valid 10-digit mobile number","x");
-    return;
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){
+    toast("Enter your email", "We'll send a 6-digit code to it", "x"); return;
   }
-  if(method === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){
-    toast("Invalid Email","Enter a valid Gmail or email address","x");
-    return;
-  }
-  if(otp !== "1234" && otp !== (S.auth.sent||"") && otp !== DEV_OTP){
-    toast("Incorrect OTP","Dev OTP is 1234. Use 1234 to log in.","x");
-    return;
-  }
-
-  // Trigger camera shutter morph and bright white flash!
-  triggerCameraFlashTransition(()=>{
-    let a = S.accounts.find(x => (method==="phone" && x.phone===phone) || (method==="email" && x.email && x.email.toLowerCase()===email.toLowerCase()));
-    if(!a){
-      const name = method === "email"
-        ? (email.split('@')[0].replace(/[._]/g,' ').replace(/\b\w/g,c=>c.toUpperCase()))
-        : ("Customer " + phone.slice(-4));
-      if(role==="photographer"){
-        const seed = { name, cats:["portrait","event"], rating:4.8, jobs:8, years:3, price:1.0, bio:"On-demand photographer ready to shoot." };
-        const pg = makePhotographer(seed, S.photographers.length);
-        pg.id = uid("pg");
-        pg.area = AREAS[0];
-        pg.online = true;
-        S.photographers.push(pg);
-        a = { id:uid("acc"), type:"photographer", phone:phone||"9876543210", email:email||"pro@snappro.in", name:pg.name, createdAt:Date.now(), photographerId:pg.id };
-      } else {
-        a = { id:uid("acc"), type:"customer", phone:phone||"9876543210", email:email||"cust@snappro.in", name, createdAt:Date.now(), customer:{ name, area:AREAS[0], wallet:2500 } };
-      }
-      S.accounts.push(a);
-    }
-    S.auth.loginPhone = "";
-    S.auth.loginEmail = "";
-    S.auth.loginOtp = "1234";
-    loginAs(a.id);
-    setTimeout(()=>toast("Welcome to SnapPro!","Camera loaded and ready","cam"), 250);
-  });
+  S.auth.method = "email";
+  S.auth.email  = email;
+  S.auth.type   = S.auth.loginRole || "customer";
+  sendOtp();
 }
 
 function loginWithGoogle(role = "customer"){
-  const email = (S.auth.loginEmail || "user@gmail.com").trim();
-  triggerCameraFlashTransition(()=>{
-    let a = S.accounts.find(x => x.email && x.email.toLowerCase() === email.toLowerCase());
-    if(!a){
-      const name = email.split('@')[0].replace(/[._]/g,' ').replace(/\b\w/g,c=>c.toUpperCase()) || "Google User";
-      if(role==="photographer"){
-        const seed = { name, cats:["portrait","event"], rating:4.9, jobs:14, years:4, price:1.0, bio:"Pro photographer on SnapPro." };
-        const pg = makePhotographer(seed, S.photographers.length);
-        pg.id = uid("pg");
-        pg.area = AREAS[0];
-        pg.online = true;
-        S.photographers.push(pg);
-        a = { id:uid("acc"), type:"photographer", phone:"9876543210", email, name, createdAt:Date.now(), photographerId:pg.id };
-      } else {
-        a = { id:uid("acc"), type:"customer", phone:"9876543210", email, name, createdAt:Date.now(), customer:{ name, area:AREAS[0], wallet:2500 } };
-      }
-      S.accounts.push(a);
-    }
-    loginAs(a.id);
-    setTimeout(()=>toast("Signed in with Google!","Welcome, "+a.name,"cam"), 250);
-  });
+  /* Real Google sign-in needs an OAuth client configured in Supabase.
+     Until then this must not fabricate a session: send the person through
+     the genuine email code instead of pretending they signed in with Google. */
+  S.auth.type   = role;
+  S.auth.method = "email";
+  authGo("phone");
+  toast("Use your email", "Google sign-in isn't set up yet — we'll email you a code", "bell");
 }
 
 function quickLogin(id){
@@ -3077,6 +3045,8 @@ function loginAs(id){
 
 function logout(){
   if(!confirm("Log out? Your account and bookings stay saved on this device."))return;
+  try{ if(sb) sb.auth.signOut(); }catch(e){}
+  sbSession = null;
   S.session=null; S.stack=[];
   S.auth={step: S.accounts.length?"login":"welcome", type:null, phone:"", otp:"", draft:null};
   save(); render();
