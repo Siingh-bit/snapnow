@@ -20,6 +20,8 @@
 <!-- Favicon (embedded SVG — no external request) -->
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%23ff5a1f'/%3E%3Cpath d='M74 38H62l-4-6H42l-4 6H26a4 4 0 0 0-4 4v26a4 4 0 0 0 4 4h48a4 4 0 0 0 4-4V42a4 4 0 0 0-4-4z' fill='none' stroke='%23fff' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='50' cy='52' r='9' fill='none' stroke='%23fff' stroke-width='3.5'/%3E%3C/svg%3E">
 <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%23ff5a1f'/%3E%3Cpath d='M74 38H62l-4-6H42l-4 6H26a4 4 0 0 0-4 4v26a4 4 0 0 0 4 4h48a4 4 0 0 0 4-4V42a4 4 0 0 0-4-4z' fill='none' stroke='%23fff' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='50' cy='52' r='9' fill='none' stroke='%23fff' stroke-width='3.5'/%3E%3C/svg%3E">
+<!-- Supabase Client SDK -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 /* ============================================================
    SnapPro — design system
@@ -473,6 +475,26 @@ const uid  = (p="id")=>p+"_"+Math.random().toString(36).slice(2,9);
 const inr  = (n)=>"₹"+Math.round(n).toLocaleString("en-IN");
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 
+function genUUID(){
+  if(typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    var r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
+function isUUID(str){
+  return typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+}
+function ensureUUID(id){
+  if(isUUID(id)) return id;
+  if(typeof id === 'string' && id.startsWith('pg_')){
+    const n = parseInt(id.slice(3)||'0', 10);
+    const hex = (isNaN(n)?0:n).toString(16).padStart(12, '0');
+    return '00000000-0000-4000-a000-' + hex;
+  }
+  return genUUID();
+}
+
 function timeAgo(ts){
   const s=Math.floor((Date.now()-ts)/1000);
   if(s<10)return"just now"; if(s<60)return s+"s ago";
@@ -736,6 +758,182 @@ function toast(title,sub,ic="bell"){
 }
 
 /* ============================================================
+   SUPABASE INTEGRATION
+   ============================================================ */
+const SUPABASE_URL = "https://mvimyxholctcqsvntewx.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_otNL5Alkjowvz7PX_hVHxQ_q263EqWF";
+var sb = null;
+var sbSession = null;
+
+function sbAuthed(){ return !!(sb && sbSession); }
+
+/* supabase-js RESOLVES with {data,error}; it does not throw. try/catch alone
+   never fires, which is why every sync failure was invisible. */
+var _sbWarned = false;
+function sbErr(where, e){
+  const msg = (e && (e.message || e.error_description || e.hint)) || String(e);
+  console.warn("Supabase " + where + ":", msg);
+  if(!_sbWarned){
+    _sbWarned = true;
+    try{ toast("Cloud sync unavailable", "Your data is saved on this device only", "bolt"); }catch(_){}
+  }
+}
+
+async function initSupabase(){
+  if(!(window.supabase && window.supabase.createClient)){ setTimeout(initSupabase, 400); return; }
+  try{
+    sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const { data } = await sb.auth.getSession();
+    sbSession = (data && data.session) || null;
+    sb.auth.onAuthStateChange((_evt, sess)=>{ sbSession = sess || null; });
+    console.log("SnapPro: Supabase ready. Signed in:", !!sbSession);
+    sbSync.hydrateFromCloud();
+  }catch(e){ sbErr("init", e); }
+}
+
+const sbSync = {
+  async saveProfile(a){
+    if(!sbAuthed() || !a) return;
+    const id = ensureUUID(a.id);
+    if(a.id !== id){ a.id = id; save(); }
+    const { error } = await sb.from('profiles').upsert({
+      id: a.id,
+      name: a.name || "User",
+      role: a.type || "customer",
+      phone: a.phone || null,
+      email: a.email || null,
+      area: (a.customer && a.customer.area) || "Indiranagar",
+      wallet_balance: (a.customer && a.customer.wallet) || 0
+    }, { onConflict: 'id' });
+    if(error) sbErr("profile", error);
+  },
+
+  async savePhotographer(pg){
+    if(!sbAuthed() || !pg) return;
+    const id = ensureUUID(pg.id);
+    if(pg.id !== id){ pg.id = id; save(); }
+
+    const r1 = await sb.from('profiles').upsert({
+      id: pg.id, name: pg.name, role: 'photographer',
+      phone: pg.phone || null, area: pg.area || 'Indiranagar'
+    }, { onConflict: 'id' });
+    if(r1.error) sbErr("photographer profile", r1.error);
+
+    const r2 = await sb.from('photographers').upsert({
+      id: pg.id,
+      display_name: pg.name || 'Photographer',
+      area: pg.area || 'Indiranagar',
+      bio: pg.bio || '',
+      categories: pg.cats || [],
+      areas: pg.area ? [pg.area] : [],
+      years_exp: pg.years || 2,
+      price_multiplier: pg.priceMult || 1.0,
+      rating: pg.rating || 4.8,
+      review_count: pg.jobs || 0,
+      is_online: pg.online !== false,
+      is_verified: !!pg.verified,
+      earnings: pg.earnings || 0
+    }, { onConflict: 'id' });
+    if(r2.error) sbErr("photographer", r2.error);
+  },
+
+  async saveRequest(r){
+    if(!sbAuthed() || !r) return;
+    const reqId = ensureUUID(r.id);
+    if(r.id !== reqId){ r.id = reqId; save(); }
+    const acc = acct();
+    const { error } = await sb.from('requests').upsert({
+      id: r.id,
+      customer_id: acc ? ensureUUID(acc.id) : null,
+      category: r.category,
+      urgency: r.urgency,
+      duration_hrs: r.hours || 2,
+      area: r.area || 'Indiranagar',
+      budget: r.budget || 3000,
+      deliverables: r.deliverables || [],
+      status: r.status === 'booked' ? 'matched' : (r.status || 'broadcasting')
+    }, { onConflict: 'id' });
+    if(error) sbErr("request", error);
+  },
+
+  async saveBooking(b){
+    if(!sbAuthed() || !b) return;
+    const bkId = ensureUUID(b.id);
+    if(b.id !== bkId){ b.id = bkId; save(); }
+    const acc = acct();
+    const { error } = await sb.from('bookings').upsert({
+      id: b.id,
+      request_id: isUUID(b.requestId) ? b.requestId : null,
+      customer_id: acc ? ensureUUID(acc.id) : null,
+      photographer_id: ensureUUID(b.photographerId),
+      total_amount: b.total || b.price || 0,
+      payout_amount: Math.round((b.price || 0) * 0.85),
+      status: b.status || 'confirmed'
+    }, { onConflict: 'id' });
+    if(error) sbErr("booking", error);
+  },
+
+  /* sender arrives as 'pg' or 'customer'. Previously those strings went through
+     ensureUUID(), which produced a fresh random UUID every call — so sender_id
+     pointed at a profile that does not exist and every insert failed the
+     foreign key. Resolve to the real participant instead. */
+  async sendMessage(bookingId, sender, content){
+    if(!sbAuthed() || !bookingId || !content) return;
+    const b = S.bookings.find(x => x.id === bookingId);
+    let senderId = null;
+    if(sender === 'pg')            senderId = b ? ensureUUID(b.photographerId) : null;
+    else if(sender === 'customer'){ const a = acct(); senderId = a ? ensureUUID(a.id) : null; }
+    else if(sender)                senderId = ensureUUID(sender);
+    if(!senderId) return;
+    const { error } = await sb.from('messages').insert({
+      booking_id: ensureUUID(bookingId), sender_id: senderId, content: content
+    });
+    if(error) sbErr("message", error);
+  },
+
+  /* Loads the public photographer listing only.
+     It must never read the profiles table: that holds other people's phone
+     numbers and email addresses, and this code runs in every visitor's browser. */
+  async hydrateFromCloud(){
+    if(!sb) return;
+    const { data, error } = await sb.from('photographers')
+      .select('id,display_name,area,bio,categories,years_exp,price_multiplier,rating,review_count,is_online,is_verified');
+    if(error){ sbErr("photographer load", error); return; }
+    if(!data || !data.length) return;
+
+    data.forEach(cp => {
+      const name = cp.display_name || 'Photographer';
+      const existing = S.photographers.find(p => p.id === cp.id || p.name === name);
+      if(existing){
+        existing.id       = cp.id;
+        existing.name     = name;
+        existing.rating   = cp.rating || existing.rating;
+        existing.online   = cp.is_online !== false;
+        existing.jobs     = cp.review_count || existing.jobs;
+        existing.bio      = cp.bio || existing.bio;
+        existing.verified = !!cp.is_verified;
+      } else {
+        const newPg = makePhotographer({
+          name: name,
+          cats: cp.categories && cp.categories.length ? cp.categories : ['portrait'],
+          rating: cp.rating || 4.8,
+          jobs: cp.review_count || 0,
+          years: cp.years_exp || 3,
+          price: cp.price_multiplier || 1.0,
+          bio: cp.bio || ''
+        }, S.photographers.length);
+        newPg.id       = cp.id;
+        newPg.area     = cp.area || AREAS[0];
+        newPg.online   = cp.is_online !== false;
+        newPg.verified = !!cp.is_verified;
+        S.photographers.push(newPg);
+      }
+    });
+    save(); render();
+  }
+};
+
+/* ============================================================
    PRICING
    ============================================================ */
 function quoteFor(pg, req){
@@ -763,7 +961,7 @@ function createRequest(d){
   const urg = urgById(d.urgency);
   const startAt = d.customDate ? new Date(d.customDate).getTime() : Date.now()+urg.mins*60*1000;
   const req = {
-    id: uid("req"),
+    id: genUUID(),
     createdAt: Date.now(),
     expiresAt: Date.now()+BROADCAST_MS,
     category: d.category,
@@ -788,6 +986,7 @@ function createRequest(d){
   req.pinged = (eligible.length?eligible:S.photographers).map(p=>p.id);
 
   save();
+  sbSync.saveRequest(req);
   notify("Request sent to "+req.pinged.length+" photographers",
          catById(req.category).name+" · "+dayStr(req.startAt)+" "+clockStr(new Date(req.startAt)),
          {for:"customer", icon:"bolt"});
@@ -851,7 +1050,7 @@ function bookOffer(reqId, offerId, payMethod){
   const pg = S.photographers.find(p=>p.id===offer.photographerId);
   const fees = feeBreakdown(offer.price);
   const b = {
-    id: uid("bk"),
+    id: genUUID(),
     requestId: req.id,
     photographerId: pg.id,
     category: req.category,
@@ -872,12 +1071,16 @@ function bookOffer(reqId, offerId, payMethod){
   };
   S.bookings.unshift(b);
   req.status="booked"; req.bookingId=b.id;
+  const firstMsg = "Hi "+cust().name.split(" ")[0]+"! Confirmed for "+dayStr(b.startAt)+" at "+clockStr(new Date(b.startAt))+". I'll message when I set off. 📸";
   S.chats[b.id] = [{
-    from:"pg", text:"Hi "+cust().name.split(" ")[0]+"! Confirmed for "+dayStr(b.startAt)+" at "+clockStr(new Date(b.startAt))+". I'll message when I set off. 📸",
+    from:"pg", text:firstMsg,
     at: Date.now()
   }];
   pg.earnings += Math.round(offer.price*0.85);
   save();
+  sbSync.saveBooking(b);
+  sbSync.saveRequest(req);
+  sbSync.sendMessage(b.id, 'pg', firstMsg);
   notify("Booking confirmed with "+pg.name, inr(fees.total)+" · "+dayStr(b.startAt)+" "+clockStr(new Date(b.startAt)), {for:"customer",icon:"check"});
   notify("You got the job! "+catById(b.category).name, cust().name+" booked you · you earn "+inr(Math.round(offer.price*0.85)), {for:"photographer",icon:"wallet"});
   return b;
@@ -903,25 +1106,37 @@ function advanceBooking(b){
     shooting:"Let's do this. Tell me if there's anything specific you want covered.",
     delivered:"Gallery's up! 148 edited shots. Hope you love them ❤️"
   }[b.status];
-  if(auto){ (S.chats[b.id]=S.chats[b.id]||[]).push({from:"pg",text:auto,at:Date.now()}); }
-  save(); render();
+  if(auto){
+    (S.chats[b.id]=S.chats[b.id]||[]).push({from:"pg",text:auto,at:Date.now()});
+    sbSync.sendMessage(b.id, 'pg', auto);
+  }
+  save();
+  sbSync.saveBooking(b);
+  render();
 }
 
 function cancelBooking(b){
   b.status="cancelled";
   const req=S.requests.find(r=>r.id===b.requestId); if(req)req.status="cancelled";
-  save(); notify("Booking cancelled","Refund of "+inr(b.total)+" initiated",{for:"customer",icon:"x"}); render();
+  save();
+  sbSync.saveBooking(b);
+  if(req) sbSync.saveRequest(req);
+  notify("Booking cancelled","Refund of "+inr(b.total)+" initiated",{for:"customer",icon:"x"}); render();
 }
 
 function sendChat(bookingId, from, text){
   if(!text.trim())return;
-  (S.chats[bookingId]=S.chats[bookingId]||[]).push({from, text:text.trim(), at:Date.now()});
+  const clean = text.trim();
+  (S.chats[bookingId]=S.chats[bookingId]||[]).push({from, text:clean, at:Date.now()});
   save(); render();
+  sbSync.sendMessage(bookingId, from, clean);
   if(from==="customer"){
     setTimeout(()=>{
       const replies=["Got it 👍","Sure, no problem.","Noted — I'll plan for that.","Yes, that works for me.","Perfect. See you then!","I'll bring an extra lens for that."];
-      (S.chats[bookingId]=S.chats[bookingId]||[]).push({from:"pg",text:pick(replies),at:Date.now()});
+      const reply = pick(replies);
+      (S.chats[bookingId]=S.chats[bookingId]||[]).push({from:"pg",text:reply,at:Date.now()});
       save(); render();
+      sbSync.sendMessage(bookingId, 'pg', reply);
     }, rint(1400,2800));
   }
 }
@@ -2505,9 +2720,10 @@ function vAuthCustSetup(){
 
 function createCustomerAccount(){
   const d=S.auth.draft;
-  const a={ id:uid("acc"), type:"customer", phone:S.auth.phone||"9876543210", email:S.auth.email||"", name:d.name.trim(), createdAt:Date.now(),
+  const a={ id:genUUID(), type:"customer", phone:S.auth.phone||"9876543210", email:S.auth.email||"", name:d.name.trim(), createdAt:Date.now(),
             customer:{ name:d.name.trim(), area:d.area, wallet:2500 } };
   S.accounts.push(a); save();
+  sbSync.saveProfile(a);
   loginAs(a.id);
   setTimeout(()=>toast("Welcome, "+a.name.split(" ")[0]+"!","₹2,500 added to your wallet to try things out","wallet"),600);
 }
@@ -2582,7 +2798,8 @@ function createPhotographerAccount(){
   const seed={ name:d.name.trim(), cats:d.cats.length?d.cats:["portrait"], rating:4.5, jobs:0,
                years:d.years, price:d.priceMult, bio:d.bio.trim()||"New on SnapPro — ready to shoot." };
   const pg=makePhotographer(seed, S.photographers.length);
-  pg.id = uid("pg");
+  const pgId = genUUID();
+  pg.id = pgId;
   pg.area = d.area;
   pg.online = true;
   pg.reviews = [];
@@ -2591,8 +2808,10 @@ function createPhotographerAccount(){
   pg.verified = false;
   pg.isNew = true;
   S.photographers.push(pg);
-  const a={ id:uid("acc"), type:"photographer", phone:S.auth.phone||"9876543210", email:S.auth.email||"", name:pg.name, createdAt:Date.now(), photographerId:pg.id };
+  const a={ id:pgId, type:"photographer", phone:S.auth.phone||"9876543210", email:S.auth.email||"", name:pg.name, createdAt:Date.now(), photographerId:pgId };
   S.accounts.push(a); save();
+  sbSync.saveProfile(a);
+  sbSync.savePhotographer(pg);
   loginAs(a.id);
   setTimeout(()=>toast("You're live, "+pg.name.split(" ")[0]+"!","You'll get an alert whenever a matching job is posted","bolt"),600);
 }
