@@ -111,6 +111,43 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
 
+-- ------------------------------------------- claim an invite at sign-in
+-- The trigger above only fires when an account is first created. Someone
+-- invited AFTER they already had a SnapPro account would never be granted
+-- their role. The console calls this on every staff sign-in to cover that.
+-- It only ever matches the caller's own verified email, so it cannot be
+-- used to grant access to anyone else.
+
+create or replace function public.claim_staff_invite()
+returns text
+language plpgsql
+security definer set search_path = public
+as $$
+declare em text; inv record;
+begin
+  select lower(email) into em from auth.users where id = auth.uid();
+  if em is null then return null; end if;
+
+  select * into inv from public.staff_invites
+   where lower(email) = em and accepted_at is null
+   limit 1;
+
+  if not found then
+    return (select role from public.staff where id = auth.uid());
+  end if;
+
+  insert into public.staff (id, email, name, role, invited_by)
+  values (auth.uid(), em, split_part(em,'@',1), inv.role, inv.invited_by)
+  on conflict (id) do update set role = excluded.role, status = 'active';
+
+  update public.staff_invites set accepted_at = now() where id = inv.id;
+  return inv.role;
+end;
+$$;
+
+revoke all on function public.claim_staff_invite() from public;
+grant execute on function public.claim_staff_invite() to authenticated;
+
 -- ---------------------------------------------------------------- RLS
 
 alter table public.staff         enable row level security;
@@ -190,6 +227,7 @@ select
   (select count(*) from pg_policies
      where schemaname='public' and tablename in ('staff','staff_invites')) as staff_policies,
   exists (select 1 from pg_proc where proname='staff_role')        as role_fn_ok,
+  exists (select 1 from pg_proc where proname='claim_staff_invite') as claim_fn_ok,
   exists (select 1 from pg_trigger
            where tgrelid='auth.users'::regclass
              and tgname='on_auth_user_created')                    as trigger_ok;

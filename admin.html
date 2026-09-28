@@ -78,6 +78,23 @@ td{padding:11px 8px;border-bottom:1px solid var(--border-soft);vertical-align:mi
 .spin{width:44px;height:44px;margin:0 auto;border-radius:50%;border:3px solid var(--surface-3);
   border-top-color:var(--accent);animation:sp .8s linear infinite}
 @keyframes sp{to{transform:rotate(360deg)}}
+.pw-wrap{position:relative}
+.pw-wrap .input{padding-right:66px}
+.pw-eye{position:absolute;right:8px;top:50%;transform:translateY(-50%);font-size:12px;font-weight:700;color:var(--muted);padding:6px 9px;border-radius:8px}
+.pw-eye:hover{color:var(--text);background:var(--surface-2)}
+.pw-rules{display:grid;grid-template-columns:1fr 1fr;gap:5px 10px;margin-top:9px}
+.pw-rule{font-size:11.5px;color:var(--muted-2);font-weight:600}
+.pw-rule.ok{color:var(--green)} .pw-rule.bad{color:var(--red)}
+.input.pw-bad{border-color:var(--red)!important}
+.pw-flash{animation:pwFlash .8s ease}
+@keyframes pwFlash{0%,100%{transform:translateX(0);box-shadow:none}
+  15%,45%,75%{transform:translateX(-6px);box-shadow:0 0 0 3px rgba(255,77,94,.5)}
+  30%,60%,90%{transform:translateX(6px);box-shadow:0 0 0 3px rgba(255,77,94,.5)}}
+.pw-flash-text{animation:pwText .8s ease}
+@keyframes pwText{0%,100%{opacity:1}25%,75%{opacity:.2}50%{opacity:1}}
+@media (prefers-reduced-motion:reduce){.pw-flash,.pw-flash-text{animation:none}}
+.field{margin-top:12px}.field label{display:block;font-size:12px;font-weight:700;color:var(--muted);margin-bottom:7px}
+.linkbtn{font-size:12px;font-weight:700;color:var(--accent)}
 </style>
 </head>
 <body>
@@ -119,6 +136,62 @@ const brand = `<div class="brand"><div class="mark">${camIcon(21,"#fff")}</div>
 
 /* ============================ auth ============================ */
 
+/* Password kept out of S so it is never rendered back into logs or state dumps. */
+var PW = { pw:"", pw2:"", show:false, touched:false, flash:false };
+function pwReset(){ PW = { pw:"", pw2:"", show:false, touched:false, flash:false }; }
+function pwRules(p){
+  p = p || "";
+  return [
+    { ok: p.length >= 8,   t: "At least 8 characters" },
+    { ok: /[a-z]/.test(p), t: "One lowercase letter" },
+    { ok: /[A-Z]/.test(p), t: "One uppercase letter" },
+    { ok: /[0-9]/.test(p), t: "One number" }
+  ];
+}
+function pwStrong(){ return pwRules(PW.pw).every(r => r.ok); }
+function pwBlock(needConfirm){
+  const bad = !pwStrong() || (needConfirm && PW.pw !== PW.pw2);
+  if(!bad) return false;
+  PW.touched = true; PW.flash = true; render();
+  setTimeout(()=>{ PW.flash = false; render(); }, 850);
+  return true;
+}
+function pwFieldsHtml(label){
+  const rules = pwRules(PW.pw);
+  const live = PW.touched || PW.pw.length > 0;
+  const weak = live && !rules.every(r => r.ok);
+  const mism = (PW.touched || PW.pw2.length > 0) && PW.pw2 !== PW.pw;
+  const type = PW.show ? "text" : "password";
+  return `
+  <div class="field"><label>${label}</label>
+    <div class="pw-wrap">
+      <input id="pw1" class="input ${weak?'pw-bad':''} ${PW.flash&&weak?'pw-flash':''}" type="${type}" autocomplete="new-password"
+        placeholder="Create a strong password" value="${esc(PW.pw)}" oninput="PW.pw=this.value;S.err='';render()">
+      <button type="button" class="pw-eye" onclick="PW.show=!PW.show;render()">${PW.show?'Hide':'Show'}</button>
+    </div>
+    <div class="pw-rules">${rules.map(r=>`<div class="pw-rule ${r.ok?'ok':(live?'bad':'')} ${PW.flash&&!r.ok?'pw-flash-text':''}">${r.ok?'✓':(live?'✗':'•')} ${r.t}</div>`).join('')}</div>
+  </div>
+  <div class="field"><label>Confirm password</label>
+    <input id="pw2" class="input ${mism?'pw-bad':''} ${PW.flash&&mism?'pw-flash':''}" type="${type}" autocomplete="new-password"
+      placeholder="Type it again" value="${esc(PW.pw2)}" oninput="PW.pw2=this.value;S.err='';render()">
+    ${mism?`<div class="xs mt8 ${PW.flash?'pw-flash-text':''}" style="color:var(--red)">✗ Passwords don't match</div>`
+      :(PW.pw2&&PW.pw2===PW.pw?`<div class="xs mt8" style="color:var(--green)">✓ Passwords match</div>`:'')}
+  </div>`;
+}
+function friendly(e){
+  const m=(e&&e.message)||"", c=(e&&e.code)||"";
+  if(c==="weak_password"||(/password/i.test(m)&&/weak|should|least|contain|characters/i.test(m))) return "That password doesn't meet the requirements.";
+  if(/different from the old/i.test(m)) return "Choose a password you haven't used before.";
+  if(/invalid login credentials/i.test(m)) return "Wrong email or password.";
+  if(/email not confirmed/i.test(m)) return "Confirm your email first.";
+  if(/signups not allowed|user not found/i.test(m)) return "There's no account with that email.";
+  if(/rate limit|too many|security purposes/i.test(m)) return "Too many attempts. Wait a minute and try again.";
+  if(/expired|invalid/i.test(m)&&/token|otp|code/i.test(m)) return "That code is wrong or has expired.";
+  return m||"Something went wrong. Try again.";
+}
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+function go(view, patch){ Object.assign(S, patch||{}, { view, err:"" }); render(); }
+
 async function boot(){
   if(!(window.supabase && window.supabase.createClient)){ setTimeout(boot,300); return; }
   sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -127,53 +200,104 @@ async function boot(){
   else { S.view="login"; render(); }
 }
 
-/* Signing in is only half of it: Supabase proves who they are, the staff
-   table decides whether they belong here. Someone with a valid SnapPro
-   customer account but no staff row gets turned away. */
+/* Signing in proves who they are; the staff table decides whether they belong.
+   claim_staff_invite() runs server-side and grants a pending invite to the
+   signed-in email — it works for brand-new and already-existing accounts. */
 async function loadMe(){
   S.busy = true; render();
   const { data: u } = await sb.auth.getUser();
   if(!u || !u.user){ S.busy=false; S.view="login"; render(); return; }
 
+  try{ await sb.rpc('claim_staff_invite'); }catch(e){}
+
   const { data: row, error } = await sb.from('staff')
     .select('id,email,name,role,status').eq('id', u.user.id).maybeSingle();
-
   S.busy = false;
   if(error){ S.err = "Couldn't verify access: "+error.message; S.view="login"; render(); return; }
-  if(!row){
-    S.view = "denied"; S.deniedEmail = u.user.email; render(); return;
-  }
-  if(row.status !== 'active'){
-    S.view = "denied"; S.deniedEmail = u.user.email; S.suspended = true; render(); return;
-  }
+  if(!row){ S.view="denied"; S.deniedEmail=u.user.email; S.suspended=false; render(); return; }
+  if(row.status !== 'active'){ S.view="denied"; S.deniedEmail=u.user.email; S.suspended=true; render(); return; }
   S.me = row; S.view = "console"; render();
   loadData();
 }
 
-async function sendCode(){
+async function signIn(){
   const email = S.email.trim().toLowerCase();
-  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ S.err="Enter a valid email address."; render(); return; }
-  S.busy=true; S.err=""; S.note=""; render();
-  const { error } = await sb.auth.signInWithOtp({ email, options:{ shouldCreateUser:true } });
+  if(!EMAIL_RE.test(email)){ S.err="Enter a valid email address."; render(); return; }
+  if(!PW.pw){ PW.touched=true; PW.flash=true; render(); setTimeout(()=>{PW.flash=false;render();},850); return; }
+  S.busy=true; S.err=""; render();
+  const { data, error } = await sb.auth.signInWithPassword({ email, password: PW.pw });
   S.busy=false;
-  if(error){ S.err = error.message || "Couldn't send the code."; render(); return; }
-  S.email = email; S.otp=""; S.view="code"; S.note="Code sent to "+email;
-  render();
+  if(error){
+    let m = friendly(error);
+    if(m==="Wrong email or password.") m += " First time here? Use “Set up your account”. Signed in with a code before? Use “Forgot password?”.";
+    if(m==="Confirm your email first."){ S.email=email; S.mode="signup"; pwReset(); await sb.auth.resend({type:'signup',email}); go("code"); return; }
+    S.err=m; render(); return;
+  }
+  pwReset(); S.email=email;
+  await loadMe();
+}
+
+async function signUp(){
+  const email = S.email.trim().toLowerCase();
+  if(!EMAIL_RE.test(email)){ S.err="Enter a valid email address."; render(); return; }
+  if(pwBlock(true)) return;
+  S.busy=true; S.err=""; render();
+  const { data, error } = await sb.auth.signUp({ email, password: PW.pw });
+  S.busy=false;
+  if(error){ S.err=friendly(error); render(); return; }
+  if(data && data.user && Array.isArray(data.user.identities) && data.user.identities.length===0){
+    S.err="This email already has a SnapPro account. Use “Forgot password?” to set a password for it."; render(); return;
+  }
+  pwReset(); S.email=email;
+  if(data && data.session){ await loadMe(); return; }
+  S.mode="signup"; S.otp=""; go("code"); S.note="Code sent to "+email; render();
+}
+
+async function sendResetCode(){
+  const email = S.email.trim().toLowerCase();
+  if(!EMAIL_RE.test(email)){ S.err="Enter a valid email address."; render(); return; }
+  S.busy=true; S.err=""; render();
+  const { error } = await sb.auth.signInWithOtp({ email, options:{ shouldCreateUser:false } });
+  S.busy=false;
+  if(error){ S.err=friendly(error); render(); return; }
+  S.email=email; S.mode="reset"; S.otp=""; go("code"); S.note="Code sent to "+email; render();
+}
+
+async function sendCode(){ return S.mode==="reset" ? sendResetCode() : resend(); }
+async function resend(){
+  S.busy=true; S.err=""; render();
+  const { error } = await sb.auth.resend({ type:'signup', email:S.email });
+  S.busy=false;
+  if(error){ S.err=friendly(error); render(); return; }
+  S.note="New code sent to "+S.email; render();
 }
 
 async function verifyCode(){
   const token = S.otp.trim();
   if(token.length!==6){ S.err="Enter the 6-digit code."; render(); return; }
   S.busy=true; S.err=""; render();
-  const { data, error } = await sb.auth.verifyOtp({ email:S.email, token, type:'email' });
+  let { data, error } = await sb.auth.verifyOtp({ email:S.email, token, type:'email' });
+  if(error && S.mode==="signup") ({ data, error } = await sb.auth.verifyOtp({ email:S.email, token, type:'signup' }));
   S.busy=false;
-  if(error || !data || !data.user){ S.err=(error&&error.message)||"That code isn't right."; S.otp=""; render(); return; }
+  if(error || !data || !data.user){ S.err=friendly(error||{message:"That code is wrong or has expired."}); S.otp=""; render(); return; }
+  if(S.mode==="reset"){ pwReset(); go("newpw"); return; }
+  await loadMe();
+}
+
+async function saveNewPassword(){
+  if(pwBlock(true)) return;
+  S.busy=true; S.err=""; render();
+  const { error } = await sb.auth.updateUser({ password: PW.pw });
+  S.busy=false;
+  if(error){ S.err=friendly(error); render(); return; }
+  pwReset();
   await loadMe();
 }
 
 async function signOut(){
   try{ await sb.auth.signOut(); }catch(e){}
-  S.me=null; S.email=""; S.otp=""; S.err=""; S.note=""; S.view="login"; S.suspended=false;
+  pwReset();
+  S.me=null; S.email=""; S.otp=""; S.err=""; S.note=""; S.view="login"; S.suspended=false; S.mode="";
   render();
 }
 
@@ -215,22 +339,30 @@ async function loadData(){
 
 async function sendInvite(){
   const email = S.inviteEmail.trim().toLowerCase();
-  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ S.err="Enter a valid email address."; render(); return; }
+  if(!EMAIL_RE.test(email)){ S.err="Enter a valid email address."; render(); return; }
   if(S.staff.some(s=>s.email.toLowerCase()===email)){ S.err="That person is already on the team."; render(); return; }
   S.busy=true; S.err=""; S.note=""; render();
-
   const { error } = await sb.from('staff_invites')
     .upsert({ email, role:S.inviteRole, invited_by:S.me.id, accepted_at:null }, { onConflict:'email' });
-
-  if(error){ S.busy=false; S.err="Couldn't create the invite: "+error.message; render(); return; }
-
-  /* Sending the sign-in code IS the invitation email — they click nothing,
-     they just enter the code and the trigger grants the role. */
-  const { error: mailErr } = await sb.auth.signInWithOtp({ email, options:{ shouldCreateUser:true } });
   S.busy=false;
-  if(mailErr){ S.err="Invite saved, but the email failed: "+mailErr.message; }
-  else { S.note = "Invited "+email+" as "+roleLabel(S.inviteRole)+". They've been emailed a code."; S.inviteEmail=""; }
+  if(error){ S.err="Couldn't create the invite: "+error.message; render(); return; }
+  S.lastInvite = { email, role:S.inviteRole };
+  S.note = "Invite created for "+email+" as "+roleLabel(S.inviteRole)+". Send them the message below.";
+  S.inviteEmail="";
   await loadData();
+}
+
+function inviteMessage(i){
+  return "You've been added to the SnapPro operations team as " + roleLabel(i.role) + ".\n\n" +
+    "1. Go to https://snappro.in/admin.html\n" +
+    "2. Click \"Set up your account\" and use this email: " + i.email + "\n" +
+    "3. Create a password, then enter the 6-digit code we email you.\n\n" +
+    "Already have a SnapPro account with this email? Use \"Forgot password?\" instead.";
+}
+async function copyInvite(){
+  try{ await navigator.clipboard.writeText(inviteMessage(S.lastInvite)); S.note="Invite message copied."; }
+  catch(e){ S.note="Select the text and copy it manually."; }
+  render();
 }
 
 async function changeRole(id, role){
@@ -265,20 +397,76 @@ async function cancelInvite(id){
 /* ============================ views =========================== */
 
 function vLogin(){
+  const empty = PW.touched && !PW.pw;
   return `<div class="center-card">${brand}
     <div class="card">
       <div class="h1">Operations sign-in</div>
-      <div class="sm muted mt8">Staff only. We'll email you a 6-digit code.</div>
-      <div class="mt16">
-        <input class="input" id="em" type="email" placeholder="you@example.com" value="${esc(S.email)}"
-          oninput="S.email=this.value;S.err='';" onkeydown="if(event.key==='Enter')sendCode()">
+      <div class="sm muted mt8">Staff only.</div>
+      <div class="field"><label>Email</label>
+        <input class="input" id="em" type="email" autocomplete="email" placeholder="you@example.com" value="${esc(S.email)}"
+          oninput="S.email=this.value;S.err='';"></div>
+      <div class="field"><label>Password</label>
+        <div class="pw-wrap">
+          <input class="input ${empty?'pw-bad':''} ${PW.flash&&empty?'pw-flash':''}" id="pwl" type="${PW.show?'text':'password'}"
+            autocomplete="current-password" placeholder="Your password" value="${esc(PW.pw)}"
+            oninput="PW.pw=this.value;S.err='';render()" onkeydown="if(event.key==='Enter')signIn()">
+          <button type="button" class="pw-eye" onclick="PW.show=!PW.show;render()">${PW.show?'Hide':'Show'}</button>
+        </div>
+        <div class="row mt8" style="justify-content:flex-end">
+          <button class="linkbtn" onclick="pwReset();go('reset')">Forgot password?</button></div>
       </div>
-      <button class="btn primary block mt12" ${S.busy?'disabled':''} onclick="sendCode()">
-        ${S.busy?'Sending…':'Email me a code'}</button>
+      <button class="btn primary block mt12" ${S.busy?'disabled':''} onclick="signIn()">${S.busy?'Signing in…':'Sign in'}</button>
       ${S.err?`<div class="err">${esc(S.err)}</div>`:''}
-      <div class="xs muted2 mt16">Access is granted by a super admin. If you haven't been invited, a code won't let you in.</div>
+      <div class="row mt16" style="justify-content:center">
+        <button class="xs muted2" onclick="pwReset();go('setup')">Invited? <span style="color:var(--accent);font-weight:700">Set up your account</span></button>
+      </div>
     </div>
     <div class="xs muted2 mt16" style="text-align:center"><a href="/">← Back to snappro.in</a></div>
+  </div>`;
+}
+
+function vSetup(){
+  return `<div class="center-card">${brand}
+    <div class="card">
+      <div class="h1">Set up your account</div>
+      <div class="sm muted mt8">Use the email you were invited with.</div>
+      <div class="field"><label>Email</label>
+        <input class="input" id="em2" type="email" autocomplete="email" placeholder="you@example.com" value="${esc(S.email)}"
+          oninput="S.email=this.value;S.err='';"></div>
+      ${pwFieldsHtml("Create a password")}
+      <button class="btn primary block mt16" ${S.busy?'disabled':''} onclick="signUp()">${S.busy?'Creating…':'Create account'}</button>
+      ${S.err?`<div class="err">${esc(S.err)}</div>`:''}
+      <div class="row mt16" style="justify-content:center">
+        <button class="xs muted2" onclick="pwReset();go('login')">← Back to sign in</button></div>
+    </div>
+  </div>`;
+}
+
+function vReset(){
+  return `<div class="center-card">${brand}
+    <div class="card">
+      <div class="h1">Forgot password</div>
+      <div class="sm muted mt8">We'll email you a 6-digit code, then you'll choose a new password.</div>
+      <div class="field"><label>Email</label>
+        <input class="input" id="em3" type="email" autocomplete="email" placeholder="you@example.com" value="${esc(S.email)}"
+          oninput="S.email=this.value;S.err='';" onkeydown="if(event.key==='Enter')sendResetCode()"></div>
+      <button class="btn primary block mt16" ${S.busy?'disabled':''} onclick="sendResetCode()">${S.busy?'Sending…':'Email me a code'}</button>
+      ${S.err?`<div class="err">${esc(S.err)}</div>`:''}
+      <div class="row mt16" style="justify-content:center">
+        <button class="xs muted2" onclick="go('login')">← Back to sign in</button></div>
+    </div>
+  </div>`;
+}
+
+function vNewPw(){
+  return `<div class="center-card">${brand}
+    <div class="card">
+      <div class="h1">New password</div>
+      <div class="sm muted mt8">${esc(S.email)}</div>
+      ${pwFieldsHtml("New password")}
+      <button class="btn primary block mt16" ${S.busy?'disabled':''} onclick="saveNewPassword()">${S.busy?'Saving…':'Save password'}</button>
+      ${S.err?`<div class="err">${esc(S.err)}</div>`:''}
+    </div>
   </div>`;
 }
 
@@ -286,19 +474,20 @@ function vCode(){
   const c = S.otp;
   return `<div class="center-card">${brand}
     <div class="card">
-      <div class="h1">Enter your code</div>
-      <div class="sm muted mt8">Sent to ${esc(S.email)}</div>
-      <div class="otp">${Array.from({length:6},(_,i)=>i).map(i=>`<i class="${c.length===i?'on':''}">${esc(c[i]||'')}</i>`).join('')}</div>
+      <div class="h1">${S.mode==="reset"?"Check your email":"Confirm your email"}</div>
+      <div class="sm muted mt8">6-digit code sent to ${esc(S.email)}</div>
+      <div class="otp">${[0,1,2,3,4,5].map(i=>`<i class="${c.length===i?'on':''}">${esc(c[i]||'')}</i>`).join('')}</div>
       <input class="input" id="ot" inputmode="numeric" maxlength="6" autocomplete="one-time-code"
         style="text-align:center;letter-spacing:8px;font-size:19px" placeholder="6-digit code" value="${esc(c)}"
         oninput="S.otp=this.value.replace(/\\D/g,'').slice(0,6);S.err='';render()"
         onkeydown="if(event.key==='Enter')verifyCode()">
       <button class="btn primary block mt12" ${(c.length===6&&!S.busy)?'':'disabled'} onclick="verifyCode()">
-        ${S.busy?'Checking…':'Verify & sign in'}</button>
+        ${S.busy?'Checking…':'Verify'}</button>
       <div class="row mt12" style="justify-content:space-between">
-        <button class="xs muted2" onclick="S.view='login';S.otp='';S.err='';render()">← Change email</button>
-        <button class="xs" style="color:var(--accent);font-weight:700" onclick="sendCode()">Resend</button>
+        <button class="xs muted2" onclick="S.otp='';go(S.mode==='reset'?'reset':'setup')">← Change email</button>
+        <button class="linkbtn" onclick="sendCode()">Resend</button>
       </div>
+      ${S.note?`<div class="ok">${esc(S.note)}</div>`:''}
       ${S.err?`<div class="err">${esc(S.err)}</div>`:''}
     </div>
   </div>`;
@@ -418,6 +607,9 @@ function vTeam(){
       <button class="btn primary" ${S.busy?'disabled':''} onclick="sendInvite()">${S.busy?'Sending…':'Send invite'}</button>
     </div>
     <div class="xs muted2 mt12">${ROLES.map(r=>`<b>${r.label}</b> — ${r.desc}`).join(' &nbsp;·&nbsp; ')}</div>
+    ${S.lastInvite?`<div class="mt16"><div class="sec">Send this to ${esc(S.lastInvite.email)}</div>
+      <textarea class="input" rows="7" readonly style="font-size:12.5px;line-height:1.5;resize:none">${esc(inviteMessage(S.lastInvite))}</textarea>
+      <button class="btn sm mt8" onclick="copyInvite()">Copy message</button></div>`:''}
   </div>
 
   <div class="card mt16">
@@ -453,7 +645,7 @@ function vTeam(){
       <td class="muted">${fmt(i.created_at)}</td>
       <td style="text-align:right"><button class="btn sm danger" onclick="cancelInvite('${i.id}')">Cancel</button></td>
     </tr>`).join('')}</tbody></table>
-    <div class="xs muted2 mt12">They've been emailed a 6-digit code. Entering it here activates their role automatically.</div>
+    <div class="xs muted2 mt12">When they set up their account with this email, their role activates automatically.</div>
   </div>`:''}`;
 }
 
@@ -467,6 +659,9 @@ function render(){
 
   app.innerHTML =
     S.view==="login"   ? vLogin()   :
+    S.view==="setup"   ? vSetup()   :
+    S.view==="reset"   ? vReset()   :
+    S.view==="newpw"   ? vNewPw()   :
     S.view==="code"    ? vCode()    :
     S.view==="denied"  ? vDenied()  :
     S.view==="console" ? vConsole() : vLogin();
