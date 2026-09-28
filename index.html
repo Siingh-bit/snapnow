@@ -460,7 +460,7 @@ table.tbl th{text-align:left;color:var(--muted-2);font-weight:700;font-size:10px
 <script>
 /* ============================================================
    SnapPro — a Blinkit-style, on-demand photographer marketplace
-   Single-file demo app. State lives in localStorage.
+   Single-file app. Auth and data via Supabase; UI state in localStorage.
    ============================================================ */
 "use strict";
 
@@ -669,7 +669,6 @@ function makePhotographer(seed,i){
    ============================================================ */
 const KEY = "snappro.v1";
 const LEGACY_KEY = "snapnow.v2";
-const DEV_OTP = null; /* retired: codes now come from Supabase */
 var S = null;   /* var (not let) so inline handlers + devtools can always reach it */
 
 function freshState(){
@@ -2750,7 +2749,7 @@ function vAuthCustSetup(){
     <div class="h2 mt8">What should we call you?</div>
     <div class="sm muted mt8">Photographers see this name when you send a request.</div>
     <div class="field mt20"><label>Your name</label>
-      <input id="setupName" class="input" placeholder="e.g. Nishal Singh" value="${esc(d.name)}"
+      <input id="setupName" class="input" placeholder="e.g. John Doe" value="${esc(d.name)}"
         oninput="S.auth.draft.name=this.value;save();render()"></div>
     <div class="field"><label>Where are you based?</label>
       <select class="input" onchange="S.auth.draft.area=this.value;save()">
@@ -3028,10 +3027,8 @@ function vAuthAdmin(){
       <div class="h2 mt16">Operations dashboard</div>
       <div class="sm muted mt8">Marketplace health, supply coverage and revenue.</div>
     </div>
-    <div class="field mt24"><label>Work email</label><input class="input" value="ops@snappro.in" readonly></div>
-    <div class="field"><label>Password</label><input class="input" type="password" value="demo1234" readonly></div>
-    <button class="btn primary block" onclick="loginAs('admin')">Open console</button>
-    <div class="xs muted2 center mt12">Pre-filled for the demo.</div>
+    <button class="btn primary block mt24" onclick="loginAs('admin')">Open console</button>
+    <div class="xs muted2 center mt12">Shows data stored on this device only.</div>
   </div>`;
 }
 
