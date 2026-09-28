@@ -163,7 +163,7 @@ async function sendCode(){
 
 async function verifyCode(){
   const token = S.otp.trim();
-  if(token.length!==6){ S.err="Enter the 6-digit code."; render(); return; }
+  if(token.length<4){ S.err="Enter the code from your email."; render(); return; }
   S.busy=true; S.err=""; render();
   const { data, error } = await sb.auth.verifyOtp({ email:S.email, token, type:'email' });
   S.busy=false;
@@ -268,7 +268,7 @@ function vLogin(){
   return `<div class="center-card">${brand}
     <div class="card">
       <div class="h1">Operations sign-in</div>
-      <div class="sm muted mt8">Staff only. We'll email you a 6-digit code.</div>
+      <div class="sm muted mt8">Staff only. We'll email you a sign-in code.</div>
       <div class="mt16">
         <input class="input" id="em" type="email" placeholder="you@example.com" value="${esc(S.email)}"
           oninput="S.email=this.value;S.err='';" onkeydown="if(event.key==='Enter')sendCode()">
@@ -288,12 +288,12 @@ function vCode(){
     <div class="card">
       <div class="h1">Enter your code</div>
       <div class="sm muted mt8">Sent to ${esc(S.email)}</div>
-      <div class="otp">${[0,1,2,3,4,5].map(i=>`<i class="${c.length===i?'on':''}">${esc(c[i]||'')}</i>`).join('')}</div>
-      <input class="input" id="ot" inputmode="numeric" maxlength="6" autocomplete="one-time-code"
-        style="text-align:center;letter-spacing:8px;font-size:19px" placeholder="6-digit code" value="${esc(c)}"
+      <div class="otp">${Array.from({length:Math.max(6,c.length)},(_,i)=>i).map(i=>`<i class="${c.length===i?'on':''}">${esc(c[i]||'')}</i>`).join('')}</div>
+      <input class="input" id="ot" inputmode="numeric" maxlength="10" autocomplete="one-time-code"
+        style="text-align:center;letter-spacing:8px;font-size:19px" placeholder="Code from your email" value="${esc(c)}"
         oninput="S.otp=this.value.replace(/\\D/g,'').slice(0,6);S.err='';render()"
         onkeydown="if(event.key==='Enter')verifyCode()">
-      <button class="btn primary block mt12" ${(c.length===6&&!S.busy)?'':'disabled'} onclick="verifyCode()">
+      <button class="btn primary block mt12" ${(c.length>=4&&!S.busy)?'':'disabled'} onclick="verifyCode()">
         ${S.busy?'Checking…':'Verify & sign in'}</button>
       <div class="row mt12" style="justify-content:space-between">
         <button class="xs muted2" onclick="S.view='login';S.otp='';S.err='';render()">← Change email</button>
@@ -453,7 +453,7 @@ function vTeam(){
       <td class="muted">${fmt(i.created_at)}</td>
       <td style="text-align:right"><button class="btn sm danger" onclick="cancelInvite('${i.id}')">Cancel</button></td>
     </tr>`).join('')}</tbody></table>
-    <div class="xs muted2 mt12">They've been emailed a 6-digit code. Entering it here activates their role automatically.</div>
+    <div class="xs muted2 mt12">They've been emailed a sign-in code. Entering it here activates their role automatically.</div>
   </div>`:''}`;
 }
 
