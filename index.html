@@ -2671,16 +2671,16 @@ async function sendOtp(){
 function vAuthOtp(){
   const a = S.auth;
   const code = String(a.otp || "");
-  /* Supabase's OTP length is a project setting (6 or 8). Adapt instead of
-     assuming, so changing it in the dashboard never breaks sign-in. */
-  const boxes = Math.max(6, code.length);
-  const ok = code.length >= 4 && !a.busy;
+  /* Codes are 6 digits. Supabase > Authentication > Sign In / Providers >
+     Email > Email OTP Length must be set to 6 to match. */
+  const boxes = 6;
+  const ok = code.length === 6 && !a.busy;
   const target = esc(a.email || "your email");
   return `<div class="topbar"><button class="iconbtn" onclick="authGo('phone')">${icon("back",18)}</button>
     <div class="grow"><div class="h3">Check your email</div><div class="xs muted2">${target}</div></div></div>
   <div class="pad">
     <div class="h2 mt8">Enter your code</div>
-    <div class="sm muted mt4">We sent a code to ${target}.
+    <div class="sm muted mt4">We sent a 6-digit code to ${target}.
       ${a.busy ? '<span class="muted2">Sending…</span>' : `· <button class="accent bold" onclick="sendOtp()">Resend</button>`}</div>
 
     <div class="row gap6 mt20" style="justify-content:center">
@@ -2688,9 +2688,9 @@ function vAuthOtp(){
         background:var(--surface);border:1.5px solid ${code.length===i?"var(--accent)":"var(--border)"}">${esc(code[i]||"")}</div>`).join("")}
     </div>
 
-    <input id="authOtp" class="input mt16" inputmode="numeric" maxlength="10" placeholder="Enter the code from your email"
+    <input id="authOtp" class="input mt16" inputmode="numeric" maxlength="6" placeholder="6-digit code"
       style="text-align:center;letter-spacing:8px;font-size:20px" autocomplete="one-time-code"
-      value="${esc(code)}" oninput="S.auth.otp=this.value.replace(/\D/g,'').slice(0,10);S.auth.err=null;save();render()">
+      value="${esc(code)}" oninput="S.auth.otp=this.value.replace(/\\D/g,'').slice(0,6);S.auth.err=null;save();render()">
 
     <button class="btn primary block mt12" ${ok?"":"disabled"} onclick="verifyOtp()">
       ${a.busy ? "Checking…" : icon("cam",16,"#fff") + " Verify &amp; continue"}</button>
@@ -2703,7 +2703,7 @@ function vAuthOtp(){
 async function verifyOtp(){
   const a = S.auth;
   const code = String(a.otp || "").trim();
-  if(code.length < 4){ S.auth.err = "Enter the code from your email."; save(); render(); return; }
+  if(code.length !== 6){ S.auth.err = "Enter the 6-digit code."; save(); render(); return; }
   if(!sb){ S.auth.err = "Can't reach the server."; save(); render(); return; }
 
   S.auth.busy = true; S.auth.err = null; save(); render();
@@ -2880,7 +2880,7 @@ function vAuthLogin(){
       <div style="width:58px;height:58px;margin:0 auto;border-radius:18px;background:linear-gradient(135deg,var(--accent),#ff8a3d);display:grid;place-items:center;box-shadow:0 12px 28px -6px rgba(255,90,31,.6)">
         ${icon("cam",28,"#fff",2)}</div>
       <div class="h2 mt10">Welcome back</div>
-      <div class="sm muted mt2">We'll email you a sign-in code</div>
+      <div class="sm muted mt2">We'll email you a 6-digit code</div>
     </div>
 
     <!-- Login Method Selector: Phone vs Gmail -->
@@ -2994,7 +2994,7 @@ function submitLogin(){
   /* one real code path: everything funnels into Supabase email OTP */
   const email = (S.auth.loginEmail || "").trim();
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){
-    toast("Enter your email", "We'll email you a sign-in code", "x"); return;
+    toast("Enter your email", "We'll email you a 6-digit code", "x"); return;
   }
   S.auth.method = "email";
   S.auth.email  = email;
