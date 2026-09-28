@@ -674,10 +674,10 @@ var S = null;   /* var (not let) so inline handlers + devtools can always reach 
 function freshState(){
   return {
     accounts:[],                     // [{id,type,phone,name,customer?,photographerId?}]
-    session:null,                    // account id, or "admin"
+    session:null,                    // account id
     auth:{step:"welcome", type:null, method:"email", phone:"", email:"", otp:"", draft:null, loginMethod:"email", loginPhone:"", loginEmail:"", loginOtp:"", loginRole:"customer"},
     role:"customer",                 // derived from the session; kept for the view router
-    nav:{customer:"home", photographer:"home", admin:"home"},
+    nav:{customer:"home", photographer:"home"},
     stack:[],                        // modal-ish screens {name,props}
     guestCustomer:{ name:"Guest", area:"Indiranagar", wallet:0 },
     myPhotographerId:"pg_0",
@@ -693,9 +693,9 @@ function freshState(){
 }
 
 /* ---------- session helpers ---------- */
-function acct(){ return S.session && S.session!=="admin" ? S.accounts.find(a=>a.id===S.session)||null : null; }
+function acct(){ return S.session ? S.accounts.find(a=>a.id===S.session)||null : null; }
 function cust(){ const a=acct(); return (a&&a.type==="customer") ? a.customer : S.guestCustomer; }
-function isAdmin(){ return S.session==="admin"; }
+function isAdmin(){ return false; } /* operations console lives at /admin.html */
 function loggedIn(){ return !!S.session; }
 /* photographers that belong to a real signed-up account — these never auto-accept */
 function ownedPgIds(){ return new Set(S.accounts.filter(a=>a.type==="photographer").map(a=>a.photographerId)); }
@@ -2538,7 +2538,7 @@ function vAuth(){
   const a=S.auth;
   return ({
     welcome:vAuthWelcome, phone:vAuthPhone, otp:vAuthOtp,
-    custSetup:vAuthCustSetup, pgSetup:vAuthPgSetup, login:vAuthLogin, admin:vAuthAdmin
+    custSetup:vAuthCustSetup, pgSetup:vAuthPgSetup, login:vAuthLogin
   }[a.step]||vAuthWelcome)();
 }
 
@@ -2585,7 +2585,6 @@ function vAuthWelcome(){
       <div class="row gap8 mt12 center" style="justify-content:center">
         <button class="xs muted2" onclick="triggerCameraFlashTransition(()=>{toast('Camera Flash Preview!','Animation working 100%','cam');})">⚡ Test Camera Animation</button>
         <span class="muted2">·</span>
-        <button class="xs muted2" style="text-decoration:underline" onclick="authGo('admin')">Admin console</button>
       </div>
     </div>
   </div>`;
@@ -3018,23 +3017,10 @@ function quickLogin(id){
   });
 }
 
-function vAuthAdmin(){
-  return `<div class="topbar"><button class="iconbtn" onclick="authGo('welcome')">${icon("back",18)}</button>
-    <div class="grow"><div class="h3">Admin console</div><div class="xs muted2">Internal use</div></div></div>
-  <div class="pad">
-    <div class="center mt20">
-      <div style="width:60px;height:60px;margin:0 auto;border-radius:18px;background:var(--surface-2);display:grid;place-items:center">${icon("trend",28,"var(--accent)")}</div>
-      <div class="h2 mt16">Operations dashboard</div>
-      <div class="sm muted mt8">Marketplace health, supply coverage and revenue.</div>
-    </div>
-    <button class="btn primary block mt24" onclick="loginAs('admin')">Open console</button>
-    <div class="xs muted2 center mt12">Shows data stored on this device only.</div>
-  </div>`;
-}
 
 function loginAs(id){
   S.session=id;
-  S.role = id==="admin" ? "admin" : (S.accounts.find(a=>a.id===id)||{}).type || "customer";
+  S.role = (S.accounts.find(a=>a.id===id)||{}).type || "customer";
   S.stack=[]; S.nav[S.role]="home";
   S.auth={step:"welcome",type:null,phone:"",otp:"",draft:null};
   save(); render(); scrollTop();
@@ -3058,103 +3044,8 @@ function switchAccount(){
 /* ============================================================
    ADMIN
    ============================================================ */
-function vAdminHome(){
-  const bk=S.bookings.filter(b=>b.status!=="cancelled");
-  const gmv=bk.reduce((a,b)=>a+b.total,0);
-  const take=bk.reduce((a,b)=>a+b.fees.platform+Math.round(b.price*0.15),0);
-  const live=S.requests.filter(r=>["live","awaiting"].includes(r.status)).length;
-  const fill=S.requests.length? Math.round(S.requests.filter(r=>r.status==="booked").length/S.requests.length*100):0;
-  const avgOffers=S.requests.length? (S.requests.reduce((a,r)=>a+r.offers.length,0)/S.requests.length).toFixed(1):"0";
-  const online=S.photographers.filter(p=>p.online).length;
 
-  const byCat={};
-  S.requests.forEach(r=>{byCat[r.category]=(byCat[r.category]||0)+1});
-  const catRows=Object.entries(byCat).sort((a,b)=>b[1]-a[1]).slice(0,5);
-  const maxCat=Math.max(...catRows.map(c=>c[1]),1);
 
-  return `<div class="pad">
-    <div class="between mb16"><div><div class="h2">Operations</div><div class="xs muted2">ops@snappro.in · live marketplace health</div></div>
-      <button class="chip" onclick="logout()">${icon("power",12)} Sign out</button></div>
-
-    <div class="grid2">
-      <div class="stat"><div class="s-v">${inr(gmv)}</div><div class="s-l">GMV</div></div>
-      <div class="stat"><div class="s-v">${inr(take)}</div><div class="s-l">Platform revenue</div></div>
-      <div class="stat"><div class="s-v">${S.requests.length}</div><div class="s-l">Requests</div></div>
-      <div class="stat"><div class="s-v">${bk.length}</div><div class="s-l">Bookings</div></div>
-      <div class="stat"><div class="s-v">${fill}%</div><div class="s-l">Fill rate</div></div>
-      <div class="stat"><div class="s-v">${avgOffers}</div><div class="s-l">Offers / request</div></div>
-    </div>
-
-    <div class="card mt12">
-      <div class="between mb12"><span class="sec-title" style="margin:0">Supply</span>
-        <span class="chip ${online>6?"green":"red"}">${online}/${S.photographers.length} online</span></div>
-      <div class="progress" style="height:8px"><i style="width:${online/S.photographers.length*100}%"></i></div>
-      <div class="row gap8 mt12">
-        <span class="chip accent">${live} live requests</span>
-        <span class="chip">${S.photographers.filter(p=>p.verified).length} verified</span>
-      </div>
-    </div>
-
-    ${catRows.length?`<div class="card mt12"><div class="sec-title">Demand by category</div>
-      ${catRows.map(([c,n])=>`<div class="row gap10 mb8">
-        <span style="width:96px" class="xs">${catById(c).emoji} ${catById(c).name}</span>
-        <div class="grow progress"><i style="width:${n/maxCat*100}%"></i></div>
-        <span class="xs bold" style="width:18px;text-align:right">${n}</span></div>`).join("")}</div>`:""}
-
-    <div class="card mt12"><div class="sec-title">Coverage map</div>
-      ${mapSvg(S.photographers.map(p=>({x:p.x,y:p.y,label:p.name[0],color:p.online?"var(--green)":"var(--muted-2)"})),{caption:"green = online"})}</div>
-
-    <div class="card mt12"><div class="sec-title">Recent requests</div>
-      ${S.requests.length?`<table class="tbl"><thead><tr><th>Type</th><th>Area</th><th>Offers</th><th>Status</th></tr></thead><tbody>
-        ${S.requests.slice(0,10).map(r=>`<tr>
-          <td>${catById(r.category).emoji} ${catById(r.category).name}</td>
-          <td class="muted">${esc(r.area)}</td><td>${r.offers.length}</td>
-          <td>${statusChip(r.status)}</td></tr>`).join("")}
-      </tbody></table>`:`<div class="xs muted2">No requests yet — post one as a customer.</div>`}
-    </div>
-
-    <div class="card mt12"><div class="sec-title">Top photographers</div>
-      <table class="tbl"><thead><tr><th>Name</th><th>Rating</th><th>Jobs</th><th>Earnings</th></tr></thead><tbody>
-      ${S.photographers.slice().sort((a,b)=>b.earnings-a.earnings).slice(0,8).map(p=>`<tr>
-        <td><div class="row gap8">${avatarHtml(p,"av-40")}<span class="bold">${esc(p.name)}</span></div></td>
-        <td>${p.rating}★</td><td>${p.jobs}</td><td class="green">${inr(p.earnings)}</td></tr>`).join("")}
-      </tbody></table></div>
-  </div><div style="height:24px"></div>`;
-}
-
-function vAdminBookings(){
-  return `<div class="pad">
-    <div class="h2 mb16">All bookings</div>
-    ${S.bookings.length?`<div class="stack gap10">${S.bookings.map(b=>{
-      const p=S.photographers.find(x=>x.id===b.photographerId);
-      return `<div class="card">
-        <div class="between"><div class="row gap10">${avatarHtml(p,"av-40")}
-          <div><div class="sm bold">${esc(p.name)} → ${esc(b.customerName)}</div>
-            <div class="xs muted2">${b.id.slice(-8).toUpperCase()} · ${timeAgo(b.createdAt)}</div></div></div>
-          ${statusChip(b.status)}</div>
-        <div class="row gap6 mt12" style="flex-wrap:wrap">
-          <span class="chip" style="font-size:10px">${catById(b.category).emoji} ${catById(b.category).name}</span>
-          <span class="chip" style="font-size:10px">${esc(b.area)}</span>
-          <span class="chip" style="font-size:10px">${inr(b.total)}</span>
-          <span class="chip green" style="font-size:10px">take ${inr(b.fees.platform+Math.round(b.price*0.15))}</span>
-        </div></div>`;
-    }).join("")}</div>`:`<div class="empty"><div class="e-ic">📋</div>No bookings yet.</div>`}
-  </div><div style="height:24px"></div>`;
-}
-
-function vAdminPhotogs(){
-  return `<div class="pad">
-    <div class="h2 mb16">Supply</div>
-    <div class="stack gap10">${S.photographers.map(p=>`
-      <div class="card row gap12">
-        ${avatarHtml(p,"av-48",p.online)}
-        <div class="grow"><div class="row gap6"><span class="bold sm">${esc(p.name)}</span>${p.verified?icon("shield",11,"var(--blue)"):""}</div>
-          <div class="xs muted2">${esc(p.area)} · ${p.rating}★ · ${p.jobs} jobs · ${p.years}y</div>
-          <div class="row gap4 mt8">${p.cats.map(c=>`<span class="chip" style="font-size:9.5px;padding:3px 7px">${catById(c).name}</span>`).join("")}</div></div>
-        <button class="chip ${p.online?"green":""}" onclick="S.photographers.find(x=>x.id==='${p.id}').online=!${p.online};save();render()">${p.online?"Online":"Offline"}</button>
-      </div>`).join("")}</div>
-  </div><div style="height:24px"></div>`;
-}
 
 /* ============================================================
    ROUTER + CHROME
@@ -3162,12 +3053,10 @@ function vAdminPhotogs(){
 const TABS = {
   customer:[["home","Home","home"],["explore","Explore","search"],["activity","Activity","list"],["profile","Profile","user"]],
   photographer:[["home","Dashboard","grid"],["requests","Requests","bolt"],["earnings","Earnings","wallet"],["profile","Profile","user"]],
-  admin:[["home","Overview","trend"],["bookings","Bookings","calendar"],["supply","Supply","cam"]]
 };
 const SCREENS = {
   "customer:home":vCustHome, "customer:explore":vCustExplore, "customer:activity":vCustActivity, "customer:profile":vCustProfile,
-  "photographer:home":vPgHome, "photographer:requests":vPgRequests, "photographer:earnings":vPgEarnings, "photographer:profile":vPgProfile,
-  "admin:home":vAdminHome, "admin:bookings":vAdminBookings, "admin:supply":vAdminPhotogs
+  "photographer:home":vPgHome, "photographer:requests":vPgRequests, "photographer:earnings":vPgEarnings, "photographer:profile":vPgProfile
 };
 const STACK_VIEWS = {
   newRequest:vNewRequest, matching:vMatching, pgDetail:vPgDetail, checkout:vCheckout, success:vSuccess,
@@ -3186,16 +3075,14 @@ function renderSidebar(){
   el("roleLabel").textContent="Signed in as";
   const a=acct();
   const pg=a&&a.type==="photographer"?S.photographers.find(p=>p.id===a.photographerId):null;
-  const who = isAdmin()
-    ? {name:"Operations", sub:"Admin console", ic:"trend"}
-    : a.type==="photographer" ? {name:a.name, sub:"Photographer · "+(pg?pg.area:""), ic:"cam"}
+  const who = a.type==="photographer" ? {name:a.name, sub:"Photographer · "+(pg?pg.area:""), ic:"cam"}
     : {name:a.name, sub:"Customer · "+cust().area, ic:"user"};
   box.innerHTML = `
     <div class="role-btn on" style="cursor:default">
       <span class="ic">${icon(who.ic,18)}</span>
       <span>${esc(who.name)}<span class="sub">${esc(who.sub)}</span></span>
     </div>
-    ${S.accounts.length>1||isAdmin()||S.accounts.length?`<button class="role-btn" onclick="switchAccount()">
+    ${S.accounts.length?`<button class="role-btn" onclick="switchAccount()">
       <span class="ic">${icon("user",18)}</span><span>Switch account<span class="sub">Log in as someone else</span></span></button>`:""}
     <button class="role-btn" onclick="logout()">
       <span class="ic">${icon("power",18)}</span><span>Log out<span class="sub">Data stays on this device</span></span></button>`;
@@ -3277,7 +3164,7 @@ function paintCountdowns(){
    BOOT
    ============================================================ */
 S = load();
-if(!S.nav) S.nav={customer:"home",photographer:"home",admin:"home"};
+if(!S.nav) S.nav={customer:"home",photographer:"home"};
 if(!S.stack) S.stack=[];
 render();
 

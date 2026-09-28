@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>SnapPro Operations</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{
+  --bg:#0a0a0f; --surface:#14141c; --surface-2:#1c1c26; --surface-3:#252533;
+  --border:#2b2b3a; --border-soft:#22222e; --text:#f4f4f7; --muted:#8b8b9e; --muted-2:#61617a;
+  --accent:#ff5a1f; --accent-soft:rgba(255,90,31,.14);
+  --green:#28c76f; --red:#ff4d5e; --blue:#4d8dff; --purple:#a67cff;
+  --r:14px; --ff:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:
+  radial-gradient(900px 600px at 85% -10%,rgba(255,90,31,.10),transparent 60%),
+  radial-gradient(800px 500px at 5% 110%,rgba(166,124,255,.10),transparent 60%),var(--bg);
+  color:var(--text);font-family:var(--ff);font-size:15px;line-height:1.45;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
+input,select{font:inherit;color:inherit}
+a{color:var(--accent)}
+.wrap{max-width:1040px;margin:0 auto;padding:28px 20px 60px}
+.center-card{max-width:400px;margin:8vh auto;padding:0 20px}
+.brand{display:flex;align-items:center;gap:11px;margin-bottom:26px}
+.mark{width:42px;height:42px;border-radius:13px;background:linear-gradient(135deg,var(--accent),#ff8a3d);
+  display:grid;place-items:center;box-shadow:0 8px 22px -6px rgba(255,90,31,.6)}
+.bname{font-weight:800;font-size:19px;letter-spacing:-.5px}
+.btag{font-size:11px;color:var(--muted-2);margin-top:-2px}
+.card{background:var(--surface);border:1px solid var(--border-soft);border-radius:var(--r);padding:16px}
+.h1{font-size:23px;font-weight:800;letter-spacing:-.7px}
+.h2{font-size:17px;font-weight:750;letter-spacing:-.3px}
+.sm{font-size:13px}.xs{font-size:11.5px}
+.muted{color:var(--muted)}.muted2{color:var(--muted-2)}
+.mt8{margin-top:8px}.mt12{margin-top:12px}.mt16{margin-top:16px}.mt24{margin-top:24px}
+.row{display:flex;align-items:center;gap:10px}
+.between{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.grow{flex:1;min-width:0}
+.sec{font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted-2);font-weight:700;margin-bottom:10px}
+.input{width:100%;padding:12px 14px;border-radius:12px;background:var(--surface);
+  border:1px solid var(--border);outline:none;transition:.15s}
+.input:focus{border-color:var(--accent);background:var(--surface-2)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:12px 18px;
+  border-radius:12px;font-weight:700;background:var(--surface-2);border:1px solid var(--border);transition:.15s}
+.btn:hover{background:var(--surface-3)}
+.btn.primary{background:linear-gradient(135deg,var(--accent),#ff7a3d);border-color:transparent;color:#fff}
+.btn.danger{border-color:rgba(255,77,94,.4);color:var(--red)}
+.btn.block{width:100%}
+.btn.sm{padding:7px 12px;font-size:12.5px;border-radius:10px}
+.btn[disabled]{opacity:.45;pointer-events:none}
+.chip{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:999px;
+  background:var(--surface-2);border:1px solid var(--border);font-size:11px;font-weight:700;color:var(--muted)}
+.chip.super{background:rgba(255,90,31,.15);border-color:rgba(255,90,31,.4);color:#ffab86}
+.chip.admin{background:rgba(77,141,255,.15);border-color:rgba(77,141,255,.4);color:#8fb6ff}
+.chip.manager{background:rgba(166,124,255,.15);border-color:rgba(166,124,255,.4);color:#c4a6ff}
+.chip.green{background:rgba(40,199,111,.14);border-color:rgba(40,199,111,.35);color:#5fe0a0}
+.chip.red{background:rgba(255,77,94,.14);border-color:rgba(255,77,94,.35);color:#ff8f9b}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.stat{background:var(--surface);border:1px solid var(--border-soft);border-radius:var(--r);padding:14px}
+.stat .v{font-size:22px;font-weight:800;letter-spacing:-.6px}
+.stat .l{font-size:11px;color:var(--muted-2);font-weight:600;margin-top:2px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;color:var(--muted-2);font-weight:700;font-size:10px;letter-spacing:.8px;
+  text-transform:uppercase;padding:9px 8px;border-bottom:1px solid var(--border)}
+td{padding:11px 8px;border-bottom:1px solid var(--border-soft);vertical-align:middle}
+.tabs{display:flex;gap:6px;background:var(--surface);padding:4px;border-radius:13px;border:1px solid var(--border-soft)}
+.tab{padding:8px 16px;border-radius:10px;font-size:13.5px;font-weight:700;color:var(--muted-2)}
+.tab.on{background:var(--surface-3);color:var(--text)}
+.otp{display:flex;gap:7px;justify-content:center;margin:18px 0}
+.otp i{width:44px;height:54px;border-radius:12px;display:grid;place-items:center;font-size:21px;
+  font-weight:800;font-style:normal;background:var(--surface);border:1.5px solid var(--border)}
+.otp i.on{border-color:var(--accent)}
+.err{color:var(--red);font-size:12.5px;margin-top:10px}
+.ok{color:var(--green);font-size:12.5px;margin-top:10px}
+.empty{text-align:center;padding:40px 20px;color:var(--muted-2)}
+.spin{width:44px;height:44px;margin:0 auto;border-radius:50%;border:3px solid var(--surface-3);
+  border-top-color:var(--accent);animation:sp .8s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div id="app"><div class="center-card"><div class="spin" style="margin-top:20vh"></div></div></div>
+
+<script>
+"use strict";
+
+const SUPABASE_URL = "https://eafudrjxjtenqoorjzsc.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_n8ub8dzUbfa5uJqA_PHDXw_QLJJINCd";
+
+const ROLES = [
+  {id:"super_admin", label:"Super admin", desc:"Everything, including managing staff"},
+  {id:"admin",       label:"Admin",       desc:"All operations data and customer details"},
+  {id:"manager",     label:"Manager",     desc:"Bookings and requests only"}
+];
+const roleLabel = r => (ROLES.find(x=>x.id===r)||{label:r}).label;
+
+let sb = null;
+const S = {
+  view: "login",
+  email: "", otp: "", busy: false, err: "", note: "",
+  me: null,              // staff row
+  tab: "overview",
+  stats: null, staff: [], invites: [], bookings: [], requests: [],
+  inviteEmail: "", inviteRole: "manager"
+};
+
+const el = id => document.getElementById(id);
+const esc = s => String(s==null?"":s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const inr = n => "₹"+Math.round(n||0).toLocaleString("en-IN");
+const fmt = d => d ? new Date(d).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric"}) : "—";
+
+function camIcon(size,color){
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>`;
+}
+const brand = `<div class="brand"><div class="mark">${camIcon(21,"#fff")}</div>
+  <div><div class="bname">SnapPro</div><div class="btag">Operations console</div></div></div>`;
+
+/* ============================ auth ============================ */
+
+async function boot(){
+  if(!(window.supabase && window.supabase.createClient)){ setTimeout(boot,300); return; }
+  sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const { data } = await sb.auth.getSession();
+  if(data && data.session) await loadMe();
+  else { S.view="login"; render(); }
+}
+
+/* Signing in is only half of it: Supabase proves who they are, the staff
+   table decides whether they belong here. Someone with a valid SnapPro
+   customer account but no staff row gets turned away. */
+async function loadMe(){
+  S.busy = true; render();
+  const { data: u } = await sb.auth.getUser();
+  if(!u || !u.user){ S.busy=false; S.view="login"; render(); return; }
+
+  const { data: row, error } = await sb.from('staff')
+    .select('id,email,name,role,status').eq('id', u.user.id).maybeSingle();
+
+  S.busy = false;
+  if(error){ S.err = "Couldn't verify access: "+error.message; S.view="login"; render(); return; }
+  if(!row){
+    S.view = "denied"; S.deniedEmail = u.user.email; render(); return;
+  }
+  if(row.status !== 'active'){
+    S.view = "denied"; S.deniedEmail = u.user.email; S.suspended = true; render(); return;
+  }
+  S.me = row; S.view = "console"; render();
+  loadData();
+}
+
+async function sendCode(){
+  const email = S.email.trim().toLowerCase();
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ S.err="Enter a valid email address."; render(); return; }
+  S.busy=true; S.err=""; S.note=""; render();
+  const { error } = await sb.auth.signInWithOtp({ email, options:{ shouldCreateUser:true } });
+  S.busy=false;
+  if(error){ S.err = error.message || "Couldn't send the code."; render(); return; }
+  S.email = email; S.otp=""; S.view="code"; S.note="Code sent to "+email;
+  render();
+}
+
+async function verifyCode(){
+  const token = S.otp.trim();
+  if(token.length!==6){ S.err="Enter the 6-digit code."; render(); return; }
+  S.busy=true; S.err=""; render();
+  const { data, error } = await sb.auth.verifyOtp({ email:S.email, token, type:'email' });
+  S.busy=false;
+  if(error || !data || !data.user){ S.err=(error&&error.message)||"That code isn't right."; S.otp=""; render(); return; }
+  await loadMe();
+}
+
+async function signOut(){
+  try{ await sb.auth.signOut(); }catch(e){}
+  S.me=null; S.email=""; S.otp=""; S.err=""; S.note=""; S.view="login"; S.suspended=false;
+  render();
+}
+
+/* ============================ data ============================ */
+
+async function loadData(){
+  const r = S.me.role;
+  const q = [];
+  q.push(sb.from('bookings').select('id,customer_id,photographer_id,total_amount,payout_amount,status,created_at').order('created_at',{ascending:false}).limit(100));
+  q.push(sb.from('requests').select('id,category,area,status,budget,created_at').order('created_at',{ascending:false}).limit(100));
+  q.push(sb.from('photographers').select('id,display_name,area,rating,review_count,is_online,is_verified').limit(200));
+  q.push(sb.from('staff').select('id,email,name,role,status,created_at').order('created_at'));
+  if(r === 'super_admin') q.push(sb.from('staff_invites').select('id,email,role,created_at,accepted_at').order('created_at',{ascending:false}));
+
+  const res = await Promise.all(q);
+  const [bk, rq, pg, st, inv] = res;
+  if(bk.error) console.warn('bookings', bk.error.message);
+
+  S.bookings = bk.data || [];
+  S.requests = rq.data || [];
+  S.photographers = pg.data || [];
+  S.staff = st.data || [];
+  S.invites = (inv && inv.data) || [];
+
+  const paid = S.bookings.filter(b=>b.status!=='cancelled');
+  S.stats = {
+    gmv: paid.reduce((a,b)=>a+(b.total_amount||0),0),
+    take: paid.reduce((a,b)=>a+((b.total_amount||0)-(b.payout_amount||0)),0),
+    bookings: paid.length,
+    requests: S.requests.length,
+    pros: S.photographers.length,
+    online: S.photographers.filter(p=>p.is_online).length,
+    fill: S.requests.length ? Math.round(S.requests.filter(r=>r.status==='matched').length / S.requests.length * 100) : 0
+  };
+  render();
+}
+
+/* ======================= staff management ===================== */
+
+async function sendInvite(){
+  const email = S.inviteEmail.trim().toLowerCase();
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ S.err="Enter a valid email address."; render(); return; }
+  if(S.staff.some(s=>s.email.toLowerCase()===email)){ S.err="That person is already on the team."; render(); return; }
+  S.busy=true; S.err=""; S.note=""; render();
+
+  const { error } = await sb.from('staff_invites')
+    .upsert({ email, role:S.inviteRole, invited_by:S.me.id, accepted_at:null }, { onConflict:'email' });
+
+  if(error){ S.busy=false; S.err="Couldn't create the invite: "+error.message; render(); return; }
+
+  /* Sending the sign-in code IS the invitation email — they click nothing,
+     they just enter the code and the trigger grants the role. */
+  const { error: mailErr } = await sb.auth.signInWithOtp({ email, options:{ shouldCreateUser:true } });
+  S.busy=false;
+  if(mailErr){ S.err="Invite saved, but the email failed: "+mailErr.message; }
+  else { S.note = "Invited "+email+" as "+roleLabel(S.inviteRole)+". They've been emailed a code."; S.inviteEmail=""; }
+  await loadData();
+}
+
+async function changeRole(id, role){
+  if(id === S.me.id && role !== 'super_admin'){
+    if(!confirm("This removes your own super admin access. Continue?")) { render(); return; }
+  }
+  const { error } = await sb.from('staff').update({ role }).eq('id', id);
+  if(error){ S.err = "Couldn't change role: "+error.message; render(); return; }
+  S.note = "Role updated."; await loadData();
+}
+
+async function setStatus(id, status){
+  const { error } = await sb.from('staff').update({ status }).eq('id', id);
+  if(error){ S.err="Couldn't update: "+error.message; render(); return; }
+  S.note = status==='suspended' ? "Access suspended." : "Access restored."; await loadData();
+}
+
+async function removeStaff(id, email){
+  if(!confirm("Remove "+email+" from the team? They lose admin access immediately.")) return;
+  const { error } = await sb.from('staff').delete().eq('id', id);
+  if(error){ S.err="Couldn't remove: "+error.message; render(); return; }
+  await sb.from('staff_invites').delete().eq('email', email);
+  S.note = "Removed "+email+"."; await loadData();
+}
+
+async function cancelInvite(id){
+  const { error } = await sb.from('staff_invites').delete().eq('id', id);
+  if(error){ S.err="Couldn't cancel: "+error.message; render(); return; }
+  S.note="Invite cancelled."; await loadData();
+}
+
+/* ============================ views =========================== */
+
+function vLogin(){
+  return `<div class="center-card">${brand}
+    <div class="card">
+      <div class="h1">Operations sign-in</div>
+      <div class="sm muted mt8">Staff only. We'll email you a 6-digit code.</div>
+      <div class="mt16">
+        <input class="input" id="em" type="email" placeholder="you@example.com" value="${esc(S.email)}"
+          oninput="S.email=this.value;S.err='';" onkeydown="if(event.key==='Enter')sendCode()">
+      </div>
+      <button class="btn primary block mt12" ${S.busy?'disabled':''} onclick="sendCode()">
+        ${S.busy?'Sending…':'Email me a code'}</button>
+      ${S.err?`<div class="err">${esc(S.err)}</div>`:''}
+      <div class="xs muted2 mt16">Access is granted by a super admin. If you haven't been invited, a code won't let you in.</div>
+    </div>
+    <div class="xs muted2 mt16" style="text-align:center"><a href="/">← Back to snappro.in</a></div>
+  </div>`;
+}
+
+function vCode(){
+  const c = S.otp;
+  return `<div class="center-card">${brand}
+    <div class="card">
+      <div class="h1">Enter your code</div>
+      <div class="sm muted mt8">Sent to ${esc(S.email)}</div>
+      <div class="otp">${[0,1,2,3,4,5].map(i=>`<i class="${c.length===i?'on':''}">${esc(c[i]||'')}</i>`).join('')}</div>
+      <input class="input" id="ot" inputmode="numeric" maxlength="6" autocomplete="one-time-code"
+        style="text-align:center;letter-spacing:8px;font-size:19px" placeholder="6-digit code" value="${esc(c)}"
+        oninput="S.otp=this.value.replace(/\\D/g,'').slice(0,6);S.err='';render()"
+        onkeydown="if(event.key==='Enter')verifyCode()">
+      <button class="btn primary block mt12" ${(c.length===6&&!S.busy)?'':'disabled'} onclick="verifyCode()">
+        ${S.busy?'Checking…':'Verify & sign in'}</button>
+      <div class="row mt12" style="justify-content:space-between">
+        <button class="xs muted2" onclick="S.view='login';S.otp='';S.err='';render()">← Change email</button>
+        <button class="xs" style="color:var(--accent);font-weight:700" onclick="sendCode()">Resend</button>
+      </div>
+      ${S.err?`<div class="err">${esc(S.err)}</div>`:''}
+    </div>
+  </div>`;
+}
+
+function vDenied(){
+  return `<div class="center-card">${brand}
+    <div class="card" style="border-color:rgba(255,77,94,.35)">
+      <div class="h1">No access</div>
+      <div class="sm muted mt8">${esc(S.deniedEmail||'That account')} is signed in, but ${S.suspended?'its admin access has been suspended':'it is not a staff account'}.</div>
+      <div class="xs muted2 mt12">Ask a super admin to invite this address, then sign in again.</div>
+      <button class="btn block mt16" onclick="signOut()">Sign out</button>
+    </div>
+  </div>`;
+}
+
+function vConsole(){
+  const me = S.me;
+  const isSuper = me.role === 'super_admin';
+  const tabs = [["overview","Overview"],["bookings","Bookings"],["requests","Requests"],["pros","Photographers"]];
+  if(isSuper) tabs.push(["team","Team"]);
+
+  return `<div class="wrap">
+    <div class="between" style="flex-wrap:wrap;gap:16px">
+      ${brand.replace('margin-bottom:26px','')}
+      <div class="row">
+        <div style="text-align:right">
+          <div class="sm" style="font-weight:700">${esc(me.name||me.email)}</div>
+          <div class="xs muted2">${esc(me.email)}</div>
+        </div>
+        <span class="chip ${me.role==='super_admin'?'super':me.role}">${roleLabel(me.role)}</span>
+        <button class="btn sm" onclick="signOut()">Sign out</button>
+      </div>
+    </div>
+
+    <div class="tabs mt16" style="width:fit-content;flex-wrap:wrap">
+      ${tabs.map(([k,l])=>`<button class="tab ${S.tab===k?'on':''}" onclick="S.tab='${k}';S.err='';S.note='';render()">${l}</button>`).join('')}
+    </div>
+
+    ${S.note?`<div class="ok mt12">${esc(S.note)}</div>`:''}
+    ${S.err?`<div class="err mt12">${esc(S.err)}</div>`:''}
+
+    <div class="mt16">${
+      S.tab==='overview' ? vOverview() :
+      S.tab==='bookings' ? vBookings() :
+      S.tab==='requests' ? vRequests() :
+      S.tab==='pros'     ? vPros()     :
+      S.tab==='team'     ? vTeam()     : ''
+    }</div>
+  </div>`;
+}
+
+function vOverview(){
+  const s = S.stats;
+  if(!s) return `<div class="empty">Loading…</div>`;
+  const canSeeMoney = S.me.role !== 'manager';
+  return `<div class="grid">
+    ${canSeeMoney?`
+      <div class="stat"><div class="v">${inr(s.gmv)}</div><div class="l">GMV</div></div>
+      <div class="stat"><div class="v">${inr(s.take)}</div><div class="l">Platform revenue</div></div>`:''}
+    <div class="stat"><div class="v">${s.bookings}</div><div class="l">Bookings</div></div>
+    <div class="stat"><div class="v">${s.requests}</div><div class="l">Requests</div></div>
+    <div class="stat"><div class="v">${s.fill}%</div><div class="l">Fill rate</div></div>
+    <div class="stat"><div class="v">${s.online}/${s.pros}</div><div class="l">Pros online</div></div>
+  </div>
+  ${!canSeeMoney?`<div class="xs muted2 mt12">Revenue figures are hidden for the Manager role.</div>`:''}`;
+}
+
+function vBookings(){
+  if(!S.bookings.length) return `<div class="card"><div class="empty">No bookings yet.</div></div>`;
+  const money = S.me.role !== 'manager';
+  return `<div class="card"><table>
+    <thead><tr><th>Booking</th><th>Status</th><th>Created</th>${money?'<th>Total</th><th>Take</th>':''}</tr></thead>
+    <tbody>${S.bookings.map(b=>`<tr>
+      <td style="font-family:monospace">${esc(String(b.id).slice(-8).toUpperCase())}</td>
+      <td><span class="chip">${esc(b.status||'—')}</span></td>
+      <td class="muted">${fmt(b.created_at)}</td>
+      ${money?`<td>${inr(b.total_amount)}</td><td class="chip green" style="display:inline-block;margin-top:6px">${inr((b.total_amount||0)-(b.payout_amount||0))}</td>`:''}
+    </tr>`).join('')}</tbody></table></div>`;
+}
+
+function vRequests(){
+  if(!S.requests.length) return `<div class="card"><div class="empty">No requests yet.</div></div>`;
+  return `<div class="card"><table>
+    <thead><tr><th>Category</th><th>Area</th><th>Budget</th><th>Status</th><th>Created</th></tr></thead>
+    <tbody>${S.requests.map(r=>`<tr>
+      <td>${esc(r.category||'—')}</td><td class="muted">${esc(r.area||'—')}</td>
+      <td>${inr(r.budget)}</td><td><span class="chip">${esc(r.status||'—')}</span></td>
+      <td class="muted">${fmt(r.created_at)}</td>
+    </tr>`).join('')}</tbody></table></div>`;
+}
+
+function vPros(){
+  if(!S.photographers || !S.photographers.length) return `<div class="card"><div class="empty">No photographers yet.</div></div>`;
+  return `<div class="card"><table>
+    <thead><tr><th>Name</th><th>Area</th><th>Rating</th><th>Jobs</th><th>Status</th></tr></thead>
+    <tbody>${S.photographers.map(p=>`<tr>
+      <td style="font-weight:600">${esc(p.display_name||'—')}</td>
+      <td class="muted">${esc(p.area||'—')}</td>
+      <td>${p.rating||'—'}★</td><td>${p.review_count||0}</td>
+      <td><span class="chip ${p.is_online?'green':''}">${p.is_online?'Online':'Offline'}</span>
+          ${p.is_verified?'<span class="chip admin">Verified</span>':''}</td>
+    </tr>`).join('')}</tbody></table></div>`;
+}
+
+function vTeam(){
+  const pending = S.invites.filter(i=>!i.accepted_at);
+  return `
+  <div class="card">
+    <div class="sec">Invite someone</div>
+    <div class="row" style="flex-wrap:wrap;gap:10px">
+      <input class="input grow" style="min-width:220px" type="email" placeholder="colleague@example.com"
+        value="${esc(S.inviteEmail)}" oninput="S.inviteEmail=this.value;S.err=''">
+      <select class="input" style="width:auto" onchange="S.inviteRole=this.value">
+        ${ROLES.map(r=>`<option value="${r.id}" ${S.inviteRole===r.id?'selected':''}>${r.label}</option>`).join('')}
+      </select>
+      <button class="btn primary" ${S.busy?'disabled':''} onclick="sendInvite()">${S.busy?'Sending…':'Send invite'}</button>
+    </div>
+    <div class="xs muted2 mt12">${ROLES.map(r=>`<b>${r.label}</b> — ${r.desc}`).join(' &nbsp;·&nbsp; ')}</div>
+  </div>
+
+  <div class="card mt16">
+    <div class="sec">Team (${S.staff.length})</div>
+    <table>
+      <thead><tr><th>Person</th><th>Role</th><th>Status</th><th>Joined</th><th></th></tr></thead>
+      <tbody>${S.staff.map(s=>{
+        const isMe = s.id===S.me.id;
+        return `<tr>
+          <td><div style="font-weight:600">${esc(s.name||s.email.split('@')[0])}${isMe?' <span class="xs muted2">(you)</span>':''}</div>
+              <div class="xs muted2">${esc(s.email)}</div></td>
+          <td><select class="input" style="padding:6px 10px;font-size:12.5px;width:auto"
+                onchange="changeRole('${s.id}', this.value)">
+                ${ROLES.map(r=>`<option value="${r.id}" ${s.role===r.id?'selected':''}>${r.label}</option>`).join('')}
+              </select></td>
+          <td><span class="chip ${s.status==='active'?'green':'red'}">${s.status}</span></td>
+          <td class="muted">${fmt(s.created_at)}</td>
+          <td style="text-align:right;white-space:nowrap">
+            ${s.status==='active'
+              ? `<button class="btn sm" ${isMe?'disabled':''} onclick="setStatus('${s.id}','suspended')">Suspend</button>`
+              : `<button class="btn sm" onclick="setStatus('${s.id}','active')">Restore</button>`}
+            <button class="btn sm danger" ${isMe?'disabled':''} onclick="removeStaff('${s.id}','${esc(s.email)}')">Remove</button>
+          </td></tr>`;
+      }).join('')}</tbody>
+    </table>
+  </div>
+
+  ${pending.length?`<div class="card mt16">
+    <div class="sec">Pending invites (${pending.length})</div>
+    <table><thead><tr><th>Email</th><th>Role</th><th>Sent</th><th></th></tr></thead>
+    <tbody>${pending.map(i=>`<tr>
+      <td>${esc(i.email)}</td><td><span class="chip ${i.role==='super_admin'?'super':i.role}">${roleLabel(i.role)}</span></td>
+      <td class="muted">${fmt(i.created_at)}</td>
+      <td style="text-align:right"><button class="btn sm danger" onclick="cancelInvite('${i.id}')">Cancel</button></td>
+    </tr>`).join('')}</tbody></table>
+    <div class="xs muted2 mt12">They've been emailed a 6-digit code. Entering it here activates their role automatically.</div>
+  </div>`:''}`;
+}
+
+/* ============================ render ========================== */
+
+function render(){
+  const app = el("app");
+  const focus = document.activeElement;
+  const fid = focus && focus.id ? focus.id : null;
+  const caret = fid && focus.setSelectionRange ? focus.selectionStart : null;
+
+  app.innerHTML =
+    S.view==="login"   ? vLogin()   :
+    S.view==="code"    ? vCode()    :
+    S.view==="denied"  ? vDenied()  :
+    S.view==="console" ? vConsole() : vLogin();
+
+  if(fid){
+    const n = el(fid);
+    if(n){ n.focus(); if(caret!=null && n.setSelectionRange){ try{ n.setSelectionRange(caret,caret); }catch(e){} } }
+  }
+}
+
+window.addEventListener("error", e => console.error("Admin:", e.message));
+boot();
+</script>
+</body>
+</html>
