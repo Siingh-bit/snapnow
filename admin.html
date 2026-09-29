@@ -166,17 +166,50 @@ function pwFieldsHtml(label){
   <div class="field"><label>${label}</label>
     <div class="pw-wrap">
       <input id="pw1" class="input ${weak?'pw-bad':''} ${PW.flash&&weak?'pw-flash':''}" type="${type}" autocomplete="new-password"
-        placeholder="Create a strong password" value="${esc(PW.pw)}" oninput="PW.pw=this.value;S.err='';render()">
-      <button type="button" class="pw-eye" onclick="PW.show=!PW.show;render()">${PW.show?'Hide':'Show'}</button>
+        placeholder="Create a strong password" value="${esc(PW.pw)}" oninput="pwInput('pw',this.value)">
+      <button type="button" class="pw-eye" onclick="pwToggleShow()">${PW.show?'Hide':'Show'}</button>
     </div>
-    <div class="pw-rules">${rules.map(r=>`<div class="pw-rule ${r.ok?'ok':(live?'bad':'')} ${PW.flash&&!r.ok?'pw-flash-text':''}">${r.ok?'✓':(live?'✗':'•')} ${r.t}</div>`).join('')}</div>
+    <div class="pw-rules" id="pwRules">${pwRulesInner()}</div>
   </div>
   <div class="field"><label>Confirm password</label>
     <input id="pw2" class="input ${mism?'pw-bad':''} ${PW.flash&&mism?'pw-flash':''}" type="${type}" autocomplete="new-password"
-      placeholder="Type it again" value="${esc(PW.pw2)}" oninput="PW.pw2=this.value;S.err='';render()">
-    ${mism?`<div class="xs mt8 ${PW.flash?'pw-flash-text':''}" style="color:var(--red)">✗ Passwords don't match</div>`
-      :(PW.pw2&&PW.pw2===PW.pw?`<div class="xs mt8" style="color:var(--green)">✓ Passwords match</div>`:'')}
+      placeholder="Type it again" value="${esc(PW.pw2)}" oninput="pwInput('pw2',this.value)">
+    <div id="pwMatch">${pwMatchInner()}</div>
   </div>`;
+}
+/* Typing must never rebuild the field being typed into: on phones a
+   rebuilt field reopens the keyboard in its default layout. */
+function setHtml(id, html){ const n = el(id); if(n) n.innerHTML = html; }
+function setCls(id, cls, on){ const n = el(id); if(n) n.classList.toggle(cls, !!on); }
+function clearErr(){ S.err = ""; document.querySelectorAll('#app .err').forEach(n => n.remove()); }
+function pwRulesInner(){
+  const live = PW.touched || PW.pw.length > 0;
+  return pwRules(PW.pw).map(r=>`<div class="pw-rule ${r.ok?'ok':(live?'bad':'')} ${PW.flash&&!r.ok?'pw-flash-text':''}">${r.ok?'✓':(live?'✗':'•')} ${r.t}</div>`).join('');
+}
+function pwMatchInner(){
+  const m = (PW.touched || PW.pw2.length > 0) && PW.pw2 !== PW.pw;
+  if(m) return `<div class="xs mt8 ${PW.flash?'pw-flash-text':''}" style="color:var(--red)">✗ Passwords don't match</div>`;
+  if(PW.pw2 && PW.pw2 === PW.pw) return `<div class="xs mt8" style="color:var(--green)">✓ Passwords match</div>`;
+  return '';
+}
+function pwPaint(){
+  const live = PW.touched || PW.pw.length > 0;
+  setHtml("pwRules", pwRulesInner());
+  setCls("pw1","pw-bad", live && !pwStrong());
+  if(el("pw2")){ setCls("pw2","pw-bad",(PW.touched||PW.pw2.length>0)&&PW.pw2!==PW.pw); setHtml("pwMatch", pwMatchInner()); }
+}
+function pwInput(k, v){ PW[k] = v; clearErr(); pwPaint(); }
+function pwToggleShow(){
+  PW.show = !PW.show;
+  ["pw1","pw2","pwl"].forEach(id=>{ const n=el(id); if(n) n.type = PW.show?"text":"password"; });
+  document.querySelectorAll(".pw-eye").forEach(b=>b.textContent = PW.show?"Hide":"Show");
+}
+function otpInput(v){
+  const code = String(v).replace(/\D/g,"").slice(0,6);
+  S.otp = code; clearErr();
+  const inp = el("ot"); if(inp && inp.value !== code) inp.value = code;
+  setHtml("otpBoxes", [0,1,2,3,4,5].map(i=>`<i class="${code.length===i?'on':''}">${esc(code[i]||'')}</i>`).join(''));
+  const b = el("otpVerify"); if(b) b.disabled = !(code.length===6 && !S.busy);
 }
 function friendly(e){
   const m=(e&&e.message)||"", c=(e&&e.code)||"";
@@ -403,14 +436,14 @@ function vLogin(){
       <div class="h1">Operations sign-in</div>
       <div class="sm muted mt8">Staff only.</div>
       <div class="field"><label>Email</label>
-        <input class="input" id="em" type="email" autocomplete="email" placeholder="you@example.com" value="${esc(S.email)}"
+        <input class="input" id="em" type="email" inputmode="email" autocapitalize="off" autocomplete="email" placeholder="you@example.com" value="${esc(S.email)}"
           oninput="S.email=this.value;S.err='';"></div>
       <div class="field"><label>Password</label>
         <div class="pw-wrap">
           <input class="input ${empty?'pw-bad':''} ${PW.flash&&empty?'pw-flash':''}" id="pwl" type="${PW.show?'text':'password'}"
             autocomplete="current-password" placeholder="Your password" value="${esc(PW.pw)}"
-            oninput="PW.pw=this.value;S.err='';render()" onkeydown="if(event.key==='Enter')signIn()">
-          <button type="button" class="pw-eye" onclick="PW.show=!PW.show;render()">${PW.show?'Hide':'Show'}</button>
+            oninput="PW.pw=this.value;clearErr();setCls('pwl','pw-bad',false)" onkeydown="if(event.key==='Enter')signIn()">
+          <button type="button" class="pw-eye" onclick="pwToggleShow()">${PW.show?'Hide':'Show'}</button>
         </div>
         <div class="row mt8" style="justify-content:flex-end">
           <button class="linkbtn" onclick="pwReset();go('reset')">Forgot password?</button></div>
@@ -431,7 +464,7 @@ function vSetup(){
       <div class="h1">Set up your account</div>
       <div class="sm muted mt8">Use the email you were invited with.</div>
       <div class="field"><label>Email</label>
-        <input class="input" id="em2" type="email" autocomplete="email" placeholder="you@example.com" value="${esc(S.email)}"
+        <input class="input" id="em2" type="email" inputmode="email" autocapitalize="off" autocomplete="email" placeholder="you@example.com" value="${esc(S.email)}"
           oninput="S.email=this.value;S.err='';"></div>
       ${pwFieldsHtml("Create a password")}
       <button class="btn primary block mt16" ${S.busy?'disabled':''} onclick="signUp()">${S.busy?'Creating…':'Create account'}</button>
@@ -448,7 +481,7 @@ function vReset(){
       <div class="h1">Forgot password</div>
       <div class="sm muted mt8">We'll email you a 6-digit code, then you'll choose a new password.</div>
       <div class="field"><label>Email</label>
-        <input class="input" id="em3" type="email" autocomplete="email" placeholder="you@example.com" value="${esc(S.email)}"
+        <input class="input" id="em3" type="email" inputmode="email" autocapitalize="off" autocomplete="email" placeholder="you@example.com" value="${esc(S.email)}"
           oninput="S.email=this.value;S.err='';" onkeydown="if(event.key==='Enter')sendResetCode()"></div>
       <button class="btn primary block mt16" ${S.busy?'disabled':''} onclick="sendResetCode()">${S.busy?'Sending…':'Email me a code'}</button>
       ${S.err?`<div class="err">${esc(S.err)}</div>`:''}
@@ -476,12 +509,12 @@ function vCode(){
     <div class="card">
       <div class="h1">${S.mode==="reset"?"Check your email":"Confirm your email"}</div>
       <div class="sm muted mt8">6-digit code sent to ${esc(S.email)}</div>
-      <div class="otp">${[0,1,2,3,4,5].map(i=>`<i class="${c.length===i?'on':''}">${esc(c[i]||'')}</i>`).join('')}</div>
+      <div class="otp" id="otpBoxes">${[0,1,2,3,4,5].map(i=>`<i class="${c.length===i?'on':''}">${esc(c[i]||'')}</i>`).join('')}</div>
       <input class="input" id="ot" inputmode="numeric" maxlength="6" autocomplete="one-time-code"
         style="text-align:center;letter-spacing:8px;font-size:19px" placeholder="6-digit code" value="${esc(c)}"
-        oninput="S.otp=this.value.replace(/\\D/g,'').slice(0,6);S.err='';render()"
+        oninput="otpInput(this.value)"
         onkeydown="if(event.key==='Enter')verifyCode()">
-      <button class="btn primary block mt12" ${(c.length===6&&!S.busy)?'':'disabled'} onclick="verifyCode()">
+      <button id="otpVerify" class="btn primary block mt12" ${(c.length===6&&!S.busy)?'':'disabled'} onclick="verifyCode()">
         ${S.busy?'Checking…':'Verify'}</button>
       <div class="row mt12" style="justify-content:space-between">
         <button class="xs muted2" onclick="S.otp='';go(S.mode==='reset'?'reset':'setup')">← Change email</button>

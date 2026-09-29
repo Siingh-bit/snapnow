@@ -443,18 +443,18 @@ table.tbl th{text-align:left;color:var(--muted-2);font-weight:700;font-size:10px
     </div>
 
     <div class="side-card">
-      <b>How to demo it</b>
+      <b>How SnapPro works</b>
       <ul>
-        <li>Sign up as a <b>customer</b> and post a shoot request</li>
-        <li>Photographers nearby get pinged and accept live</li>
-        <li><b>Switch account</b> → sign up as a <b>photographer</b> to receive and quote on jobs yourself</li>
-        <li>Compare quotes, pay, chat, track arrival</li>
+        <li>Post a shoot — when, where and your budget</li>
+        <li>Photographers nearby get notified and send quotes</li>
+        <li>Compare portfolios, ratings and prices</li>
+        <li>Book, chat and track your photographer's arrival</li>
       </ul>
     </div>
 
     <div class="side-foot">
-      Everything is saved in your browser. No server, no account.
-      <button class="reset-btn" onclick="resetAll()">Reset demo data</button>
+      Your account is protected by your email and password.
+      <button class="reset-btn" onclick="resetAll()">Clear data on this device</button>
     </div>
   </aside>
 
@@ -796,10 +796,22 @@ function sbErr(where, e){
   }
 }
 
+/* One client for the whole page, created on first use. */
+function sbClient(){
+  if(!sb && window.supabase && window.supabase.createClient){
+    try{ sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); }catch(e){ sbErr("client", e); }
+  }
+  return sb;
+}
+/* Waits up to ~5s for the Supabase library to finish downloading. */
+async function ensureSb(){
+  for(let i=0; i<25 && !sbClient(); i++) await new Promise(r=>setTimeout(r,200));
+  return !!sb;
+}
+
 async function initSupabase(){
-  if(!(window.supabase && window.supabase.createClient)){ setTimeout(initSupabase, 400); return; }
+  if(!sbClient()){ setTimeout(initSupabase, 400); return; }
   try{
-    sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     const { data } = await sb.auth.getSession();
     sbSession = (data && data.session) || null;
     sb.auth.onAuthStateChange((_evt, sess)=>{ sbSession = sess || null; });
@@ -1556,8 +1568,9 @@ function vNewRequest(){
         <input class="input" placeholder="e.g. Rooftop, 12th Main, near Metro" value="${esc(d.address)}" oninput="S.draft.address=this.value">
       </div>
       <div class="field">
-        <label>Your budget — ${inr(d.budget)}</label>
-        <input type="range" min="1000" max="40000" step="500" value="${d.budget}" style="width:100%;accent-color:var(--accent)" oninput="setDraft('budget',+this.value)">
+        <label>Your budget — <span id="budgetVal">${inr(d.budget)}</span></label>
+        <input type="range" min="1000" max="40000" step="500" value="${d.budget}" style="width:100%;accent-color:var(--accent)"
+          oninput="S.draft.budget=+this.value;setHtml('budgetVal',inr(+this.value))" onchange="save()">
         <div class="between xs muted2"><span>₹1,000</span><span>Suggested ${inr(est)}</span><span>₹40,000</span></div>
       </div>
       <div class="field"><label>Notes for the photographer</label>
@@ -2098,7 +2111,7 @@ function vCustProfile(){
         <button class="btn sm grow danger" onclick="logout()">Log out</button>
       </div>
     </div>
-    <button class="btn block mt16 danger" onclick="resetAll()">Reset demo data</button>
+    <button class="btn block mt16 danger" onclick="resetAll()">Clear data on this device</button>
   </div><div style="height:24px"></div>`;
 }
 
@@ -2247,7 +2260,7 @@ function vPgQuote(props){
     <div class="field mt20">
       <label>Your price — ${inr(q.price)} ${q.price>r.budget?'<span style="color:var(--red)">(over budget)</span>':'<span class="green">(within budget)</span>'}</label>
       <input type="range" min="500" max="40000" step="250" value="${q.price}" style="width:100%;accent-color:var(--accent)"
-        oninput="S.quoteDraft=Object.assign({eta:${q.eta},note:''},S.quoteDraft,{price:+this.value});save();render()">
+        oninput="S.quoteDraft=Object.assign({eta:${q.eta},note:''},S.quoteDraft,{price:+this.value})" onchange="save();render()">
       <div class="between xs muted2"><span>Suggested ${inr(base)}</span><span>You keep ${inr(Math.round(q.price*0.85))} (85%)</span></div>
     </div>
     <div class="field"><label>How soon can you be there?</label>
@@ -2646,20 +2659,73 @@ function pwFieldsHtml(needConfirm, label){
     <div class="pw-wrap">
       <input id="pw1" class="input ${weak?'pw-bad':''} ${PW.flash&&weak?'pw-flash':''}" type="${type}"
         autocomplete="new-password" placeholder="Create a strong password" value="${esc(PW.pw)}"
-        oninput="PW.pw=this.value;S.auth.err=null;render()">
-      <button type="button" class="pw-eye" onclick="PW.show=!PW.show;render()">${PW.show?'Hide':'Show'}</button>
+        oninput="pwInput('pw',this.value)">
+      <button type="button" class="pw-eye" onclick="pwToggleShow()">${PW.show?'Hide':'Show'}</button>
     </div>
-    <div class="pw-rules">
-      ${rules.map(r => `<div class="pw-rule ${r.ok?'ok':(live?'bad':'')} ${PW.flash&&!r.ok?'pw-flash-text':''}">${r.ok?'✓':(live?'✗':'•')} ${r.t}</div>`).join("")}
-    </div>
+    <div class="pw-rules" id="pwRules">${pwRulesInner()}</div>
   </div>
   ${needConfirm ? `<div class="field"><label>Confirm password</label>
     <input id="pw2" class="input ${showMismatch?'pw-bad':''} ${PW.flash&&showMismatch?'pw-flash':''}" type="${type}"
       autocomplete="new-password" placeholder="Type it again" value="${esc(PW.pw2)}"
-      oninput="PW.pw2=this.value;S.auth.err=null;render()">
-    ${showMismatch ? `<div class="xs mt6 ${PW.flash?'pw-flash-text':''}" style="color:var(--red)">✗ Passwords don't match</div>`
-      : (PW.pw2 && PW.pw2 === PW.pw ? `<div class="xs mt6" style="color:var(--green)">✓ Passwords match</div>` : "")}
+      oninput="pwInput('pw2',this.value)">
+    <div id="pwMatch">${pwMatchInner()}</div>
   </div>` : ""}`;
+}
+
+/* ============================================================
+   TYPING
+   Typing must never rebuild the field being typed into. On phones a
+   rebuilt field reopens the keyboard in its default layout, so every
+   digit flipped the keypad back to letters. These update only the bits
+   of the screen that depend on the value.
+   ============================================================ */
+function setHtml(id, html){ const n = el(id); if(n) n.innerHTML = html; }
+function setCls(id, cls, on){ const n = el(id); if(n) n.classList.toggle(cls, !!on); }
+function clearAuthErr(){ if(S.auth) S.auth.err = null; setHtml("authErr", ""); }
+
+function emailErrHtml(v){ return v && !EMAIL_RE.test(v) ? `<div class="xs mt6" style="color:var(--red)">Enter a valid email address.</div>` : ""; }
+function emailInput(key, v){ S.auth[key] = v.trim(); clearAuthErr(); setHtml("emailErr", ""); save(); }
+function emailBlur(key){ setHtml("emailErr", emailErrHtml(S.auth[key])); }
+
+function otpBoxesHtml(code){
+  return [0,1,2,3,4,5].map(i=>`<div class="otp-cell" style="width:46px;height:58px;border-radius:13px;display:grid;place-items:center;font-size:23px;font-weight:800;
+    background:var(--surface);border:1.5px solid ${code.length===i?"var(--accent)":"var(--border)"}">${esc(code[i]||"")}</div>`).join("");
+}
+function otpInput(v){
+  const code = String(v).replace(/\D/g, "").slice(0, 6);
+  S.auth.otp = code; clearAuthErr(); save();
+  const inp = el("authOtp"); if(inp && inp.value !== code) inp.value = code;
+  setHtml("otpBoxes", otpBoxesHtml(code));
+  const b = el("otpVerify"); if(b) b.disabled = !(code.length === 6 && !S.auth.busy);
+}
+
+function nameInput(v){
+  if(!S.auth.draft) return;
+  S.auth.draft.name = v; save();
+  const b = el("setupBtn"); if(b) b.disabled = v.trim().length <= 1;
+}
+
+function pwRulesInner(){
+  const live = PW.touched || PW.pw.length > 0;
+  return pwRules(PW.pw).map(r => `<div class="pw-rule ${r.ok?'ok':(live?'bad':'')} ${PW.flash&&!r.ok?'pw-flash-text':''}">${r.ok?'✓':(live?'✗':'•')} ${r.t}</div>`).join("");
+}
+function pwMatchInner(){
+  const mism = (PW.touched || PW.pw2.length > 0) && PW.pw2 !== PW.pw;
+  if(mism) return `<div class="xs mt6 ${PW.flash?'pw-flash-text':''}" style="color:var(--red)">✗ Passwords don't match</div>`;
+  if(PW.pw2 && PW.pw2 === PW.pw) return `<div class="xs mt6" style="color:var(--green)">✓ Passwords match</div>`;
+  return "";
+}
+function pwPaint(){
+  const live = PW.touched || PW.pw.length > 0;
+  setHtml("pwRules", pwRulesInner());
+  setCls("pw1", "pw-bad", live && !pwStrong());
+  if(el("pw2")){ setCls("pw2", "pw-bad", (PW.touched || PW.pw2.length > 0) && PW.pw2 !== PW.pw); setHtml("pwMatch", pwMatchInner()); }
+}
+function pwInput(k, v){ PW[k] = v; clearAuthErr(); pwPaint(); }
+function pwToggleShow(){
+  PW.show = !PW.show;
+  ["pw1","pw2","pwLogin"].forEach(id => { const n = el(id); if(n) n.type = PW.show ? "text" : "password"; });
+  document.querySelectorAll(".pw-eye").forEach(b => b.textContent = PW.show ? "Hide" : "Show");
 }
 
 function friendlyAuthError(e){
@@ -2691,16 +2757,16 @@ function vAuthPhone(){
     <div class="sm muted mt4">You'll confirm your email with a 6-digit code.</div>
 
     <div class="field mt16"><label>Email address</label>
-      <input id="authEmail" class="input" type="email" autocomplete="email" placeholder="you@example.com"
-        value="${esc(a.email)}" oninput="S.auth.email=this.value.trim();S.auth.err=null;save();render()">
-      ${a.email && !okEmail ? `<div class="xs mt6" style="color:var(--red)">Enter a valid email address.</div>` : ""}
+      <input id="authEmail" class="input" type="email" inputmode="email" autocomplete="email" autocapitalize="off" placeholder="you@example.com"
+        value="${esc(a.email)}" oninput="emailInput('email',this.value)" onblur="emailBlur('email')">
+      <div id="emailErr">${emailErrHtml(a.email)}</div>
     </div>
 
     ${pwFieldsHtml(true)}
 
     <button class="btn primary block mt8" ${a.busy?"disabled":""} onclick="submitSignup()">
       ${a.busy ? "Creating account…" : "Create account"}</button>
-    ${a.err ? `<div class="xs center mt12" style="color:var(--red)">${esc(a.err)}</div>` : ""}
+    <div id="authErr">${a.err ? `<div class="xs center mt12" style="color:var(--red)">${esc(a.err)}</div>` : ""}</div>
 
     <div class="xs muted2 center mt12">Phone sign-up is coming soon.</div>
     <div class="center mt12">
@@ -2714,7 +2780,7 @@ async function submitSignup(){
   const email = (a.email || "").trim().toLowerCase();
   if(!EMAIL_RE.test(email)){ S.auth.err = "Enter a valid email address."; save(); render(); return; }
   if(pwBlock(true)) return;
-  if(!sb){ S.auth.err = "Can't reach the server. Check your connection."; save(); render(); return; }
+  if(!(await ensureSb())){ S.auth.err = "Couldn't connect to SnapPro. Check your internet and refresh the page."; save(); render(); return; }
 
   S.auth.busy = true; S.auth.err = null; save(); render();
   const { data, error } = await sb.auth.signUp({ email, password: PW.pw });
@@ -2743,7 +2809,7 @@ async function sendOtp(){ return resendCode(); }
 
 async function resendCode(){
   const a = S.auth;
-  if(!sb || !a.email) return;
+  if(!a.email || !(await ensureSb())) return;
   S.auth.busy = true; S.auth.err = null; save(); render();
   const res = a.mode === "reset"
     ? await sb.auth.signInWithOtp({ email: a.email, options: { shouldCreateUser: false } })
@@ -2767,19 +2833,16 @@ function vAuthOtp(){
     <div class="sm muted mt4">We sent a 6-digit code to ${target}.
       ${a.busy ? '<span class="muted2">Sending…</span>' : `· <button class="accent bold" onclick="resendCode()">Resend</button>`}</div>
 
-    <div class="row gap6 mt20" style="justify-content:center">
-      ${[0,1,2,3,4,5].map(i=>`<div class="otp-cell" style="width:46px;height:58px;border-radius:13px;display:grid;place-items:center;font-size:23px;font-weight:800;
-        background:var(--surface);border:1.5px solid ${code.length===i?"var(--accent)":"var(--border)"}">${esc(code[i]||"")}</div>`).join("")}
-    </div>
+    <div class="row gap6 mt20" id="otpBoxes" style="justify-content:center">${otpBoxesHtml(code)}</div>
 
     <input id="authOtp" class="input mt16" inputmode="numeric" maxlength="6" placeholder="6-digit code"
       style="text-align:center;letter-spacing:8px;font-size:20px" autocomplete="one-time-code"
-      value="${esc(code)}" oninput="S.auth.otp=this.value.replace(/\\D/g,'').slice(0,6);S.auth.err=null;save();render()">
+      value="${esc(code)}" oninput="otpInput(this.value)">
 
-    <button class="btn primary block mt12" ${ok?"":"disabled"} onclick="verifyOtp()">
+    <button id="otpVerify" class="btn primary block mt12" ${ok?"":"disabled"} onclick="verifyOtp()">
       ${a.busy ? "Checking…" : icon("cam",16,"#fff") + " Verify &amp; continue"}</button>
 
-    ${a.err?`<div class="xs center mt12" style="color:var(--red)">${esc(a.err)}</div>`:""}
+    <div id="authErr">${a.err?`<div class="xs center mt12" style="color:var(--red)">${esc(a.err)}</div>`:""}</div>
     <div class="xs muted2 center mt16">Codes expire after an hour. Nothing arriving? Check spam, or resend.</div>
   </div>`;
 }
@@ -2788,7 +2851,7 @@ async function verifyOtp(){
   const a = S.auth;
   const code = String(a.otp || "").trim();
   if(code.length !== 6){ S.auth.err = "Enter the 6-digit code."; save(); render(); return; }
-  if(!sb){ S.auth.err = "Can't reach the server."; save(); render(); return; }
+  if(!(await ensureSb())){ S.auth.err = "Couldn't connect to SnapPro. Check your internet and refresh the page."; save(); render(); return; }
 
   S.auth.busy = true; S.auth.err = null; save(); render();
   let { data, error } = await sb.auth.verifyOtp({ email: a.email, token: code, type: "email" });
@@ -2814,7 +2877,7 @@ async function verifyOtp(){
 /* Local account id must equal the Supabase user id, or row level security
    rejects every write this person makes. */
 async function rebuildLocalAccount(uid, email){
-  if(!sb) return null;
+  if(!(await ensureSb())) return null;
   const { data: prof } = await sb.from("profiles").select("name,role,area,phone").eq("id", uid).maybeSingle();
   if(!prof) return null;
   const name = prof.name || email.split("@")[0];
@@ -2874,13 +2937,13 @@ function vAuthCustSetup(){
     <div class="h2 mt8">What should we call you?</div>
     <div class="sm muted mt8">Photographers see this name when you send a request.</div>
     <div class="field mt20"><label>Your name</label>
-      <input id="setupName" class="input" placeholder="e.g. John Doe" value="${esc(d.name)}"
-        oninput="S.auth.draft.name=this.value;save();render()"></div>
+      <input id="setupName" class="input" autocapitalize="words" autocomplete="name" placeholder="e.g. John Doe" value="${esc(d.name)}"
+        oninput="nameInput(this.value)"></div>
     <div class="field"><label>Where are you based?</label>
       <select class="input" onchange="S.auth.draft.area=this.value;save()">
         ${AREAS.map(x=>`<option ${d.area===x?"selected":""}>${x}</option>`).join("")}</select>
       <div class="xs muted2 mt8">We'll ping photographers within ~10 km of here. You can change it any time.</div></div>
-    <button class="btn primary block mt8" ${ok?"":"disabled"} onclick="createCustomerAccount()">Create account</button>
+    <button id="setupBtn" class="btn primary block mt8" ${ok?"":"disabled"} onclick="createCustomerAccount()">Create account</button>
   </div>`;
 }
 
@@ -2908,14 +2971,14 @@ function vAuthPgSetup(){
       <div class="h2">Tell customers who you are</div>
       <div class="sm muted mt8">This is the top of your public profile.</div>
       <div class="field mt20"><label>Your name</label>
-        <input id="setupName" class="input" placeholder="e.g. Aarav Mehta" value="${esc(d.name)}" oninput="S.auth.draft.name=this.value;save();render()"></div>
+        <input id="setupName" class="input" autocapitalize="words" autocomplete="name" placeholder="e.g. Aarav Mehta" value="${esc(d.name)}" oninput="nameInput(this.value)"></div>
       <div class="field"><label>Short bio</label>
         <textarea class="input" placeholder="e.g. Wedding & candid storyteller. I shoot the moments between the poses."
           oninput="S.auth.draft.bio=this.value">${esc(d.bio)}</textarea></div>
-      <div class="field"><label>Years of experience — ${d.years}</label>
+      <div class="field"><label>Years of experience — <span id="yrsVal">${d.years}</span></label>
         <input type="range" min="0" max="20" value="${d.years}" style="width:100%;accent-color:var(--accent)"
-          oninput="S.auth.draft.years=+this.value;save();render()"></div>
-      <button class="btn primary block" ${canNext?"":"disabled"} onclick="S.auth.draft.step=2;save();render()">Continue</button>
+          oninput="S.auth.draft.years=+this.value;setHtml('yrsVal',this.value)" onchange="save()"></div>
+      <button id="setupBtn" class="btn primary block" ${canNext?"":"disabled"} onclick="S.auth.draft.step=2;save();render()">Continue</button>
 
     `:step===2?`
       <div class="h2">What do you shoot?</div>
@@ -2934,9 +2997,9 @@ function vAuthPgSetup(){
       <div class="field mt20"><label>Base area</label>
         <select class="input" onchange="S.auth.draft.area=this.value;save()">
           ${AREAS.map(x=>`<option ${d.area===x?"selected":""}>${x}</option>`).join("")}</select></div>
-      <div class="field"><label>Your rate vs market average — ${Math.round(d.priceMult*100)}%</label>
+      <div class="field"><label>Your rate vs market average — <span id="pmVal">${Math.round(d.priceMult*100)}</span>%</label>
         <input type="range" min="0.6" max="1.6" step="0.05" value="${d.priceMult}" style="width:100%;accent-color:var(--accent)"
-          oninput="S.auth.draft.priceMult=+this.value;save();render()">
+          oninput="S.auth.draft.priceMult=+this.value;setHtml('pmVal',Math.round(this.value*100))" onchange="save();render()">
         <div class="between xs muted2"><span>Budget</span><span>Market rate</span><span>Premium</span></div></div>
       <div class="card" style="background:var(--surface-2)">
         <div class="sec-title">Your starting prices</div>
@@ -2999,17 +3062,17 @@ function vAuthLogin(){
     </div>
 
     <div class="field"><label>Email address</label>
-      <input id="loginEmail" class="input" type="email" autocomplete="email" placeholder="you@example.com"
-        value="${esc(email)}" oninput="S.auth.loginEmail=this.value.trim();S.auth.err=null;save();render()">
-      ${email && !okEmail ? `<div class="xs mt6" style="color:var(--red)">Enter a valid email address.</div>` : ""}
+      <input id="loginEmail" class="input" type="email" inputmode="email" autocomplete="email" autocapitalize="off" placeholder="you@example.com"
+        value="${esc(email)}" oninput="emailInput('loginEmail',this.value)" onblur="emailBlur('loginEmail')">
+      <div id="emailErr">${emailErrHtml(email)}</div>
     </div>
 
     <div class="field"><label>Password</label>
       <div class="pw-wrap">
         <input id="pwLogin" class="input ${empty?'pw-bad':''} ${PW.flash&&empty?'pw-flash':''}" type="${PW.show?'text':'password'}"
           autocomplete="current-password" placeholder="Your password" value="${esc(PW.pw)}"
-          oninput="PW.pw=this.value;S.auth.err=null;render()" onkeydown="if(event.key==='Enter')submitLogin()">
-        <button type="button" class="pw-eye" onclick="PW.show=!PW.show;render()">${PW.show?'Hide':'Show'}</button>
+          oninput="PW.pw=this.value;clearAuthErr();setCls('pwLogin','pw-bad',false)" onkeydown="if(event.key==='Enter')submitLogin()">
+        <button type="button" class="pw-eye" onclick="pwToggleShow()">${PW.show?'Hide':'Show'}</button>
       </div>
       <div class="row mt8" style="justify-content:flex-end">
         <button class="xs accent bold" onclick="S.auth.email=S.auth.loginEmail||'';pwReset();authGo('reset')">Forgot password?</button>
@@ -3018,7 +3081,7 @@ function vAuthLogin(){
 
     <button class="btn primary block mt8" ${a.busy?"disabled":""} onclick="submitLogin()">
       ${a.busy ? "Signing in…" : icon("cam",18,"#fff") + " Log in"}</button>
-    ${a.err ? `<div class="xs center mt12" style="color:var(--red);line-height:1.5">${esc(a.err)}</div>` : ""}
+    <div id="authErr">${a.err ? `<div class="xs center mt12" style="color:var(--red);line-height:1.5">${esc(a.err)}</div>` : ""}</div>
 
     ${S.accounts.some(x=>x.email) ? `
       <div class="divider mt16"></div>
@@ -3042,7 +3105,7 @@ async function submitLogin(){
     setTimeout(()=>{ PW.flash = false; render(); }, 850);
     return;
   }
-  if(!sb){ S.auth.err = "Can't reach the server."; save(); render(); return; }
+  if(!(await ensureSb())){ S.auth.err = "Couldn't connect to SnapPro. Check your internet and refresh the page."; save(); render(); return; }
 
   S.auth.busy = true; S.auth.err = null; save(); render();
   const { data, error } = await sb.auth.signInWithPassword({ email, password: PW.pw });
@@ -3077,20 +3140,20 @@ function vAuthReset(){
     <div class="h2 mt8">Reset your password</div>
     <div class="sm muted mt4">Enter your email. We'll send a 6-digit code, then you'll choose a new password.</div>
     <div class="field mt16"><label>Email address</label>
-      <input id="resetEmail" class="input" type="email" autocomplete="email" placeholder="you@example.com"
-        value="${esc(a.email)}" oninput="S.auth.email=this.value.trim();S.auth.err=null;save();render()"
+      <input id="resetEmail" class="input" type="email" inputmode="email" autocomplete="email" autocapitalize="off" placeholder="you@example.com"
+        value="${esc(a.email)}" oninput="emailInput('email',this.value)" onblur="emailBlur('email')"
         onkeydown="if(event.key==='Enter')sendResetCode()">
-      ${a.email && !okEmail ? `<div class="xs mt6" style="color:var(--red)">Enter a valid email address.</div>` : ""}
+      <div id="emailErr">${emailErrHtml(a.email)}</div>
     </div>
     <button class="btn primary block" ${a.busy?"disabled":""} onclick="sendResetCode()">${a.busy?"Sending…":"Email me a code"}</button>
-    ${a.err ? `<div class="xs center mt12" style="color:var(--red)">${esc(a.err)}</div>` : ""}
+    <div id="authErr">${a.err ? `<div class="xs center mt12" style="color:var(--red)">${esc(a.err)}</div>` : ""}</div>
   </div>`;
 }
 
 async function sendResetCode(){
   const email = (S.auth.email || "").trim().toLowerCase();
   if(!EMAIL_RE.test(email)){ S.auth.err = "Enter a valid email address."; save(); render(); return; }
-  if(!sb){ S.auth.err = "Can't reach the server."; save(); render(); return; }
+  if(!(await ensureSb())){ S.auth.err = "Couldn't connect to SnapPro. Check your internet and refresh the page."; save(); render(); return; }
   S.auth.busy = true; S.auth.err = null; save(); render();
   const { error } = await sb.auth.signInWithOtp({ email, options: { shouldCreateUser: false } });
   S.auth.busy = false;
@@ -3108,13 +3171,13 @@ function vAuthNewPw(){
     <div class="sm muted mt4">Your email is confirmed. Pick a password you'll remember.</div>
     ${pwFieldsHtml(true, "New password")}
     <button class="btn primary block mt8" ${a.busy?"disabled":""} onclick="saveNewPassword()">${a.busy?"Saving…":"Save password"}</button>
-    ${a.err ? `<div class="xs center mt12" style="color:var(--red)">${esc(a.err)}</div>` : ""}
+    <div id="authErr">${a.err ? `<div class="xs center mt12" style="color:var(--red)">${esc(a.err)}</div>` : ""}</div>
   </div>`;
 }
 
 async function saveNewPassword(){
   if(pwBlock(true)) return;
-  if(!sb){ S.auth.err = "Can't reach the server."; save(); render(); return; }
+  if(!(await ensureSb())){ S.auth.err = "Couldn't connect to SnapPro. Check your internet and refresh the page."; save(); render(); return; }
   S.auth.busy = true; S.auth.err = null; save(); render();
   const { data, error } = await sb.auth.updateUser({ password: PW.pw });
   S.auth.busy = false;
@@ -3282,6 +3345,7 @@ S = load();
 if(!S.nav) S.nav={customer:"home",photographer:"home"};
 if(!S.stack) S.stack=[];
 render();
+initSupabase();   /* was never called: the customer site had no Supabase connection at all */
 
 setInterval(()=>{ el("clock").textContent = clockStr(); }, 10000);
 el("clock").textContent = clockStr();
