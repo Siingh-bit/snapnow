@@ -11,7 +11,8 @@ shoot.
 
 | Path | What it is |
 | --- | --- |
-| `index.html` | The app for customers and photographers (single file, no build step) |
+| `index.html` | The home page at snappro.in: what SnapPro is, with sign-up and log-in links |
+| `app.html` | The app for customers and photographers (opens at `#signup`, `#join` or `#login`) |
 | `admin.html` | Staff console at snappro.in/admin.html (super admin, admin, manager) |
 | `supabase/snappro.sql` | Complete database set-up: tables, security rules, triggers, storage, invite emails. Safe to run again. |
 | `.github/workflows/deploy.yml` | Uploads the site to Hostinger on every push to `main` |
@@ -37,6 +38,6 @@ shoot.
 
 ## Deploying
 
-Push to `main`. The GitHub Action uploads `index.html` and `admin.html` to Hostinger. The
+Push to `main`. The GitHub Action uploads `index.html`, `app.html` and `admin.html` to Hostinger. The
 `supabase/` folder is not uploaded; run `supabase/snappro.sql` in the Supabase SQL Editor when it
 changes.

@@ -3,2785 +3,323 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>SnapPro — Book a photographer near you | snappro.in</title>
-<meta name="description" content="Book a photographer near you. Post your shoot, get quotes from photographers in your city, compare portfolios and prices, and book.">
-<meta name="theme-color" content="#0a0a0f">
+<title>SnapPro — Book a photographer near you</title>
+<meta name="description" content="Tell SnapPro what you're shooting and photographers in your city send you their price. See their work, pick one, pay after the shoot.">
+<meta name="theme-color" content="#f4f0e8">
 <link rel="canonical" href="https://snappro.in/">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://snappro.in/">
 <meta property="og:title" content="SnapPro — Book a photographer near you">
-<meta property="og:description" content="Book a photographer near you. Post your shoot, get quotes from photographers in your city, compare portfolios and prices, and book.">
+<meta property="og:description" content="Tell us what you're shooting. Photographers in your city send their price. Pick one, pay after the shoot.">
+<meta property="og:image" content="https://images.unsplash.com/photo-1647934786533-f3c15896410b?auto=format&fit=crop&w=1200&h=630&q=70">
 <meta property="og:site_name" content="SnapPro">
-<meta name="twitter:card" content="summary">
-<meta name="twitter:title" content="SnapPro — Book a photographer near you">
-<meta name="twitter:description" content="Book a photographer near you. Post your shoot, get quotes from photographers in your city, compare portfolios and prices, and book.">
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%23ff5a1f'/%3E%3Cpath d='M74 38H62l-4-6H42l-4 6H26a4 4 0 0 0-4 4v26a4 4 0 0 0 4 4h48a4 4 0 0 0 4-4V42a4 4 0 0 0-4-4z' fill='none' stroke='%23fff' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='50' cy='52' r='9' fill='none' stroke='%23fff' stroke-width='3.5'/%3E%3C/svg%3E">
-<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%23ff5a1f'/%3E%3Cpath d='M74 38H62l-4-6H42l-4 6H26a4 4 0 0 0-4 4v26a4 4 0 0 0 4 4h48a4 4 0 0 0 4-4V42a4 4 0 0 0-4-4z' fill='none' stroke='%23fff' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='50' cy='52' r='9' fill='none' stroke='%23fff' stroke-width='3.5'/%3E%3C/svg%3E">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='18' fill='%231d1a16'/%3E%3Ccircle cx='50' cy='52' r='20' fill='none' stroke='%23fffdf8' stroke-width='7'/%3E%3Ccircle cx='74' cy='28' r='6' fill='%23c8471d'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://images.unsplash.com">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
 <style>
-
-/* ============================================================
-   SnapPro — design system
-   ============================================================ */
 :root{
-  --bg:#0a0a0f;
-  --surface:#14141c;
-  --surface-2:#1c1c26;
-  --surface-3:#252533;
-  --border:#2b2b3a;
-  --border-soft:#22222e;
-  --text:#f4f4f7;
-  --muted:#8b8b9e;
-  --muted-2:#61617a;
-  --accent:#ff5a1f;
-  --accent-soft:rgba(255,90,31,.14);
-  --accent-2:#ffc857;
-  --green:#28c76f;
-  --green-soft:rgba(40,199,111,.14);
-  --blue:#4d8dff;
-  --red:#ff4d5e;
-  --purple:#a67cff;
-  --r-sm:10px; --r-md:16px; --r-lg:22px; --r-xl:28px;
-  --shadow:0 18px 50px -12px rgba(0,0,0,.75);
-  --ff:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  --bg:#f4f0e8; --paper:#fffdf8; --ink:#1d1a16; --muted:#6d655a; --faint:#9a9184; --line:#ddd5c7;
+  --accent:#c8471d; --serif:'Instrument Serif',Georgia,serif; --sans:'Instrument Sans',-apple-system,'Segoe UI',Roboto,sans-serif;
 }
-*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
-html,body{margin:0;padding:0;height:100%}
-body{
-  background:
-    radial-gradient(1000px 700px at 80% -10%, rgba(255,90,31,.10), transparent 60%),
-    radial-gradient(900px 600px at 10% 110%, rgba(166,124,255,.10), transparent 60%),
-    var(--bg);
-  color:var(--text);
-  font-family:var(--ff);
-  font-size:15px;
-  line-height:1.45;
-  -webkit-font-smoothing:antialiased;
-}
-button{font-family:inherit;font-size:inherit;color:inherit;border:0;background:none;cursor:pointer}
-input,select,textarea{font-family:inherit;font-size:inherit;color:inherit}
-::-webkit-scrollbar{width:0;height:0}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:17px;line-height:1.55;-webkit-font-smoothing:antialiased}
+a{color:inherit}
+img{display:block;max-width:100%}
+.wrap{max-width:1180px;margin:0 auto;padding:0 28px}
+@media (max-width:640px){.wrap{padding:0 20px}}
 
-/* ---------- generic ---------- */
-.pad{padding:16px 18px}
-.row{display:flex;align-items:center;gap:10px}
-.between{display:flex;align-items:center;justify-content:space-between;gap:10px}
-.grow{flex:1;min-width:0}
-.stack{display:flex;flex-direction:column}
-.gap4{gap:4px}.gap6{gap:6px}.gap8{gap:8px}.gap10{gap:10px}.gap12{gap:12px}.gap16{gap:16px}
-.mt2{margin-top:2px}.mt4{margin-top:4px}.mt6{margin-top:6px}.mt8{margin-top:8px}.mt10{margin-top:10px}.mt12{margin-top:12px}.mt14{margin-top:14px}.mt16{margin-top:16px}.mt20{margin-top:20px}.mt24{margin-top:24px}
-.mb4{margin-bottom:4px}.mb6{margin-bottom:6px}.mb8{margin-bottom:8px}.mb12{margin-bottom:12px}.mb14{margin-bottom:14px}.mb16{margin-bottom:16px}.mb20{margin-bottom:20px}
-.h1{font-size:24px;font-weight:800;letter-spacing:-.7px;line-height:1.2}
-.h2{font-size:18px;font-weight:750;letter-spacing:-.4px}
-.h3{font-size:15px;font-weight:700;letter-spacing:-.2px}
-.sm{font-size:12.5px}
-.xs{font-size:11px}
-.muted{color:var(--muted)}
-.muted2{color:var(--muted-2)}
-.accent{color:var(--accent)}
-.green{color:var(--green)}
-.bold{font-weight:700}
-.center{text-align:center}
-.truncate{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.sec-title{font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted-2);font-weight:700;margin-bottom:10px}
-.divider{height:1px;background:var(--border-soft);margin:14px 0}
+/* nav */
+nav{position:sticky;top:0;z-index:10;background:rgba(244,240,232,.92);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-bottom:1px solid transparent;transition:border-color .2s}
+nav.scrolled{border-bottom-color:var(--line)}
+.nav{display:flex;align-items:center;gap:28px;height:68px}
+.logo{font-family:var(--serif);font-size:28px;text-decoration:none;letter-spacing:-.3px;margin-right:auto;display:flex;align-items:center;gap:8px}
+.logo i{width:9px;height:9px;border-radius:50%;background:var(--accent);display:inline-block;transform:translateY(-8px)}
+.nav a.l{font-size:15px;text-decoration:none;color:var(--muted)}
+.nav a.l:hover{color:var(--ink)}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:13px 22px;border-radius:8px;font-weight:600;font-size:16px;text-decoration:none;border:1px solid var(--ink);transition:background .15s,color .15s}
+.btn.dark{background:var(--ink);color:#fff}
+.btn.dark:hover{background:#000}
+.btn.line{background:transparent}
+.btn.line:hover{background:var(--ink);color:#fff}
+.btn.small{padding:9px 16px;font-size:15px}
+@media (max-width:820px){.nav a.l.hide{display:none}}
+@media (max-width:480px){.nav{gap:16px}.nav a.l.login{display:none}}
 
-.card{background:var(--surface);border:1px solid var(--border-soft);border-radius:var(--r-md);padding:14px}
-.card.tap{transition:.15s;cursor:pointer}
-.card.tap:active{transform:scale(.985)}
-.card.tap:hover{border-color:var(--border)}
+/* hero */
+.hero{display:grid;grid-template-columns:1.05fr .95fr;gap:56px;align-items:center;padding:56px 0 72px}
+.kicker{font-size:14px;color:var(--muted);display:flex;align-items:center;gap:10px}
+.kicker::before{content:"";width:28px;height:1px;background:var(--ink)}
+h1{font-family:var(--serif);font-weight:400;font-size:clamp(46px,6.4vw,86px);line-height:.98;letter-spacing:-1.5px;margin:22px 0 0}
+h1 em{font-style:italic;color:var(--accent)}
+.hero p.big{font-size:19px;color:var(--muted);max-width:30em;margin:26px 0 0}
+.cta{display:flex;flex-wrap:wrap;gap:12px;margin-top:32px}
+.fine{font-size:14px;color:var(--faint);margin-top:18px}
+.hero-photo{position:relative}
+.hero-photo img{width:100%;aspect-ratio:4/5;object-fit:cover;border-radius:4px}
+.hero-photo figcaption{position:absolute;right:-22px;bottom:12px;transform:rotate(-90deg);transform-origin:right bottom;font-size:11px;color:var(--faint);white-space:nowrap}
+.stamp{position:absolute;left:-28px;top:34px;background:var(--paper);border:1px solid var(--line);padding:14px 16px;border-radius:6px;max-width:220px;box-shadow:0 12px 30px -18px rgba(40,30,20,.5)}
+.stamp b{display:block;font-size:14px}
+.stamp span{font-size:13px;color:var(--muted)}
+@media (max-width:900px){.hero{grid-template-columns:1fr;gap:36px;padding:32px 0 56px}.hero-photo{max-width:520px}.stamp{left:12px;top:auto;bottom:-22px}.hero-photo figcaption{display:none}}
 
-.btn{
-  display:inline-flex;align-items:center;justify-content:center;gap:8px;
-  padding:14px 18px;border-radius:15px;font-weight:700;font-size:15px;
-  background:var(--surface-2);border:1px solid var(--border);transition:.15s;
-}
-.btn:active{transform:scale(.98)}
-.btn.primary{background:linear-gradient(135deg,var(--accent),#ff7a3d);border-color:transparent;color:#fff;box-shadow:0 10px 26px -10px rgba(255,90,31,.85)}
-.btn.green{background:linear-gradient(135deg,#22b563,var(--green));border-color:transparent;color:#fff}
-.btn.ghost{background:transparent}
-.btn.danger{border-color:rgba(255,77,94,.4);color:var(--red)}
-.btn.block{width:100%}
-.btn.sm{padding:9px 14px;font-size:13px;border-radius:12px}
-.btn[disabled]{opacity:.4;pointer-events:none}
+/* photo strip */
+.strip{display:grid;grid-template-columns:1.3fr 1fr 1fr 1.3fr;gap:10px}
+.strip figure{margin:0}
+.strip img{width:100%;height:340px;object-fit:cover;border-radius:3px}
+.strip figcaption{font-size:14px;margin-top:8px;display:flex;justify-content:space-between;color:var(--muted)}
+.strip figcaption b{color:var(--ink);font-weight:500}
+@media (max-width:820px){.strip{grid-template-columns:1fr 1fr}.strip img{height:220px}}
 
-.chip{display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:999px;background:var(--surface-2);border:1px solid var(--border);font-size:11.5px;font-weight:600;color:var(--muted)}
-.chip.accent{background:var(--accent-soft);border-color:rgba(255,90,31,.3);color:#ffab86}
-.chip.green{background:var(--green-soft);border-color:rgba(40,199,111,.3);color:#5fe0a0}
-.chip.blue{background:rgba(77,141,255,.14);border-color:rgba(77,141,255,.3);color:#8fb6ff}
-.chip.red{background:rgba(255,77,94,.14);border-color:rgba(255,77,94,.3);color:#ff8f9b}
-.chip.purple{background:rgba(166,124,255,.14);border-color:rgba(166,124,255,.3);color:#c4a6ff}
+section{padding:96px 0}
+section.tight{padding:64px 0}
+.label{font-size:14px;color:var(--muted);margin:0 0 14px}
+h2{font-family:var(--serif);font-weight:400;font-size:clamp(36px,4.4vw,58px);line-height:1.02;letter-spacing:-.8px;margin:0}
+h2 em{font-style:italic}
 
-.field{margin-bottom:14px}
-.field label{display:block;font-size:12px;font-weight:700;color:var(--muted);margin-bottom:7px}
-.input,select.input,textarea.input{
-  width:100%;padding:13px 14px;border-radius:13px;
-  background:var(--surface);border:1px solid var(--border);
-  outline:none;transition:.15s;
-}
-.input:focus{border-color:var(--accent);background:var(--surface-2)}
-textarea.input{resize:none;min-height:76px;line-height:1.5}
-select.input{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%238b8b9e' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center}
+/* how it works */
+.how{display:grid;grid-template-columns:.8fr 1.2fr;gap:64px}
+.steps{list-style:none;margin:0;padding:0;counter-reset:s}
+.steps li{display:grid;grid-template-columns:64px 1fr;gap:10px;padding:26px 0;border-top:1px solid var(--line)}
+.steps li:last-child{border-bottom:1px solid var(--line)}
+.steps li::before{counter-increment:s;content:counter(s,decimal-leading-zero);font-family:var(--serif);font-size:34px;line-height:1;color:var(--accent)}
+.steps h3{margin:0;font-size:20px;font-weight:600;letter-spacing:-.2px}
+.steps p{margin:6px 0 0;color:var(--muted)}
+@media (max-width:820px){.how{grid-template-columns:1fr;gap:28px}}
 
-.topbar{
-  position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:12px;
-  padding:14px 16px;background:rgba(10,10,15,.9);backdrop-filter:blur(14px);
-  border-bottom:1px solid var(--border-soft);
-}
-.iconbtn{width:36px;height:36px;flex:0 0 36px;border-radius:12px;display:grid;place-items:center;background:var(--surface);border:1px solid var(--border-soft);transition:.15s}
-.iconbtn:hover{background:var(--surface-2)}
+/* why */
+.why{background:var(--ink);color:#f4f0e8}
+.why .inner{display:grid;grid-template-columns:1fr 1fr;gap:64px;align-items:end}
+.why h2{color:#fff}
+.why p{color:#cfc7ba;font-size:19px;margin:0 0 18px}
+.why p:last-child{margin:0}
+.why .sig{font-family:var(--serif);font-style:italic;font-size:22px;color:#fff}
+@media (max-width:820px){.why .inner{grid-template-columns:1fr;gap:28px}}
 
-.avatar{border-radius:50%;display:grid;place-items:center;font-weight:800;color:#fff;flex:0 0 auto;position:relative;overflow:hidden}
-.avatar span{position:relative;z-index:2;text-shadow:0 1px 3px rgba(0,0,0,.35)}
-.av-40{width:40px;height:40px;font-size:14px}
-.av-48{width:48px;height:48px;font-size:16px}
-.av-56{width:56px;height:56px;font-size:18px}
-.av-72{width:72px;height:72px;font-size:24px}
-.online-dot{position:absolute;bottom:0;right:0;width:13px;height:13px;border-radius:50%;background:var(--green);border:2.5px solid var(--surface);z-index:3}
+/* photographers */
+.pro{display:grid;grid-template-columns:1fr 1fr;gap:64px;align-items:center}
+.pro img{width:100%;aspect-ratio:5/4;object-fit:cover;border-radius:3px}
+.pro ul{list-style:none;padding:0;margin:26px 0 30px}
+.pro li{padding:12px 0;border-top:1px solid var(--line);display:flex;gap:14px}
+.pro li:last-child{border-bottom:1px solid var(--line)}
+.pro li b{min-width:150px;font-weight:600}
+.pro li span{color:var(--muted)}
+@media (max-width:820px){.pro{grid-template-columns:1fr;gap:32px}.pro li{flex-direction:column;gap:2px}}
 
-/* ---------- urgency picker ---------- */
-.urgency{display:grid;grid-template-columns:repeat(2,1fr);gap:9px}
-.u-card{
-  padding:13px;border-radius:15px;border:1.5px solid var(--border);
-  background:var(--surface);text-align:left;transition:.15s;position:relative;overflow:hidden;
-}
-.u-card:active{transform:scale(.98)}
-.u-card.on{border-color:var(--accent);background:var(--accent-soft)}
-.u-card .u-em{font-size:19px;line-height:1}
-.u-card .u-t{font-weight:750;font-size:14px;margin-top:7px}
-.u-card .u-s{font-size:11px;color:var(--muted-2);margin-top:1px}
-.u-card .u-surge{position:absolute;top:9px;right:9px;font-size:9.5px;font-weight:800;padding:2px 6px;border-radius:6px;background:rgba(255,77,94,.18);color:#ff8f9b}
+/* shoot types */
+.types{columns:3;column-gap:40px;margin-top:34px;padding:0;list-style:none}
+.types li{font-family:var(--serif);font-size:30px;line-height:1.35;break-inside:avoid}
+.types li small{font-family:var(--sans);font-size:14px;color:var(--faint);margin-left:8px}
+@media (max-width:820px){.types{columns:2}.types li{font-size:24px}}
 
-/* ---------- radar / matching ---------- */
-.radar{position:relative;height:190px;display:grid;place-items:center;margin:6px 0 4px}
-.radar .ring{position:absolute;border:1.5px solid rgba(255,90,31,.4);border-radius:50%;animation:pulse 2.6s ease-out infinite}
-@keyframes pulse{0%{width:60px;height:60px;opacity:.9}100%{width:230px;height:230px;opacity:0}}
-.radar .core{width:66px;height:66px;border-radius:50%;background:linear-gradient(135deg,var(--accent),#ff8a3d);display:grid;place-items:center;box-shadow:0 0 40px rgba(255,90,31,.55);z-index:2}
-.radar .sat{position:absolute;width:30px;height:30px;border-radius:50%;border:2px solid var(--surface);z-index:3;display:grid;place-items:center;font-size:10px;font-weight:800;color:#fff;animation:fadein .5s ease}
-@keyframes fadein{from{opacity:0;transform:scale(.3)}to{opacity:1;transform:scale(1)}}
+/* faq */
+.faq{display:grid;grid-template-columns:.8fr 1.2fr;gap:64px}
+details{border-top:1px solid var(--line);padding:20px 0}
+details:last-child{border-bottom:1px solid var(--line)}
+summary{cursor:pointer;font-size:19px;font-weight:500;list-style:none;display:flex;justify-content:space-between;gap:20px}
+summary::-webkit-details-marker{display:none}
+summary::after{content:"+";font-size:24px;line-height:1;color:var(--muted);transition:transform .2s}
+details[open] summary::after{transform:rotate(45deg)}
+details p{margin:10px 0 0;color:var(--muted);max-width:38em}
+@media (max-width:820px){.faq{grid-template-columns:1fr;gap:20px}}
 
-.offer{animation:slideup .35s cubic-bezier(.2,.9,.3,1)}
-@keyframes slideup{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+/* closing */
+.closing{text-align:center;padding:110px 0}
+.closing h2{max-width:14em;margin:0 auto}
+.closing .cta{justify-content:center}
 
-/* ---------- chat ---------- */
-.chat-scroll{display:flex;flex-direction:column;gap:9px;padding:16px}
-.bub{max-width:76%;padding:10px 13px;border-radius:16px;font-size:13.5px;line-height:1.45;word-wrap:break-word}
-.bub.them{background:var(--surface-2);border:1px solid var(--border-soft);align-self:flex-start;border-bottom-left-radius:5px}
-.bub.me{background:linear-gradient(135deg,var(--accent),#ff7a3d);color:#fff;align-self:flex-end;border-bottom-right-radius:5px}
-.bub-time{font-size:9.5px;opacity:.65;margin-top:3px;text-align:right}
-.chat-input{display:flex;gap:8px;padding:10px 12px;border-top:1px solid var(--border-soft);background:rgba(10,10,15,.95)}
-.chat-input input{flex:1;padding:12px 14px;border-radius:999px;background:var(--surface);border:1px solid var(--border);outline:none}
-.chat-input input:focus{border-color:var(--accent)}
+footer{border-top:1px solid var(--line);padding:36px 0 44px;font-size:14px;color:var(--muted)}
+.foot{display:flex;flex-wrap:wrap;justify-content:space-between;gap:20px}
+.foot a{text-decoration:none}.foot a:hover{color:var(--ink)}
+.foot .links{display:flex;gap:22px;flex-wrap:wrap}
+.credits{font-size:12.5px;color:var(--faint);margin-top:20px}
+.credits a{color:var(--faint)}
 
-#toasts{position:fixed;top:calc(12px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);width:min(520px,calc(100% - 24px));z-index:90;display:flex;flex-direction:column;gap:8px;pointer-events:none}
-.toast{
-  background:var(--surface-2);border:1px solid var(--border);border-radius:15px;
-  padding:12px 14px;display:flex;gap:11px;align-items:flex-start;
-  box-shadow:0 14px 32px -10px rgba(0,0,0,.85);animation:tin .3s cubic-bezier(.2,.9,.3,1);
-}
-@keyframes tin{from{opacity:0;transform:translateY(-16px)}to{opacity:1;transform:none}}
-.toast.out{animation:tout .3s forwards}
-@keyframes tout{to{opacity:0;transform:translateY(-16px)}}
-.toast .t-ic{width:32px;height:32px;flex:0 0 32px;border-radius:10px;display:grid;place-items:center;background:var(--accent-soft)}
-.toast .t-t{font-weight:700;font-size:13px}
-.toast .t-s{font-size:11.5px;color:var(--muted);margin-top:1px;line-height:1.35}
-
-/* ---------- misc ---------- */
-.stars{display:inline-flex;gap:1px;align-items:center}
-.progress{height:5px;border-radius:3px;background:var(--surface-3);overflow:hidden}
-.progress i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--accent-2));border-radius:3px;transition:width .6s}
-.empty{text-align:center;padding:46px 24px;color:var(--muted-2)}
-.empty .e-ic{font-size:34px;margin-bottom:10px;opacity:.5}
-.kv{display:flex;justify-content:space-between;padding:9px 0;font-size:13.5px;border-bottom:1px solid var(--border-soft)}
-.kv:last-child{border-bottom:0}
-.kv span:first-child{color:var(--muted)}
-.kv span:last-child{font-weight:650}
-.timer{font-variant-numeric:tabular-nums;font-weight:800}
-.blink{animation:bl 1.4s infinite}
-@keyframes bl{50%{opacity:.35}}
-.hscroll{display:flex;gap:10px;overflow-x:auto;padding:2px 18px 4px;margin:0 -18px}
-.hscroll>*{flex:0 0 auto}
-
-.stat{background:var(--surface);border:1px solid var(--border-soft);border-radius:var(--r-md);padding:13px}
-.stat .s-v{font-size:21px;font-weight:800;letter-spacing:-.6px}
-.stat .s-l{font-size:11px;color:var(--muted-2);font-weight:600;margin-top:2px}
-.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-
-/* ---------- OTP digits -> camera morph, shutter & flash ---------- */
-#camFx{position:fixed;inset:0;z-index:2147483000;overflow:hidden;pointer-events:all;font-family:var(--ff)}
-#camFx .fx-scrim{position:absolute;inset:0;background:rgba(6,6,11,0);transition:background .4s ease,backdrop-filter .4s ease}
-#camFx.dim .fx-scrim{background:rgba(6,6,11,.93);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
-
-/* clones of the real OTP digit boxes, flown from their true positions */
-#camFx .fx-cell{
-  position:absolute;display:grid;place-items:center;
-  font-size:26px;font-weight:800;color:var(--text);
-  background:var(--surface);border:1.5px solid var(--accent);border-radius:15px;
-  box-shadow:0 8px 26px rgba(0,0,0,.5);
-  transition:transform .54s cubic-bezier(.66,0,.34,1),
-             opacity .26s ease .3s,
-             border-radius .54s ease,
-             background .54s ease,
-             box-shadow .54s ease;
-  will-change:transform,opacity;
-}
-#camFx .fx-cell span{transition:opacity .2s ease}
-#camFx.converge .fx-cell span{opacity:0}
-
-/* the camera the digits become */
-#camFx .fx-cam{
-  position:absolute;left:50%;top:50%;
-  transform:translate(-50%,-50%) scale(.18);opacity:0;
-  display:flex;flex-direction:column;align-items:center;gap:16px;
-  transition:transform .52s cubic-bezier(.2,1.28,.34,1),opacity .28s ease;
-  will-change:transform,opacity;
-}
-#camFx.cam-in .fx-cam{opacity:1;transform:translate(-50%,-50%) scale(1)}
-
-#camFx .fx-tag{
-  font-size:10.5px;font-weight:800;letter-spacing:1.6px;color:var(--accent);
-  background:rgba(255,90,31,.15);border:1px solid rgba(255,90,31,.42);
-  padding:4px 14px;border-radius:999px;text-transform:uppercase;
-}
-#camFx .fx-body{
-  width:168px;height:124px;background:linear-gradient(145deg,#252535,#12121a);
-  border:2.5px solid rgba(255,90,31,.9);border-radius:30px;
-  position:relative;display:grid;place-items:center;
-  box-shadow:0 26px 64px rgba(0,0,0,.95),0 0 54px rgba(255,90,31,.42);
-}
-#camFx .fx-shutterbtn{
-  position:absolute;top:-11px;left:30px;width:20px;height:11px;
-  background:linear-gradient(180deg,#ff5a1f,#c43d08);border-radius:5px 5px 0 0;
-  box-shadow:0 -2px 9px rgba(255,90,31,.65);transition:transform .13s ease;
-}
-#camFx.snap .fx-shutterbtn{transform:translateY(6px)}
-#camFx .fx-dial{position:absolute;top:-10px;right:28px;width:28px;height:10px;background:linear-gradient(180deg,#8b8b9e,#44444f);border-radius:5px 5px 0 0}
-#camFx .fx-vf{position:absolute;top:13px;left:17px;width:24px;height:17px;background:#090d14;border:1.5px solid rgba(255,255,255,.34);border-radius:5px;display:grid;place-items:center}
-#camFx .fx-vf i{width:6px;height:6px;border-radius:50%;background:#00e5ff;box-shadow:0 0 7px #00e5ff}
-#camFx .fx-emitter{position:absolute;top:12px;right:17px;width:32px;height:19px;background:#1a1c26;border:1.5px solid rgba(255,255,255,.38);border-radius:6px;display:grid;place-items:center;overflow:hidden}
-#camFx .fx-emitter i{width:19px;height:9px;border-radius:2px;background:#ffc857;box-shadow:0 0 12px #ffc857;transition:background .24s ease,box-shadow .24s ease}
-#camFx.charge .fx-emitter i{background:#fff;box-shadow:0 0 34px #fff,0 0 62px var(--accent)}
-#camFx .fx-lens{
-  width:86px;height:86px;border-radius:50%;
-  background:radial-gradient(circle at 40% 34%,#2c2c3e,#0a0a0f 74%);
-  border:4.5px solid var(--accent);display:grid;place-items:center;position:relative;
-  box-shadow:0 0 32px rgba(255,90,31,.5),inset 0 0 22px rgba(0,0,0,.95);
-}
-#camFx .fx-glare{position:absolute;top:11px;left:15px;width:21px;height:10px;border-radius:50%;background:rgba(255,255,255,.42);transform:rotate(-35deg);pointer-events:none}
-#camFx .fx-iris{
-  width:56px;height:56px;border-radius:50%;
-  background:conic-gradient(from 0deg,#1c1d28,#0e0f16,#2c2d3c,#0e0f16);
-  border:2px solid rgba(255,255,255,.24);display:grid;place-items:center;
-  transition:transform .28s cubic-bezier(.6,0,.35,1);
-}
-#camFx.snap .fx-iris{transform:scale(0) rotate(210deg)}
-#camFx .fx-iris i{width:11px;height:11px;border-radius:50%;background:var(--accent);box-shadow:0 0 11px var(--accent)}
-#camFx .fx-status{
-  font-size:12.5px;font-weight:800;letter-spacing:1.4px;color:#f4f4f7;text-transform:uppercase;
-  display:flex;align-items:center;gap:8px;background:rgba(20,20,28,.85);
-  padding:8px 18px;border-radius:24px;border:1px solid rgba(255,90,31,.4);
-}
-#camFx .fx-flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none}
-#camFx.flash .fx-flash{animation:fxFlash .95s ease-out forwards}
-@keyframes fxFlash{0%{opacity:0}7%{opacity:1}44%{opacity:1}100%{opacity:0}}
-
-@media (prefers-reduced-motion:reduce){
-  #camFx .fx-cell,#camFx .fx-cam,#camFx .fx-iris,#camFx .fx-shutterbtn,#camFx .fx-emitter i,#camFx .fx-scrim{transition-duration:.01ms!important}
-  #camFx.flash .fx-flash{animation:fxFlashSoft .45s ease-out forwards}
-  @keyframes fxFlashSoft{0%{opacity:0}20%{opacity:.55}100%{opacity:0}}
-}
-
-/* ---------- password fields ---------- */
-.pw-wrap{position:relative}
-.pw-wrap .input{padding-right:66px}
-.pw-eye{position:absolute;right:8px;top:50%;transform:translateY(-50%);font-size:12px;font-weight:700;color:var(--muted);padding:6px 9px;border-radius:8px}
-.pw-eye:hover{color:var(--text);background:var(--surface-2)}
-.pw-rules{display:grid;grid-template-columns:1fr 1fr;gap:5px 10px;margin-top:9px}
-.pw-rule{font-size:11.5px;color:var(--muted-2);font-weight:600;transition:color .15s}
-.pw-rule.ok{color:var(--green)}
-.pw-rule.bad{color:var(--red)}
-.input.pw-bad{border-color:var(--red)!important}
-.pw-flash{animation:pwFlash .8s ease}
-@keyframes pwFlash{0%,100%{transform:translateX(0);box-shadow:none}
-  15%,45%,75%{transform:translateX(-6px);box-shadow:0 0 0 3px rgba(255,77,94,.5)}
-  30%,60%,90%{transform:translateX(6px);box-shadow:0 0 0 3px rgba(255,77,94,.5)}}
-.pw-flash-text{animation:pwText .8s ease}
-@keyframes pwText{0%,100%{opacity:1}25%,75%{opacity:.2}50%{opacity:1}}
-@media (prefers-reduced-motion:reduce){.pw-flash,.pw-flash-text{animation:none}}
-
-
-/* ---------- app column ---------- */
-body{min-height:100%;background-attachment:fixed}
-#app{max-width:540px;margin:0 auto;min-height:100vh;min-height:100dvh;position:relative;background:rgba(10,10,15,.55);border-left:1px solid var(--border-soft);border-right:1px solid var(--border-soft)}
-#screen{padding-bottom:calc(84px + env(safe-area-inset-bottom))}
-#screen.no-tabs{padding-bottom:calc(24px + env(safe-area-inset-bottom))}
-.tabbar{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:min(540px,100%);z-index:40;display:flex;border-top:1px solid var(--border-soft);
-  background:rgba(10,10,15,.95);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);padding:6px 4px calc(8px + env(safe-area-inset-bottom))}
-.tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:7px 0;color:var(--muted-2);font-size:10.5px;font-weight:600;border-radius:12px;position:relative}
-.tab.on{color:var(--accent)}
-.tab .badge{position:absolute;top:2px;right:calc(50% - 20px);background:var(--red);color:#fff;font-size:9px;font-weight:800;min-width:16px;height:16px;border-radius:9px;display:grid;place-items:center;padding:0 4px}
-@media (max-width:560px){ #app{border:0;background:transparent} }
-.splash{min-height:100vh;min-height:100dvh;display:grid;place-items:center}
-.splash .logo-lg{animation:bl 1.4s infinite}
-a{color:inherit;text-decoration:none}
-.w100{width:100%}
-.right{text-align:right}
-.top{align-items:flex-start}
-.prose{white-space:pre-wrap;word-wrap:break-word}
-.linkish{font-size:13px;color:var(--muted);padding:4px}
-.linkish b{color:var(--text)}
-.linkish.accent,.linkish.accent b{color:var(--accent)}
-.card.soft{background:var(--surface-2);border-color:transparent}
-.note{display:flex;gap:10px;align-items:flex-start;font-size:12.5px;color:var(--muted);background:var(--surface);border:1px solid var(--border-soft);border-radius:var(--r-md);padding:12px 14px}
-.note b{color:var(--text)}
-.note svg{flex:0 0 auto;margin-top:1px}
-.big-em{font-size:24px;line-height:1}
-.steps{display:flex;gap:6px;margin-bottom:18px}
-.steps i{flex:1;height:4px;border-radius:3px;background:var(--surface-3)}
-.steps i.on{background:linear-gradient(90deg,var(--accent),var(--accent-2))}
-.bk-card .steps,.live-card .steps{margin:0}
-.chip.new{background:rgba(77,141,255,.12);border-color:rgba(77,141,255,.3);color:#8fb6ff;padding:2px 8px;font-size:10.5px}
-.chip.lg{padding:9px 14px;font-size:13px}
-.chip-sep{width:1px;height:18px;background:var(--border);align-self:center}
-.chips{display:flex;flex-wrap:wrap;gap:6px}
-button.chip{cursor:pointer}
-.rating{color:var(--accent-2);font-weight:700}
-.verified{display:inline-grid;place-items:center}
-.skeleton{height:92px;border-radius:var(--r-md);margin-top:12px;background:linear-gradient(90deg,var(--surface) 0%,var(--surface-2) 50%,var(--surface) 100%);background-size:200% 100%;animation:sk 1.3s linear infinite}
-.skeleton.sm{height:48px}
-@keyframes sk{from{background-position:200% 0}to{background-position:-200% 0}}
-
-/* logo / welcome */
-.logo-lg,.logo-md{margin:0 auto;display:grid;place-items:center;background:linear-gradient(135deg,var(--accent),#ff8a3d);box-shadow:0 12px 30px -8px rgba(255,90,31,.65)}
-.logo-lg{width:72px;height:72px;border-radius:22px}
-.logo-md{width:56px;height:56px;border-radius:18px}
-.hero-mark{padding:28px 0 8px}
-.choice{display:flex;align-items:center;gap:14px;width:100%;text-align:left}
-.choice-ic{width:48px;height:48px;flex:0 0 48px;border-radius:14px;display:grid;place-items:center;font-size:24px;background:var(--accent-soft)}
-.choice-ic.alt{background:rgba(166,124,255,.14)}
-.how{background:var(--surface);border:1px solid var(--border-soft);border-radius:var(--r-md);padding:14px}
-.how-row{display:flex;gap:12px;align-items:flex-start;font-size:13px;color:var(--muted);padding:6px 0}
-.how-row b{width:22px;height:22px;flex:0 0 22px;border-radius:50%;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent);font-size:11px}
-.legal{text-align:center;font-size:12px;color:var(--muted-2);margin:24px 0 8px}
-.legal a{color:var(--muted)}
-
-/* forms */
-.field-err{font-size:12px;color:var(--red);font-weight:600;margin-top:6px}
-.field-ok{font-size:12px;color:var(--green);font-weight:600;margin-top:6px}
-.form-err{margin-top:12px;padding:11px 13px;border-radius:12px;background:rgba(255,77,94,.1);border:1px solid rgba(255,77,94,.35);color:#ff8f9b;font-size:13px;font-weight:600}
-input[type=range]{width:100%;accent-color:var(--accent)}
-.input.big{font-size:22px;font-weight:800;letter-spacing:-.4px}
-input[type=datetime-local].input{color-scheme:dark}
-.search{display:flex;align-items:center;gap:8px;padding:0 14px;border-radius:13px;background:var(--surface);border:1px solid var(--border)}
-.search input{flex:1;padding:12px 0;background:none;border:0;outline:none;min-width:0}
-.search:focus-within{border-color:var(--accent)}
-
-/* OTP */
-.otp-row{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
-.otp-cell{aspect-ratio:1/1.15;border-radius:14px;background:var(--surface);border:1.5px solid var(--border);display:grid;place-items:center;font-size:24px;font-weight:800}
-.otp-cell.on{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
-.otp-input{text-align:center;letter-spacing:8px;font-size:20px;font-weight:800}
-
-/* city autocomplete */
-.ac{position:relative}
-.ac-list{display:none;position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:30;background:var(--surface-2);border:1px solid var(--border);border-radius:13px;box-shadow:var(--shadow);overflow:hidden;max-height:300px;overflow-y:auto}
-.ac-list.open{display:block}
-.ac-item{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;cursor:pointer;font-size:14px;border-bottom:1px solid var(--border-soft)}
-.ac-item:last-child{border-bottom:0}
-.ac-item span{font-size:12px;color:var(--muted-2)}
-.ac-item.on,.ac-item:hover{background:var(--accent-soft)}
-.loc-msg{font-size:12px;color:var(--muted);min-height:4px;margin:-6px 0 14px}
-.loc-msg:empty{margin:0}
-.loc-msg.busy{color:var(--muted)}
-.loc-msg.ok{color:var(--green);font-weight:600}
-.loc-msg.bad{color:var(--red);font-weight:600}
-
-/* home */
-.loc-chip{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;font-weight:600;color:var(--muted);padding:4px 0}
-.hero{background:linear-gradient(145deg,rgba(255,90,31,.16),rgba(166,124,255,.08));border:1px solid rgba(255,90,31,.25);border-radius:var(--r-lg);padding:18px}
-.hero .u-card{text-align:center;padding:10px 6px}
-.hero .u-card .u-t{font-size:12px;margin-top:4px}
-.cat{width:84px;padding:12px 6px;border-radius:15px;background:var(--surface);border:1px solid var(--border-soft);text-align:center}
-.cat-em{font-size:24px;margin-bottom:5px}
-.live-card{border-color:rgba(255,90,31,.35);width:100%}
-.bk-card{border-color:rgba(40,199,111,.3);width:100%}
-.warn-card{display:flex;align-items:center;gap:12px;width:100%;border-color:rgba(255,90,31,.35)}
-.pgcard{width:100%;display:block;text-align:left}
-.sticky-head{position:sticky;top:0;z-index:20;background:rgba(10,10,15,.94);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid var(--border-soft)}
-.toggle{display:inline-flex;align-items:center;gap:8px;padding:7px 12px 7px 7px;border-radius:999px;background:var(--surface);border:1px solid var(--border);font-size:12px;font-weight:700;color:var(--muted)}
-.toggle i{width:34px;height:20px;border-radius:999px;background:var(--surface-3);position:relative;transition:.2s}
-.toggle i::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:.2s}
-.toggle.on{color:var(--green);border-color:rgba(40,199,111,.4)}
-.toggle.on i{background:var(--green)}
-.toggle.on i::after{left:16px}
-
-/* photos */
-.pstrip{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px}
-.pimg{width:86px;height:86px;flex:0 0 86px;border-radius:11px;object-fit:cover;background:var(--surface-2)}
-.no-photos{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted-2);padding:10px 12px;border:1px dashed var(--border);border-radius:11px}
-.pgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}
-.pgrid-i{position:relative;aspect-ratio:1;border-radius:9px;overflow:hidden;background:var(--surface-2);padding:0;display:block}
-.pgrid-i img{width:100%;height:100%;object-fit:cover;display:block}
-.pgrid-i .del{position:absolute;top:5px;right:5px;width:28px;height:28px;border-radius:9px;background:rgba(0,0,0,.65);display:grid;place-items:center}
-.cover{height:150px;background:linear-gradient(135deg,rgba(255,90,31,.25),rgba(166,124,255,.18));overflow:hidden}
-.cover img{width:100%;height:100%;object-fit:cover;opacity:.55;display:block}
-.avatar.ring{border:3px solid var(--bg)}
-.photo-view{position:fixed;inset:0;z-index:80;background:#000;display:grid;place-items:center}
-.photo-view img{max-width:100%;max-height:100%;object-fit:contain}
-.photo-close{position:absolute;top:calc(14px + env(safe-area-inset-top));right:14px;z-index:2}
-.file-btn{position:relative;overflow:hidden;cursor:pointer}
-.file-btn input{position:absolute;inset:0;opacity:0;cursor:pointer}
-.busy-note{margin-top:12px;font-size:13px;color:var(--accent);font-weight:600;text-align:center}
-
-/* requests / offers */
-.offer.best{border-color:rgba(255,90,31,.45)}
-.quote{font-size:12.5px;color:var(--muted);background:var(--surface-2);border-radius:11px;padding:9px 11px;font-style:italic;white-space:pre-wrap;word-wrap:break-word}
-.waiting{padding:10px 0 4px}
-.bottom-bar{position:sticky;bottom:0;display:flex;align-items:center;gap:14px;padding:12px 18px calc(12px + env(safe-area-inset-bottom));background:rgba(10,10,15,.96);border-top:1px solid var(--border-soft);margin-top:20px}
-.kv.top{align-items:flex-start}
-.kv span:last-child{max-width:62%}
-.red-soft{color:#ff8f9b}
-
-/* timeline */
-.timeline{display:flex;flex-direction:column;gap:12px}
-.tl{display:flex;gap:12px;align-items:flex-start}
-.tl i{width:20px;height:20px;flex:0 0 20px;border-radius:50%;border:2px solid var(--border);display:grid;place-items:center;margin-top:1px}
-.tl.on i{border-color:var(--green);background:var(--green-soft)}
-.tl.now i{border-color:var(--accent);background:var(--accent-soft);box-shadow:0 0 0 4px var(--accent-soft)}
-
-/* list rows */
-.card.list{padding:4px 14px}
-.li{display:flex;align-items:center;gap:12px;width:100%;padding:13px 0;border-bottom:1px solid var(--border-soft);text-align:left}
-.li:last-child{border-bottom:0}
-
-/* rating */
-.star-row{display:flex;justify-content:center;gap:6px}
-.star-btn{font-size:38px;color:var(--surface-3);line-height:1;padding:2px}
-.star-btn.on{color:var(--accent-2)}
-
-/* chat */
-.chat-wrap{display:flex;flex-direction:column;height:100vh;height:100dvh}
-.chat-wrap .chat-scroll{flex:1;overflow-y:auto}
-.chat-input{padding-bottom:calc(10px + env(safe-area-inset-bottom))}
-.send{background:var(--accent);border-color:transparent}
-.chat-closed{padding:14px;text-align:center;font-size:12.5px;color:var(--muted-2);border-top:1px solid var(--border-soft)}
-#screen.chat-mode{padding-bottom:0}
-@media (max-width:560px){.input,.search input,.chat-input input{font-size:16px}}
-
+.reveal{opacity:0;transform:translateY(14px);transition:opacity .7s ease,transform .7s ease}
+.reveal.in{opacity:1;transform:none}
+@media (prefers-reduced-motion:reduce){.reveal{opacity:1;transform:none;transition:none}html{scroll-behavior:auto}}
 </style>
 </head>
 <body>
-<div id="app">
-  <main id="screen"></main>
-  <div id="tabs"></div>
-</div>
-<div id="toasts" aria-live="polite"></div>
-<noscript><div style="padding:40px;text-align:center">SnapPro needs JavaScript turned on.</div></noscript>
+
+<nav id="nav"><div class="wrap nav">
+  <a class="logo" href="/">SnapPro<i></i></a>
+  <a class="l hide" href="#how">How it works</a>
+  <a class="l hide" href="#photographers">For photographers</a>
+  <a class="l hide" href="#questions">Questions</a>
+  <a class="l login" href="/app.html#login" data-when="out">Log in</a>
+  <a class="btn dark small" href="/app.html#signup" data-when="out">Get started</a>
+  <a class="btn dark small" href="/app.html" data-when="in" hidden>Open SnapPro</a>
+</div></nav>
+
+<main>
+  <div class="wrap hero">
+    <div>
+      <div class="kicker">Photographers on demand, across India</div>
+      <h1>A photographer at your door. <em>Not in your DMs.</em></h1>
+      <p class="big">Birthday tonight? Product shoot tomorrow? Tell us what you're shooting and photographers near you send their price. Look at their work, pick one, and you're sorted.</p>
+      <div class="cta">
+        <a class="btn dark" href="/app.html#signup">Book a photographer</a>
+        <a class="btn line" href="/app.html#join">I'm a photographer</a>
+      </div>
+      <div class="fine">Free for customers. You pay the photographer directly, after the shoot.</div>
+    </div>
+    <figure class="hero-photo" style="margin:0">
+      <img src="https://images.unsplash.com/photo-1647934786533-f3c15896410b?auto=format&fit=crop&w=1000&q=72"
+           srcset="https://images.unsplash.com/photo-1647934786533-f3c15896410b?auto=format&fit=crop&w=600&q=70 600w, https://images.unsplash.com/photo-1647934786533-f3c15896410b?auto=format&fit=crop&w=1000&q=72 1000w"
+           sizes="(max-width:900px) 100vw, 45vw" alt="A photographer raising his camera to take a picture" fetchpriority="high">
+      <div class="stamp"><b>Quotes, not guesswork</b><span>Every photographer names their own price for your shoot, up front.</span></div>
+      <figcaption>Photo · Arnav Pratap Singh</figcaption>
+    </figure>
+  </div>
+
+  <div class="wrap reveal">
+    <div class="strip">
+      <figure><img loading="lazy" src="https://images.unsplash.com/photo-1587271407850-8d438ca9fdf2?auto=format&fit=crop&w=700&q=70" alt="A couple performing a wedding ritual under a floral canopy"><figcaption><b>Weddings</b><span>Amish Thakkar</span></figcaption></figure>
+      <figure><img loading="lazy" src="https://images.unsplash.com/photo-1611106211090-8f3c79eb8552?auto=format&fit=crop&w=600&q=70" alt="A woman in a green and gold sari"><figcaption><b>Portraits</b><span>Aastha Bansal</span></figcaption></figure>
+      <figure><img loading="lazy" src="https://images.unsplash.com/photo-1735052711950-c31c729c2a4e?auto=format&fit=crop&w=600&q=70" alt="A couple in Indian attire standing on a road"><figcaption><b>Pre-wedding</b><span>iKshana Productions</span></figcaption></figure>
+      <figure><img loading="lazy" src="https://images.unsplash.com/photo-1630526720753-aa4e71acf67d?auto=format&fit=crop&w=700&q=70" alt="A couple in traditional wedding attire on a rock by a river"><figcaption><b>Couples</b><span>Sean Williams</span></figcaption></figure>
+    </div>
+  </div>
+
+  <section id="how">
+    <div class="wrap how">
+      <div class="reveal">
+        <p class="label">How it works</p>
+        <h2>Four steps. <em>No&nbsp;back-and-forth.</em></h2>
+      </div>
+      <ol class="steps reveal">
+        <li><div><h3>Tell us about the shoot</h3><p>When, where, what kind of shoot, how long, and roughly what you'd like to spend. Takes about a minute.</p></div></li>
+        <li><div><h3>Photographers near you send a price</h3><p>Only people who shoot that kind of work in your city see it. Each one quotes their own price and can add a note.</p></div></li>
+        <li><div><h3>Choose by their work</h3><p>Open their portfolio, read reviews from people who actually booked them, then pick. Chat with them in the app.</p></div></li>
+        <li><div><h3>Pay after the shoot</h3><p>You pay the photographer directly, by cash or UPI, once the shoot is done. Plans change? Cancel free until they set off.</p></div></li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="why">
+    <div class="wrap inner">
+      <h2 class="reveal">Finding a photographer shouldn't take a week of DMs.</h2>
+      <div class="reveal">
+        <p>Right now, booking a photographer in India usually means scrolling Instagram, messaging five people, and waiting a day to hear "price in DM".</p>
+        <p>We built SnapPro so it works the other way round. You say what you need once, and the photographers come to you with a price.</p>
+        <p class="sig">— The SnapPro team</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="photographers">
+    <div class="wrap pro">
+      <img class="reveal" loading="lazy" src="https://images.unsplash.com/photo-1498830923224-e1c12d1564a6?auto=format&fit=crop&w=1000&q=70" alt="A photographer taking a photo, in selective focus">
+      <div class="reveal">
+        <p class="label">For photographers</p>
+        <h2>Get paid shoots in your city, <em>at your price.</em></h2>
+        <ul>
+          <li><b>Your price</b><span>You quote every job yourself. Nobody sets your rate for you.</span></li>
+          <li><b>Relevant work only</b><span>You see shoots in your city, for the kinds of work you pick.</span></li>
+          <li><b>No commission</b><span>Customers pay you directly. SnapPro doesn't take a cut right now.</span></li>
+          <li><b>Your work up front</b><span>Customers see your portfolio and real reviews before they book.</span></li>
+        </ul>
+        <a class="btn dark" href="/app.html#join">Join as a photographer</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="tight">
+    <div class="wrap reveal">
+      <p class="label">What people book</p>
+      <h2>Big days and small ones.</h2>
+      <ul class="types">
+        <li>Weddings</li><li>Birthdays</li><li>Portraits</li><li>Parties &amp; events</li>
+        <li>Maternity</li><li>Pets</li><li>Products</li><li>Food</li>
+        <li>Fashion</li><li>Corporate</li><li>Real estate</li><li>Candid &amp; street</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="questions">
+    <div class="wrap faq">
+      <div class="reveal"><p class="label">Questions</p><h2>Good to know.</h2></div>
+      <div class="reveal">
+        <details open><summary>What does SnapPro cost?</summary><p>Nothing for customers. You pay only the price your photographer quoted, and you pay them directly.</p></details>
+        <details><summary>How do I pay?</summary><p>Directly to the photographer after the shoot, by cash or UPI, whichever you both prefer. SnapPro doesn't take payments.</p></details>
+        <details><summary>How do I know a photographer is any good?</summary><p>Every photographer has a portfolio you can look through, and ratings come only from customers who booked them and finished a shoot. Photographers we've checked ourselves carry a verified badge.</p></details>
+        <details><summary>Which cities are you in?</summary><p>SnapPro works anywhere in India. You'll see the photographers who have joined in your city. We're new, so some cities have more choice than others right now. Post your shoot anyway. Anyone who joins in your city while it's open will see it too.</p></details>
+        <details><summary>Can I cancel?</summary><p>Yes. It's free to cancel until your photographer is on the way.</p></details>
+        <details><summary>Does my address get shared?</summary><p>Photographers only see your city and pincode when they quote. Your exact address goes to the one photographer you book, and nobody else.</p></details>
+        <details><summary>Something went wrong. Who do I talk to?</summary><p>Write to <a href="mailto:snappro.support@gmail.com">snappro.support@gmail.com</a> and a real person will get back to you.</p></details>
+      </div>
+    </div>
+  </section>
+
+  <section class="closing" style="border-top:1px solid var(--line)">
+    <div class="wrap reveal">
+      <h2>Got something worth <em>photographing?</em></h2>
+      <div class="cta">
+        <a class="btn dark" href="/app.html#signup">Book a photographer</a>
+        <a class="btn line" href="/app.html#login">Log in</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="foot">
+      <div>© <span id="yr">2026</span> SnapPro · Made in India</div>
+      <div class="links">
+        <a href="/app.html#signup">Sign up</a>
+        <a href="/app.html#login">Log in</a>
+        <a href="/app.html#join">For photographers</a>
+        <a href="mailto:snappro.support@gmail.com">snappro.support@gmail.com</a>
+      </div>
+    </div>
+    <div class="credits">Photos on this page from <a href="https://unsplash.com/?utm_source=snappro&utm_medium=referral" rel="noopener">Unsplash</a> by Arnav Pratap Singh, Amish Thakkar, Aastha Bansal, iKshana Productions, Sean Williams and Aravind Kumar.</div>
+  </div>
+</footer>
+
 <script>
-"use strict";
-/* ============================================================
-   SnapPro — on-demand photographers
-   All data lives in Supabase. The browser keeps only UI preferences.
-   ============================================================ */
+(function(){
+  document.getElementById("yr").textContent = new Date().getFullYear();
 
-/* ---------- small helpers ---------- */
-const $  = (s, r=document) => r.querySelector(s);
-const el = id => document.getElementById(id);
-const esc = s => String(s==null?"":s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const inr = n => "₹" + Math.round(Number(n)||0).toLocaleString("en-IN");
-const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
-const toMs = v => v == null ? 0 : (typeof v === "number" ? v : Date.parse(v));
-const firstName = n => String(n||"").trim().split(/\s+/)[0] || "";
-
-function clockStr(d){
-  d = d instanceof Date ? d : new Date(toMs(d));
-  let h = d.getHours(); const m = String(d.getMinutes()).padStart(2,"0");
-  const ap = h >= 12 ? "PM" : "AM"; h = h % 12 || 12; return h + ":" + m + " " + ap;
-}
-function dayStr(v){
-  const d = new Date(toMs(v)), t = new Date(), tm = new Date(Date.now()+864e5);
-  if(d.toDateString() === t.toDateString()) return "Today";
-  if(d.toDateString() === tm.toDateString()) return "Tomorrow";
-  return d.toLocaleDateString("en-IN", {weekday:"short", day:"numeric", month:"short"});
-}
-const whenStr = v => v ? dayStr(v) + ", " + clockStr(v) : "—";
-function timeAgo(v){
-  const s = Math.floor((Date.now() - toMs(v))/1000);
-  if(s < 45) return "just now"; if(s < 3600) return Math.floor(s/60) + "m ago";
-  if(s < 86400) return Math.floor(s/3600) + "h ago"; return Math.floor(s/86400) + "d ago";
-}
-function leftStr(v){
-  let s = Math.floor((toMs(v) - Date.now())/1000);
-  if(s <= 0) return "closed";
-  const h = Math.floor(s/3600); s -= h*3600; const m = Math.floor(s/60);
-  return h ? h + "h " + m + "m left" : m + "m left";
-}
-function hueOf(str){ let h = 2166136261; str = String(str||""); for(let i=0;i<str.length;i++){ h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return Math.abs(h) % 360; }
-function initials(name){ return String(name||"?").trim().split(/\s+/).map(w=>w[0]||"").slice(0,2).join("").toUpperCase() || "?"; }
-function avatarHtml(id, name, size, online){
-  const h = hueOf(id || name);
-  return `<div class="avatar ${size||'av-48'}" style="background:linear-gradient(135deg,hsl(${h} 60% 45%),hsl(${(h+40)%360} 55% 32%))"><span>${esc(initials(name))}</span>${online?'<i class="online-dot"></i>':''}</div>`;
-}
-function ratingHtml(pg){
-  if(!pg || !pg.rating || !pg.review_count) return `<span class="chip new">New</span>`;
-  return `<span class="rating">★ ${Number(pg.rating).toFixed(1)}</span><span class="muted2"> (${pg.review_count})</span>`;
-}
-
-function toast(title, sub, ic){
-  const box = el("toasts"); if(!box) return;
-  const d = document.createElement("div");
-  d.className = "toast"; d.setAttribute("role","status");
-  d.innerHTML = `<div class="t-ic">${icon(ic||"bell",17,"var(--accent)")}</div><div class="grow"><div class="t-t">${esc(title)}</div>${sub?`<div class="t-s">${esc(sub)}</div>`:""}</div>`;
-  box.appendChild(d);
-  setTimeout(()=>{ d.classList.add("out"); setTimeout(()=>d.remove(), 300); }, 4200);
-}
-
-function icon(name, size=20, color="currentColor", w=2){
-  const P = {
-    home:'<path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/>',
-    search:'<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>',
-    bolt:'<path d="M13 2L4.5 13.5H11l-1 8.5 8.5-11.5H12z"/>',
-    bell:'<path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/>',
-    user:'<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
-    cam:'<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>',
-    pin:'<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>',
-    clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>',
-    chat:'<path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.5 8.5 0 0 1-3.9-.9L3 21l1.9-5A8.4 8.4 0 0 1 12 3a8.4 8.4 0 0 1 9 8.5z"/>',
-    back:'<path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/>',
-    check:'<path d="M20 6L9 17l-5-5"/>',
-    x:'<path d="M18 6L6 18"/><path d="M6 6l12 12"/>',
-    star:'<path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/>',
-    grid:'<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
-    wallet:'<path d="M20 12V8H6a2 2 0 0 1 0-4h12v4"/><path d="M4 6v12a2 2 0 0 0 2 2h14v-4"/><path d="M18 12a2 2 0 0 0 0 4h4v-4z"/>',
-    send:'<path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4z"/>',
-    calendar:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 11h18"/>',
-    list:'<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
-    shield:'<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
-    power:'<path d="M18.4 6.6a9 9 0 1 1-12.7 0"/><path d="M12 2v10"/>',
-    image:'<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>',
-    plus:'<path d="M12 5v14M5 12h14"/>',
-    trash:'<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/>',
-    mail:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/>',
-    logout:'<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/>',
-    edit:'<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
-    briefcase:'<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
-    chevron:'<path d="M9 18l6-6-6-6"/>'
-  };
-  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[name]||""}</svg>`;
-}
-
-/* ---------- catalogue ---------- */
-const CATEGORIES = [
-  {id:"portrait",  name:"Portrait",        emoji:"🧑", base:2500},
-  {id:"event",     name:"Party / Event",   emoji:"🎉", base:4000},
-  {id:"wedding",   name:"Wedding",         emoji:"💍", base:12000},
-  {id:"birthday",  name:"Birthday",        emoji:"🎂", base:3500},
-  {id:"product",   name:"Product",         emoji:"📦", base:5000},
-  {id:"food",      name:"Food",            emoji:"🍜", base:4500},
-  {id:"maternity", name:"Maternity",       emoji:"🤰", base:6000},
-  {id:"corporate", name:"Corporate",       emoji:"💼", base:7000},
-  {id:"realestate",name:"Real estate",     emoji:"🏠", base:5500},
-  {id:"fashion",   name:"Fashion",         emoji:"👗", base:8000},
-  {id:"pet",       name:"Pet",             emoji:"🐕", base:2800},
-  {id:"street",    name:"Candid / Street", emoji:"🚶", base:2200}
-];
-const catById = id => CATEGORIES.find(c => c.id === id) || {id, name: id || "Shoot", emoji:"📷", base:3000};
-
-const URGENCY = [
-  {id:"now",   label:"Right now",   sub:"Within ~30 min",   emoji:"⚡", mins:30,   window:30,   surge:1.6},
-  {id:"1h",    label:"In 1 hour",   sub:"Fast dispatch",    emoji:"🔥", mins:60,   window:45,   surge:1.35},
-  {id:"3h",    label:"In 3 hours",  sub:"More choice",      emoji:"🕒", mins:180,  window:120,  surge:1.15},
-  {id:"today", label:"Later today", sub:"Best value",       emoji:"🌆", mins:480,  window:240,  surge:1.0},
-  {id:"tmrw",  label:"Tomorrow",    sub:"Plan ahead",       emoji:"📅", mins:1440, window:720,  surge:0.95},
-  {id:"pick",  label:"Pick a date", sub:"Choose date & time",emoji:"🗓️", mins:2880, window:1440, surge:0.9}
-];
-const urgById = id => URGENCY.find(u => u.id === id) || URGENCY[1];
-const DELIVERABLES = ["Edited photos","RAW files","Same-day preview","Video reel","Drone shots","Prints"];
-
-/* Indicative price for a shoot; photographers set their own quote. */
-function suggestedPrice(category, hours, urgency, priceMult){
-  const v = catById(category).base * ((hours||2)/2) * (priceMult||1) * urgById(urgency).surge;
-  return Math.max(500, Math.round(v/50)*50);
-}
-
-const SUPPORT_EMAIL = "snappro.support@gmail.com";
-
-/* ============================================================
-   LOCATION — city autocomplete, pincode lookup, state autofill
-   ============================================================ */
-const IN_STATES = ["Andhra Pradesh","Arunachal Pradesh","Assam","Bihar","Chhattisgarh","Goa","Gujarat","Haryana",
-  "Himachal Pradesh","Jharkhand","Karnataka","Kerala","Madhya Pradesh","Maharashtra","Manipur","Meghalaya","Mizoram",
-  "Nagaland","Odisha","Punjab","Rajasthan","Sikkim","Tamil Nadu","Telangana","Tripura","Uttar Pradesh","Uttarakhand",
-  "West Bengal","Andaman and Nicobar Islands","Chandigarh","Dadra and Nagar Haveli and Daman and Diu","Delhi",
-  "Jammu and Kashmir","Ladakh","Lakshadweep","Puducherry"];
-
-const CITY_DATA = {
-  "Andhra Pradesh":["Visakhapatnam","Vijayawada","Guntur","Nellore","Kurnool","Tirupati","Kakinada","Rajahmundry","Anantapur","Kadapa","Eluru","Ongole","Amaravati"],
-  "Arunachal Pradesh":["Itanagar"],
-  "Assam":["Guwahati","Dibrugarh","Silchar","Jorhat","Tezpur","Nagaon"],
-  "Bihar":["Patna","Gaya","Bhagalpur","Muzaffarpur","Darbhanga","Purnia","Bodh Gaya"],
-  "Chhattisgarh":["Raipur","Bhilai","Bilaspur","Korba","Durg"],
-  "Goa":["Goa","Panaji","Margao","Vasco da Gama","Mapusa"],
-  "Gujarat":["Ahmedabad","Surat","Vadodara","Rajkot","Gandhinagar","Bhavnagar","Jamnagar","Junagadh","Anand","Bhuj","Navsari","Vapi","Morbi"],
-  "Haryana":["Gurugram","Faridabad","Panipat","Ambala","Karnal","Rohtak","Hisar","Sonipat","Panchkula"],
-  "Himachal Pradesh":["Shimla","Manali","Dharamshala","Solan","Mandi","Kullu"],
-  "Jharkhand":["Ranchi","Jamshedpur","Dhanbad","Bokaro"],
-  "Karnataka":["Bengaluru","Mysuru","Mangaluru","Hubballi","Belagavi","Kalaburagi","Davanagere","Ballari","Udupi","Shivamogga","Tumakuru","Madikeri"],
-  "Kerala":["Thiruvananthapuram","Kochi","Kozhikode","Thrissur","Kollam","Kannur","Alappuzha","Kottayam","Palakkad","Munnar"],
-  "Madhya Pradesh":["Bhopal","Indore","Gwalior","Jabalpur","Ujjain","Sagar","Rewa","Satna"],
-  "Maharashtra":["Mumbai","Pune","Nagpur","Nashik","Thane","Navi Mumbai","Aurangabad","Solapur","Kolhapur","Amravati","Nanded","Sangli","Jalgaon","Akola","Latur","Ahmednagar","Lonavala","Mahabaleshwar","Kalyan","Vasai-Virar","Panvel"],
-  "Manipur":["Imphal"],
-  "Meghalaya":["Shillong"],
-  "Mizoram":["Aizawl"],
-  "Nagaland":["Kohima","Dimapur"],
-  "Odisha":["Bhubaneswar","Cuttack","Rourkela","Puri","Sambalpur","Berhampur"],
-  "Punjab":["Ludhiana","Amritsar","Jalandhar","Patiala","Bathinda","Mohali"],
-  "Rajasthan":["Jaipur","Jodhpur","Udaipur","Kota","Ajmer","Bikaner","Alwar","Bhilwara","Jaisalmer","Pushkar","Mount Abu"],
-  "Sikkim":["Gangtok"],
-  "Tamil Nadu":["Chennai","Coimbatore","Madurai","Tiruchirappalli","Salem","Tirunelveli","Vellore","Erode","Tiruppur","Thoothukudi","Thanjavur","Ooty","Kanyakumari","Kodaikanal","Hosur"],
-  "Telangana":["Hyderabad","Secunderabad","Warangal","Nizamabad","Karimnagar","Khammam"],
-  "Tripura":["Agartala"],
-  "Uttar Pradesh":["Lucknow","Kanpur","Ghaziabad","Noida","Greater Noida","Agra","Varanasi","Meerut","Prayagraj","Bareilly","Aligarh","Moradabad","Gorakhpur","Jhansi","Mathura","Ayodhya","Vrindavan"],
-  "Uttarakhand":["Dehradun","Haridwar","Rishikesh","Nainital","Mussoorie","Haldwani","Roorkee"],
-  "West Bengal":["Kolkata","Howrah","Durgapur","Asansol","Siliguri","Darjeeling","Kharagpur"],
-  "Andaman and Nicobar Islands":["Port Blair"],
-  "Chandigarh":["Chandigarh"],
-  "Dadra and Nagar Haveli and Daman and Diu":["Daman","Silvassa"],
-  "Delhi":["Delhi","New Delhi"],
-  "Jammu and Kashmir":["Srinagar","Jammu"],
-  "Ladakh":["Leh"],
-  "Lakshadweep":["Kavaratti"],
-  "Puducherry":["Puducherry"]
-};
-/* ranked first when several cities match what you've typed */
-const POPULAR = ["Mumbai","Delhi","Bengaluru","Hyderabad","Chennai","Kolkata","Pune","Ahmedabad","Jaipur","Surat",
-  "Lucknow","Chandigarh","Gurugram","Noida","Kochi","Indore","Bhopal","Nagpur","Goa","Coimbatore","Vadodara",
-  "Visakhapatnam","Thane","Navi Mumbai","Mysuru","Udaipur","Dehradun","Bhubaneswar","Patna","Guwahati","Kanpur","Nashik",
-  "Ghaziabad","Ludhiana","Agra","Faridabad","Meerut","Rajkot","Varanasi","Srinagar","Aurangabad","Amritsar","Prayagraj",
-  "Ranchi","Howrah","Jabalpur","Gwalior","Vijayawada","Jodhpur","Madurai","Raipur","Kota","Thiruvananthapuram","Mangaluru",
-  "Solapur","Hubballi","Tiruchirappalli","Bareilly","Moradabad","Aligarh","Jalandhar","Salem","Warangal","Guntur","Mohali",
-  "Saharanpur","Gorakhpur","Bikaner","Amravati","Jamshedpur","Bhilai","Cuttack","Kozhikode","Kolhapur","Ajmer","Jamnagar",
-  "Ujjain","Siliguri","Jhansi","Jammu","Belagavi","Tirunelveli","Dhanbad","Gaya","Panaji","Shimla","Puducherry","Tirupati",
-  "Mathura","Haridwar","Rishikesh","Manali","Darjeeling","Ooty","Margao","Mapusa"];
-const CITY_ALIASES = {
-  "bangalore":"Bengaluru","bengaluru urban":"Bengaluru","bangalore rural":"Bengaluru","bombay":"Mumbai",
-  "mumbai suburban":"Mumbai","gurgaon":"Gurugram","calcutta":"Kolkata","madras":"Chennai","mysore":"Mysuru",
-  "mangalore":"Mangaluru","trivandrum":"Thiruvananthapuram","cochin":"Kochi","ernakulam":"Kochi","poona":"Pune",
-  "baroda":"Vadodara","allahabad":"Prayagraj","hubli":"Hubballi","belgaum":"Belagavi","gulbarga":"Kalaburagi",
-  "pondicherry":"Puducherry","trichy":"Tiruchirappalli","vizag":"Visakhapatnam","gautam buddha nagar":"Noida",
-  "rangareddy":"Hyderabad","k.v.rangareddy":"Hyderabad","k.v. rangareddy":"Hyderabad","medchal":"Hyderabad",
-  "medchal-malkajgiri":"Hyderabad","north goa":"Goa","south goa":"Goa","shimoga":"Shivamogga","tumkur":"Tumakuru"
-};
-const CITIES = (() => {
-  const out = [];
-  for(const st in CITY_DATA) for(const c of CITY_DATA[st]) out.push({c, s:st, rank: POPULAR.indexOf(c) === -1 ? 999 : POPULAR.indexOf(c)});
-  return out;
-})();
-const cityState = name => { const hit = CITIES.find(x => x.c.toLowerCase() === String(name||"").trim().toLowerCase()); return hit ? hit.s : null; };
-
-function normCity(raw){
-  const k = String(raw||"").trim().toLowerCase();
-  if(!k) return "";
-  if(CITY_ALIASES[k]) return CITY_ALIASES[k];
-  if(k.includes("delhi")) return "Delhi";
-  if(k.startsWith("mumbai")) return "Mumbai";
-  const hit = CITIES.find(x => x.c.toLowerCase() === k);
-  if(hit) return hit.c;
-  return String(raw).trim().replace(/\s+/g," ").replace(/\b\w/g, ch => ch.toUpperCase());
-}
-function normState(raw){
-  let k = String(raw||"").trim().toLowerCase().replace(/&/g,"and").replace(/\s+/g," ");
-  const fix = {"chattisgarh":"chhattisgarh","orissa":"odisha","pondicherry":"puducherry","uttaranchal":"uttarakhand",
-               "dadra and nagar haveli":"dadra and nagar haveli and daman and diu","daman and diu":"dadra and nagar haveli and daman and diu"};
-  if(fix[k]) k = fix[k];
-  return IN_STATES.find(s => s.toLowerCase() === k) || (raw ? String(raw).trim() : "");
-}
-
-/* Offline fallback: India's PIN codes are allocated by region. */
-function stateFromPin(pin){
-  const p2 = pin.slice(0,2), p3 = pin.slice(0,3), n2 = +p2, n3 = +p3;
-  const by3 = {"160":"Chandigarh","194":"Ladakh","403":"Goa","737":"Sikkim","744":"Andaman and Nicobar Islands",
-    "790":"Arunachal Pradesh","791":"Arunachal Pradesh","792":"Arunachal Pradesh","793":"Meghalaya","794":"Meghalaya",
-    "795":"Manipur","796":"Mizoram","797":"Nagaland","798":"Nagaland","799":"Tripura"};
-  if(by3[p3]) return by3[p3];
-  if([246,247,248,249,262,263].includes(n3)) return "Uttarakhand";
-  if([814,815,816,822,825,826,827,828,829,831,832,833,834,835].includes(n3)) return "Jharkhand";
-  if(n3 >= 500 && n3 <= 509) return "Telangana";
-  if(n2 === 11) return "Delhi";
-  if(n2 === 12 || n2 === 13) return "Haryana";
-  if(n2 >= 14 && n2 <= 16) return "Punjab";
-  if(n2 === 17) return "Himachal Pradesh";
-  if(n2 === 18 || n2 === 19) return "Jammu and Kashmir";
-  if(n2 >= 20 && n2 <= 28) return "Uttar Pradesh";
-  if(n2 >= 30 && n2 <= 34) return "Rajasthan";
-  if(n2 >= 36 && n2 <= 39) return "Gujarat";
-  if(n2 >= 40 && n2 <= 44) return "Maharashtra";
-  if(n2 >= 45 && n2 <= 48) return "Madhya Pradesh";
-  if(n2 === 49) return "Chhattisgarh";
-  if(n2 >= 51 && n2 <= 53) return "Andhra Pradesh";
-  if(n2 >= 56 && n2 <= 59) return "Karnataka";
-  if(n2 >= 60 && n2 <= 64) return "Tamil Nadu";
-  if(n2 >= 67 && n2 <= 69) return "Kerala";
-  if(n2 >= 70 && n2 <= 74) return "West Bengal";
-  if(n2 >= 75 && n2 <= 77) return "Odisha";
-  if(n2 === 78) return "Assam";
-  if(n2 >= 80 && n2 <= 85) return "Bihar";
-  return null;
-}
-
-const PIN_CACHE = {};
-async function lookupPincode(pin){
-  if(!/^[1-9][0-9]{5}$/.test(pin)) return { invalid:true };
-  if(PIN_CACHE[pin]) return PIN_CACHE[pin];
+  /* already signed in? offer to go straight to the app */
   try{
-    const ctl = typeof AbortController !== "undefined" ? new AbortController() : null;
-    const timer = ctl ? setTimeout(()=>ctl.abort(), 6000) : null;
-    const r = await fetch("https://api.postalpincode.in/pincode/" + pin, ctl ? {signal:ctl.signal} : {});
-    if(timer) clearTimeout(timer);
-    const j = await r.json();
-    const rec = Array.isArray(j) ? j[0] : null;
-    if(rec && rec.Status === "Success" && Array.isArray(rec.PostOffice) && rec.PostOffice.length){
-      const tally = {};
-      rec.PostOffice.forEach(po => { const c = normCity(po.District); tally[c] = (tally[c]||0) + 1; });
-      const city = Object.keys(tally).sort((a,b) => tally[b]-tally[a])[0];
-      return (PIN_CACHE[pin] = { city, state: normState(rec.PostOffice[0].State), source:"post" });
-    }
-    if(rec && rec.Status === "Error") return (PIN_CACHE[pin] = { invalid:true });
-  }catch(e){ /* offline or service down — fall back below */ }
-  const st = stateFromPin(pin);
-  return st ? { state: st, source:"prefix" } : { invalid:true };
-}
-
-function citySuggestions(q){
-  q = String(q||"").trim().toLowerCase();
-  if(!q) return [];
-  const seen = new Set(), out = [];
-  const add = x => { const key = x.c + "|" + x.s; if(!seen.has(key)){ seen.add(key); out.push(x); } };
-  const byRank = (a,b) => a.rank - b.rank || a.c.localeCompare(b.c);
-  CITIES.filter(x => x.c.toLowerCase().startsWith(q)).sort(byRank).forEach(add);
-  Object.keys(CITY_ALIASES).filter(a => a.startsWith(q)).forEach(a => { const c = CITY_ALIASES[a]; const hit = CITIES.find(x => x.c === c); if(hit) add(hit); });
-  CITIES.filter(x => x.c.toLowerCase().split(/[\s-]+/).some(w => w.startsWith(q))).sort(byRank).forEach(add);
-  if(q.length >= 3) CITIES.filter(x => x.c.toLowerCase().includes(q)).sort(byRank).forEach(add);
-  return out.slice(0, 8);
-}
-
-/* ---------- the reusable location form ----------
-   Typing never rebuilds these inputs (phones would reset the keyboard);
-   only the suggestion list, state and status line are repainted. */
-const LOCF = {};
-function locInit(p, v){
-  v = v || {};
-  LOCF[p] = { city: v.city || "", state: v.state || (v.city ? (cityState(v.city)||"") : ""), pincode: v.pincode || "",
-              sug: [], hi: -1, msg: "", msgKind: "", pinOk: !!(v.pincode && /^[1-9][0-9]{5}$/.test(v.pincode)), seq: 0 };
-  return LOCF[p];
-}
-function locFieldsHtml(p){
-  const f = LOCF[p] || locInit(p);
-  return `
-  <div class="field"><label for="${p}City">City</label>
-    <div class="ac">
-      <input id="${p}City" class="input" autocomplete="off" autocapitalize="words" spellcheck="false" placeholder="Start typing — e.g. Mumbai"
-        value="${esc(f.city)}" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="${p}Sug"
-        oninput="locCityInput('${p}',this.value)" onkeydown="locCityKey('${p}',event)" onblur="setTimeout(()=>locCloseSug('${p}'),150)">
-      <div id="${p}Sug" class="ac-list" role="listbox"></div>
-    </div>
-  </div>
-  <div class="grid2">
-    <div class="field"><label for="${p}Pin">Pincode</label>
-      <input id="${p}Pin" class="input" inputmode="numeric" maxlength="6" autocomplete="postal-code" placeholder="6 digits"
-        value="${esc(f.pincode)}" oninput="locPinInput('${p}',this.value)"></div>
-    <div class="field"><label for="${p}State">State</label>
-      <select id="${p}State" class="input" onchange="locStateChange('${p}',this.value)">
-        <option value="">Select state</option>
-        ${IN_STATES.map(s => `<option ${f.state===s?"selected":""}>${esc(s)}</option>`).join("")}
-      </select></div>
-  </div>
-  <div id="${p}Msg" class="loc-msg ${f.msgKind}">${esc(f.msg)}</div>`;
-}
-function locPaintSug(p){
-  const f = LOCF[p], box = el(p+"Sug"), inp = el(p+"City"); if(!box) return;
-  if(!f.sug.length){ box.innerHTML = ""; box.classList.remove("open"); if(inp) inp.setAttribute("aria-expanded","false"); return; }
-  box.innerHTML = f.sug.map((x,i) => `<div class="ac-item ${i===f.hi?'on':''}" role="option" data-i="${i}"
-      onpointerdown="event.preventDefault();locCityPick('${p}',${i})"><b>${esc(x.c)}</b><span>${esc(x.s)}</span></div>`).join("");
-  box.classList.add("open"); if(inp) inp.setAttribute("aria-expanded","true");
-}
-function locCloseSug(p){ const f = LOCF[p]; if(!f) return; f.sug = []; f.hi = -1; locPaintSug(p); }
-function locMsg(p, text, kind){ const f = LOCF[p]; f.msg = text||""; f.msgKind = kind||""; const m = el(p+"Msg"); if(m){ m.textContent = f.msg; m.className = "loc-msg " + f.msgKind; } }
-function locSetState(p, st){ const f = LOCF[p]; f.state = st || ""; const s = el(p+"State"); if(s) s.value = f.state; }
-function locCityInput(p, v){
-  const f = LOCF[p]; f.city = v; f.hi = -1;
-  f.sug = citySuggestions(v);
-  const known = cityState(v); if(known) locSetState(p, known);
-  locPaintSug(p); locRecheck(p);
-}
-function locCityPick(p, i){
-  const f = LOCF[p], x = f.sug[i]; if(!x) return;
-  f.city = x.c; const inp = el(p+"City"); if(inp) inp.value = x.c;
-  locSetState(p, x.s); locCloseSug(p);
-  if(!f.pincode) locMsg(p, "Now add your 6-digit pincode.", ""); else locRecheck(p);
-  const pin = el(p+"Pin"); if(pin && !f.pincode) pin.focus();
-}
-function locCityKey(p, e){
-  const f = LOCF[p]; if(!f.sug.length) return;
-  if(e.key === "ArrowDown"){ e.preventDefault(); f.hi = (f.hi + 1) % f.sug.length; locPaintSug(p); }
-  else if(e.key === "ArrowUp"){ e.preventDefault(); f.hi = (f.hi - 1 + f.sug.length) % f.sug.length; locPaintSug(p); }
-  else if(e.key === "Enter"){ e.preventDefault(); locCityPick(p, f.hi >= 0 ? f.hi : 0); }
-  else if(e.key === "Escape"){ locCloseSug(p); }
-}
-function locRecheck(p){
-  const f = LOCF[p]; if(!f.pinOk || !f.pinState) return;
-  const c = locClash(f);
-  if(c) locMsg(p, c, "bad");
-  else if(f.msgKind === "bad"){ locSetState(p, f.pinState); locMsg(p, "✓ " + f.pincode + " · " + f.pinState, "ok"); }
-}
-function locStateChange(p, v){ LOCF[p].state = v; }
-async function locPinInput(p, v){
-  const f = LOCF[p];
-  const pin = String(v).replace(/\D/g,"").slice(0,6);
-  const inp = el(p+"Pin"); if(inp && inp.value !== pin) inp.value = pin;
-  f.pincode = pin; f.pinOk = false; f.pinState = "";
-  if(pin.length < 6){ locMsg(p, "", ""); return; }
-  const seq = ++f.seq;
-  locMsg(p, "Looking up " + pin + "…", "busy");
-  const res = await lookupPincode(pin);
-  if(seq !== f.seq) return;            // a newer pincode was typed meanwhile
-  if(!res || res.invalid){ locMsg(p, "We couldn't find that pincode. Please check it.", "bad"); return; }
-  f.pinOk = true;
-  if(res.source === "post") f.pinState = res.state;
-  const clash = locClash(f);
-  if(clash){ locMsg(p, clash, "bad"); return; }
-  if(res.state) locSetState(p, res.state);
-  if(res.city && !f.city.trim()){ f.city = res.city; const c = el(p+"City"); if(c) c.value = res.city; }
-  locMsg(p, res.city ? `✓ ${res.city}, ${res.state}` : `✓ ${res.state}`, "ok");
-}
-/* A pincode confirmed by India Post that sits in a different state from the
-   city typed is almost always a typo, so say so instead of saving it. */
-function locClash(f){
-  if(!f.pinState || !f.city.trim()) return null;
-  const k = normCity(f.city).toLowerCase();
-  const states = CITIES.filter(x => x.c.toLowerCase() === k).map(x => x.s);
-  if(!states.length || states.includes(f.pinState)) return null;
-  return "Pincode " + f.pincode + " is in " + f.pinState + ", but " + normCity(f.city) + " is in " + states[0] + ". Please check your city or pincode.";
-}
-/* returns an error message, or null when the location is complete */
-function locError(p){
-  const f = LOCF[p]; if(!f) return "Add your location.";
-  if(!f.city.trim()) return "Enter your city.";
-  if(!/^[1-9][0-9]{5}$/.test(f.pincode)) return "Enter a valid 6-digit pincode.";
-  if(!f.pinOk && f.msgKind === "bad") return f.msg || "That pincode doesn't look right.";
-  const clash = locClash(f); if(clash) return clash;
-  if(!f.state) return "Select your state.";
-  return null;
-}
-const locValue = p => ({ city: normCity(LOCF[p].city), state: LOCF[p].state, pincode: LOCF[p].pincode });
-
-/* ============================================================
-   STATE
-   Only small UI preferences are kept in the browser. Accounts,
-   requests, quotes, bookings and messages all live in Supabase.
-   ============================================================ */
-const PREFS_KEY = "snappro.v3";
-/* clear data saved by earlier versions of the site */
-try{ ["snappro.v1","snappro.v2","snapnow.v1","snapnow.v2"].forEach(k => localStorage.removeItem(k)); }catch(e){}
-
-function loadPrefs(){ try{ return JSON.parse(localStorage.getItem(PREFS_KEY)) || {}; }catch(e){ return {}; } }
-function savePrefs(){ try{ localStorage.setItem(PREFS_KEY, JSON.stringify(S.prefs)); }catch(e){} }
-
-var S = {
-  booted: false,
-  me: null,          // own profiles row
-  pg: null,          // own photographers row (photographers only)
-  email: "",
-  tab: "home",
-  stack: [],
-  auth: { step: "welcome", type: null, email: "", otp: "", busy: false, err: null, mode: "", draft: null },
-  draft: null,       // new request being built
-  prefs: loadPrefs(),
-  d: {               // data from Supabase
-    requests: [], offers: {}, bookings: [], openRequests: [], myOffers: [],
-    pgs: {}, pgList: [], pgListAt: 0, reviews: {}, reviewed: {}, msgs: {}
-  },
-  loading: {}
-};
-if(!S.prefs.passed) S.prefs.passed = [];
-
-const isCustomer = () => S.me && S.me.role === "customer";
-const isPg = () => S.me && S.me.role === "photographer";
-const meCity = () => (S.me && S.me.city) || "";
-
-/* ============================================================
-   SUPABASE
-   ============================================================ */
-const SUPABASE_URL = "https://eafudrjxjtenqoorjzsc.supabase.co";
-const SUPABASE_ANON_KEY = "sb_publishable_n8ub8dzUbfa5uJqA_PHDXw_QLJJINCd";
-var sb = null;
-
-function sbClient(){
-  if(!sb && window.supabase && window.supabase.createClient){
-    try{ sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); }catch(e){ console.error("SnapPro: Supabase client", e); }
-  }
-  return sb;
-}
-async function ensureSb(){
-  for(let i = 0; i < 30 && !sbClient(); i++) await new Promise(r => setTimeout(r, 200));
-  return !!sb;
-}
-/* Supabase returns {data,error}; it does not throw. Our database triggers
-   raise plain-English messages, so those are shown as they are. */
-function dbMsg(e){
-  const m = (e && (e.message || e.error_description)) || "";
-  if(!m) return "Something went wrong. Please try again.";
-  if(/duplicate key|already exists/i.test(m)) return "That's already been done.";
-  if(/violates row-level security|permission denied/i.test(m)) return "You don't have access to that.";
-  if(/Failed to fetch|NetworkError|network/i.test(m)) return "No connection. Check your internet and try again.";
-  if(/JWT|session/i.test(m)) return "Your session has expired. Please log in again.";
-  return m;
-}
-async function q(promise){
-  const res = await promise;
-  if(res && res.error) throw new Error(dbMsg(res.error));
-  return res ? res.data : null;
-}
-
-const PG_COLS = "id,display_name,city,state,pincode,bio,categories,years_exp,price_multiplier,rating,review_count,jobs_done,is_online,is_verified,portfolio,created_at";
-const REQ_COLS = "id,customer_id,customer_name,category,urgency,duration_hrs,city,state,pincode,budget,deliverables,notes,status,start_at,expires_at,created_at";
-const BK_COLS = "id,request_id,offer_id,customer_id,photographer_id,customer_name,photographer_name,category,start_at,duration_hrs,city,pincode,address,price,status,created_at,updated_at";
-
-const api = {
-  async uid(){ const { data } = await sb.auth.getSession(); return data && data.session ? data.session.user.id : null; },
-
-  async loadMe(){
-    const { data: u } = await sb.auth.getUser();
-    const user = u && u.user; if(!user) return null;
-    S.email = user.email || "";
-    const p = await q(sb.from("profiles").select("id,name,role,email,phone,city,state,pincode").eq("id", user.id).maybeSingle());
-    S.me = p || { id: user.id, name: "", role: "customer", email: user.email };
-    S.pg = null;
-    if(S.me.role === "photographer"){
-      S.pg = await q(sb.from("photographers").select(PG_COLS).eq("id", user.id).maybeSingle());
-      if(S.pg) S.d.pgs[S.pg.id] = S.pg;
-    }
-    return S.me;
-  },
-  async saveProfile(patch){
-    const row = await q(sb.from("profiles").update(patch).eq("id", S.me.id).select("id,name,role,email,phone,city,state,pincode").single());
-    S.me = row; return row;
-  },
-  async savePg(patch, isNew){
-    const row = isNew
-      ? await q(sb.from("photographers").insert(Object.assign({ id: S.me.id }, patch)).select(PG_COLS).single())
-      : await q(sb.from("photographers").update(patch).eq("id", S.me.id).select(PG_COLS).single());
-    S.pg = row; S.d.pgs[row.id] = row; return row;
-  },
-
-  async photographers(){
-    const rows = await q(sb.from("photographers").select(PG_COLS).order("created_at", {ascending:false}).limit(300));
-    rows.forEach(r => S.d.pgs[r.id] = r);
-    S.d.pgList = rows; S.d.pgListAt = Date.now();
-    return rows;
-  },
-  async ensurePgs(ids){
-    const need = [...new Set(ids)].filter(id => id && !S.d.pgs[id]);
-    if(!need.length) return;
-    const rows = await q(sb.from("photographers").select(PG_COLS).in("id", need));
-    rows.forEach(r => S.d.pgs[r.id] = r);
-  },
-  async reviewsFor(pgId){
-    const rows = await q(sb.from("reviews").select("id,booking_id,customer_name,stars,body,created_at").eq("photographer_id", pgId).order("created_at", {ascending:false}).limit(50));
-    S.d.reviews[pgId] = rows; return rows;
-  },
-
-  /* ---- customer ---- */
-  async createRequest(d){
-    return q(sb.from("requests").insert(d).select(REQ_COLS).single());
-  },
-  async myRequests(){
-    return q(sb.from("requests").select(REQ_COLS).eq("customer_id", S.me.id).order("created_at", {ascending:false}).limit(40));
-  },
-  async offersFor(reqIds){
-    if(!reqIds.length) return [];
-    return q(sb.from("offers").select("id,request_id,photographer_id,photographer_name,price,eta_min,note,created_at").in("request_id", reqIds).order("created_at"));
-  },
-  async cancelRequest(id){ return q(sb.from("requests").update({ status: "cancelled" }).eq("id", id).select("id").single()); },
-  async book(offerId, address){
-    return q(sb.from("bookings").insert({ offer_id: offerId, customer_id: S.me.id, address }).select(BK_COLS).single());
-  },
-  async reviewedBookings(ids){
-    if(!ids.length) return [];
-    return q(sb.from("reviews").select("booking_id,stars,body").in("booking_id", ids));
-  },
-  async review(bookingId, stars, body){
-    /* the database fills in the photographer and customer from the booking */
-    return q(sb.from("reviews").insert({ booking_id: bookingId, stars, body }).select("id").single());
-  },
-
-  /* ---- photographer ---- */
-  async openRequests(){
-    return q(sb.from("requests").select(REQ_COLS).eq("status","broadcasting").gt("expires_at", new Date().toISOString())
-      .neq("customer_id", S.me.id).order("created_at", {ascending:false}).limit(60));
-  },
-  async myOffers(){
-    return q(sb.from("offers").select("id,request_id,price,eta_min,note,created_at").eq("photographer_id", S.me.id).order("created_at", {ascending:false}).limit(60));
-  },
-  async sendOffer(reqId, price, eta, note){
-    return q(sb.from("offers").insert({ request_id: reqId, photographer_id: S.me.id, price, eta_min: eta, note }).select("id").single());
-  },
-  async withdrawOffer(id){ return q(sb.from("offers").delete().eq("id", id)); },
-
-  /* ---- both ---- */
-  async myBookings(){
-    const col = isPg() ? "photographer_id" : "customer_id";
-    return q(sb.from("bookings").select(BK_COLS).eq(col, S.me.id).order("start_at", {ascending:false}).limit(60));
-  },
-  async setBooking(id, patch){ return q(sb.from("bookings").update(patch).eq("id", id).select(BK_COLS).single()); },
-  async messages(bookingId){
-    return q(sb.from("messages").select("id,sender_id,content,created_at").eq("booking_id", bookingId).order("created_at").limit(300));
-  },
-  async sendMessage(bookingId, content){
-    return q(sb.from("messages").insert({ booking_id: bookingId, sender_id: S.me.id, content }).select("id").single());
-  }
-};
-
-/* ============================================================
-   PORTFOLIO PHOTOS — resized in the browser before upload so a
-   10 MB phone photo becomes a ~300 KB JPEG
-   ============================================================ */
-async function resizeImage(file, max, quality){
-  max = max || 1600; quality = quality || 0.85;
-  let src;
-  if(window.createImageBitmap){ try{ src = await createImageBitmap(file, { imageOrientation: "from-image" }); }catch(e){ src = null; } }
-  if(!src){
-    src = await new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = URL.createObjectURL(file); });
-  }
-  const w = src.width, h = src.height, k = Math.min(1, max / Math.max(w, h));
-  const c = document.createElement("canvas"); c.width = Math.round(w*k); c.height = Math.round(h*k);
-  c.getContext("2d").drawImage(src, 0, 0, c.width, c.height);
-  return new Promise(res => c.toBlob(res, "image/jpeg", quality));
-}
-async function uploadPortfolio(files){
-  const list = Array.from(files || []).filter(f => /^image\//.test(f.type));
-  if(!list.length){ toast("Choose photos", "JPG, PNG or WebP images", "image"); return; }
-  const room = 30 - ((S.pg && S.pg.portfolio) || []).length;
-  if(room <= 0){ toast("Portfolio is full", "Remove a photo to add another (max 30)", "image"); return; }
-  const take = list.slice(0, room);
-  let urls = [], failed = 0;
-  for(let i = 0; i < take.length; i++){
-    setBusyNote("Uploading photo " + (i+1) + " of " + take.length + "…");
-    try{
-      const blob = await resizeImage(take[i]);
-      const path = S.me.id + "/" + Date.now() + "-" + Math.random().toString(36).slice(2,8) + ".jpg";
-      const up = await sb.storage.from("portfolio").upload(path, blob, { contentType: "image/jpeg", upsert: false });
-      if(up.error) throw up.error;
-      const { data } = sb.storage.from("portfolio").getPublicUrl(path);
-      urls.push(data.publicUrl);
-    }catch(e){ failed++; console.error("SnapPro upload", e); }
-  }
-  setBusyNote("");
-  if(urls.length){
-    try{ await api.savePg({ portfolio: [ ...((S.pg && S.pg.portfolio) || []), ...urls ] }); }
-    catch(e){ toast("Couldn't save photos", e.message, "x"); return; }
-  }
-  if(failed) toast("Some photos didn't upload", failed + " failed — try again", "x");
-  else toast(urls.length === 1 ? "Photo added" : urls.length + " photos added", "They're on your public profile now", "image");
-  render();
-}
-async function removePortfolio(url){
-  if(!confirm("Remove this photo from your portfolio?")) return;
-  const marker = "/object/public/portfolio/";
-  const i = url.indexOf(marker);
-  if(i >= 0){ try{ await sb.storage.from("portfolio").remove([decodeURIComponent(url.slice(i + marker.length))]); }catch(e){} }
-  try{ await api.savePg({ portfolio: ((S.pg && S.pg.portfolio) || []).filter(u => u !== url) }); toast("Photo removed", "", "trash"); }
-  catch(e){ toast("Couldn't remove photo", e.message, "x"); }
-  render();
-}
-function setBusyNote(text){ const n = el("busyNote"); if(n){ n.textContent = text; n.style.display = text ? "block" : "none"; } }
-
-/* ============================================================
-   REFRESH — how people on different phones see each other.
-   Runs every few seconds while the app is open; never rebuilds the
-   screen while you're typing.
-   ============================================================ */
-let pollTimer = null, chatTimer = null, refreshing = false;
-function startPolling(){ stopPolling(); pollTimer = setInterval(() => { if(!document.hidden) refresh(true); }, 7000); }
-function stopPolling(){ if(pollTimer) clearInterval(pollTimer); pollTimer = null; if(chatTimer) clearInterval(chatTimer); chatTimer = null; }
-
-async function refresh(fromPoll){
-  if(!S.me || refreshing || !sb) return;
-  refreshing = true;
-  const before = signature();
-  try{
-    if(isCustomer()){
-      const reqs = await api.myRequests();
-      const prevOffers = S.d.offers;
-      const ids = reqs.filter(r => r.status === "broadcasting" || r.status === "awaiting").map(r => r.id);
-      const offers = await api.offersFor(ids);
-      const grouped = {}; offers.forEach(o => (grouped[o.request_id] = grouped[o.request_id] || []).push(o));
-      await api.ensurePgs(offers.map(o => o.photographer_id));
-      if(fromPoll) offers.forEach(o => {
-        const had = (prevOffers[o.request_id] || []).some(x => x.id === o.id);
-        if(!had) toast((o.photographer_name || "A photographer") + " sent a quote", inr(o.price) + " — tap your request to compare", "check");
-      });
-      S.d.requests = reqs; S.d.offers = grouped;
-    } else if(isPg()){
-      const prevOpen = new Set(S.d.openRequests.map(r => r.id));
-      const [open, mine] = await Promise.all([api.openRequests(), api.myOffers()]);
-      if(fromPoll) open.filter(r => !prevOpen.has(r.id) && matchesMe(r)).forEach(r =>
-        toast("New " + catById(r.category).name.toLowerCase() + " request", (r.city||"") + " · " + whenStr(r.start_at), "bolt"));
-      S.d.openRequests = open; S.d.myOffers = mine;
-    }
-    const prevBk = {}; S.d.bookings.forEach(b => prevBk[b.id] = b.status);
-    const bks = await api.myBookings();
-    if(fromPoll) bks.forEach(b => {
-      if(!(b.id in prevBk) && isPg()) toast("You're booked!", (b.customer_name||"A customer") + " · " + catById(b.category).name + " · " + whenStr(b.start_at), "check");
-      else if(prevBk[b.id] && prevBk[b.id] !== b.status) toast("Booking " + BK_LABEL[b.status].toLowerCase(), catById(b.category).name + " · " + whenStr(b.start_at), "cam");
-    });
-    S.d.bookings = bks;
-    if(isCustomer()){
-      const done = bks.filter(b => b.status === "completed").map(b => b.id).filter(id => !(id in S.d.reviewed));
-      if(done.length) (await api.reviewedBookings(done)).forEach(r => S.d.reviewed[r.booking_id] = r);
-      done.forEach(id => { if(!(id in S.d.reviewed)) S.d.reviewed[id] = null; });
-      await api.ensurePgs(bks.map(b => b.photographer_id));
-    }
-  }catch(e){
-    if(!fromPoll) toast("Couldn't refresh", e.message, "x");
-  }finally{ refreshing = false; }
-  if(signature() !== before) softRender();
-}
-function signature(){
-  const d = S.d;
-  return JSON.stringify([d.requests.map(r => r.id + r.status), Object.values(d.offers).flat().map(o => o.id),
-    d.bookings.map(b => b.id + b.status + (b.address||"")), d.openRequests.map(r => r.id), d.myOffers.map(o => o.id),
-    Object.keys(d.reviewed).length]);
-}
-function matchesMe(r){
-  if(!S.pg) return false;
-  const cityOk = !meCity() || !r.city || r.city.toLowerCase() === meCity().toLowerCase();
-  const cats = S.pg.categories || [];
-  return cityOk && (!cats.length || cats.includes(r.category));
-}
-
-/* Re-render unless the person is typing — rebuilding a focused field
-   would reset their phone keyboard and lose their place. */
-let pendingRender = false;
-function softRender(){
-  const a = document.activeElement;
-  if(a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && el("screen") && el("screen").contains(a)){
-    if(!pendingRender){ pendingRender = true; a.addEventListener("blur", () => { pendingRender = false; setTimeout(render, 0); }, { once: true }); }
-    return;
-  }
-  render();
-}
-
-const BK_FLOW = ["confirmed","enroute","arrived","shooting","completed"];
-const BK_LABEL = { confirmed:"Confirmed", enroute:"On the way", arrived:"Arrived", shooting:"Shoot in progress", completed:"Completed", cancelled:"Cancelled" };
-const BK_CHIP = { confirmed:"green", enroute:"accent", arrived:"blue", shooting:"purple", completed:"green", cancelled:"red" };
-function reqState(r){
-  if(r.status === "matched") return { label:"Booked", kind:"green" };
-  if(r.status === "cancelled") return { label:"Cancelled", kind:"red" };
-  const n = (S.d.offers[r.id] || []).length;
-  const open = r.status === "broadcasting" && toMs(r.expires_at) > Date.now();
-  if(n) return { label: n + (n === 1 ? " quote" : " quotes"), kind:"accent" };
-  if(open) return { label:"Waiting for quotes", kind:"accent" };
-  return { label:"No quotes", kind:"" };
-}
-
-/* one shared AudioContext — creating one per shutter leaks and browsers cap them */
-var _fxAudio = null;
-function fxAudioCtx(){
-  const AC = window.AudioContext || window.webkitAudioContext;
-  if(!AC) return null;
-  try{
-    if(!_fxAudio || _fxAudio.state === "closed") _fxAudio = new AC();
-    if(_fxAudio.state === "suspended") _fxAudio.resume().catch(()=>{});
-    return _fxAudio;
-  }catch(e){ return null; }
-}
-
-function playShutterSound(){
-  const ctx = fxAudioCtx(); if(!ctx) return;
-  try{
-    const t = ctx.currentTime;
-
-    /* mirror flip — low thump */
-    const osc = ctx.createOscillator(), g1 = ctx.createGain();
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(150, t);
-    osc.frequency.exponentialRampToValueAtTime(30, t + 0.05);
-    g1.gain.setValueAtTime(0.22, t);
-    g1.gain.exponentialRampToValueAtTime(0.001, t + 0.05);
-    osc.connect(g1); g1.connect(ctx.destination);
-    osc.start(t); osc.stop(t + 0.06);
-
-    /* curtain snap — filtered noise burst */
-    const len = Math.floor(ctx.sampleRate * 0.08);
-    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
-    const data = buf.getChannelData(0);
-    for(let i = 0; i < len; i++) data[i] = (Math.random()*2 - 1) * Math.exp(-i / (len * 0.25));
-    const noise = ctx.createBufferSource(); noise.buffer = buf;
-    const hp = ctx.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 1000;
-    const g2 = ctx.createGain();
-    g2.gain.setValueAtTime(0.36, t + 0.04);
-    g2.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
-    noise.connect(hp); hp.connect(g2); g2.connect(ctx.destination);
-    noise.start(t + 0.04); noise.stop(t + 0.14);
+    var signedIn = Object.keys(localStorage).some(function(k){ return /^sb-.*-auth-token$/.test(k); });
+    if(signedIn) document.querySelectorAll("[data-when]").forEach(function(a){ a.hidden = a.getAttribute("data-when") !== "in"; });
   }catch(e){}
-}
 
-/* timers from a previous run, so a re-trigger never double-fires */
-var _fxTimers = [];
-function fxClearTimers(){ _fxTimers.forEach(clearTimeout); _fxTimers = []; }
-function fxAt(ms, fn){ _fxTimers.push(setTimeout(fn, ms)); }
+  var nav = document.getElementById("nav");
+  addEventListener("scroll", function(){ nav.classList.toggle("scrolled", scrollY > 8); }, { passive: true });
 
-/*
-  The OTP digits physically become the camera:
-  the four real digit boxes are cloned at their exact on-screen positions,
-  fly to the centre while their numbers fade, and the camera grows out of
-  where they merged. Then the shutter snaps and the screen flashes white.
-  Rebuilt from scratch on every call, so it always replays.
-*/
-function triggerCameraFlashTransition(callback, opts){
-  opts = opts || {};
-  fxClearTimers();
-  const prev = el("camFx"); if(prev) prev.remove();
+  /* fade sections in as they scroll into view */
+  var items = document.querySelectorAll(".reveal");
+  if(window.IntersectionObserver){
+    var io = new IntersectionObserver(function(es){ es.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add("in"); io.unobserve(e.target); } }); }, { rootMargin: "0px 0px -8% 0px" });
+    items.forEach(function(n){ io.observe(n); });
+  } else items.forEach(function(n){ n.classList.add("in"); });
 
-  const reduced = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
-  let done = false;
-  const fire = ()=>{ if(done) return; done = true; try{ if(callback) callback(); }catch(e){ console.error("SnapPro login transition:", e); } };
-
-  const fx = document.createElement("div");
-  fx.id = "camFx";
-  fx.setAttribute("role","status");
-  fx.setAttribute("aria-live","polite");
-  fx.setAttribute("aria-label","Signing you in");
-  fx.innerHTML =
-    '<div class="fx-scrim"></div>' +
-    '<div class="fx-cam">' +
-      '<div class="fx-tag">' + esc(opts.tag || "Code verified") + '</div>' +
-      '<div class="fx-body">' +
-        '<div class="fx-shutterbtn"></div><div class="fx-dial"></div>' +
-        '<div class="fx-vf"><i></i></div>' +
-        '<div class="fx-emitter"><i></i></div>' +
-        '<div class="fx-lens"><div class="fx-glare"></div><div class="fx-iris"><i></i></div></div>' +
-      '</div>' +
-      '<div class="fx-status">' +
-        '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>' +
-        '<span>' + esc(opts.status || "Say cheese…") + '</span>' +
-      '</div>' +
-    '</div>' +
-    '<div class="fx-flash"></div>';
-  document.body.appendChild(fx);
-
-  /* clone the live digit boxes where they actually sit on screen */
-  const cells = Array.prototype.slice.call(document.querySelectorAll(".otp-cell"));
-  const clones = [];
-  cells.forEach(function(c){
-    const r = c.getBoundingClientRect();
-    if(!r.width || !r.height) return;
-    const d = document.createElement("div");
-    d.className = "fx-cell";
-    d.style.left = r.left + "px"; d.style.top = r.top + "px";
-    d.style.width = r.width + "px"; d.style.height = r.height + "px";
-    d.innerHTML = "<span>" + esc((c.textContent || "").trim()) + "</span>";
-    fx.appendChild(d);
-    clones.push({node: d, rect: r});
-  });
-
-  const cx = window.innerWidth / 2, cy = window.innerHeight / 2;
-
-  /* reduced motion: no flying, no blinding strobe — just a soft wash */
-  if(reduced){
-    fx.classList.add("dim","cam-in");
-    clones.forEach(function(c){ c.node.style.opacity = "0"; });
-    fxAt(140, function(){ fx.classList.add("charge"); });
-    fxAt(230, function(){ fx.classList.add("snap"); playShutterSound(); });
-    fxAt(300, function(){ fx.classList.add("flash"); });
-    fxAt(420, fire);
-    fxAt(800, function(){ const n = el("camFx"); if(n) n.remove(); });
-    return;
-  }
-
-  requestAnimationFrame(function(){
-    fx.classList.add("dim");
-    /* digits converge on the centre and dissolve into the camera's footprint */
-    clones.forEach(function(c, i){
-      const dx = cx - (c.rect.left + c.rect.width / 2);
-      const dy = cy - (c.rect.top + c.rect.height / 2);
-      const spread = (i - (clones.length - 1) / 2);
-      c.node.style.transform = "translate(" + dx + "px," + dy + "px) scale(.34) rotate(" + (spread * 24) + "deg)";
-      c.node.style.borderRadius = "50%";
-      c.node.style.background = "var(--accent)";
-      c.node.style.boxShadow = "0 0 34px rgba(255,90,31,.75)";
-      c.node.style.opacity = "0";
-    });
-    fx.classList.add("converge");
-  });
-
-  fxAt(430, function(){ fx.classList.add("cam-in"); clones.forEach(function(c){ c.node.remove(); }); });
-  fxAt(700, function(){ fx.classList.add("charge"); });
-  fxAt(870, function(){ fx.classList.add("snap"); playShutterSound(); });
-  fxAt(990, function(){ fx.classList.add("flash"); });
-  /* log in while the screen is pure white, so the app is already there when it fades */
-  fxAt(1120, fire);
-  fxAt(1900, function(){ const n = el("camFx"); if(n) n.remove(); });
-
-  /* safety net: never strand the user behind the overlay */
-  fxAt(3200, function(){ fire(); const n = el("camFx"); if(n) n.remove(); });
-}
-
-
-/* ============================================================
-   TYPING — never rebuild the field being typed into
-   ============================================================ */
-function setHtml(id, html){ const n = el(id); if(n) n.innerHTML = html; }
-function setCls(id, cls, on){ const n = el(id); if(n) n.classList.toggle(cls, !!on); }
-function clearAuthErr(){ S.auth.err = null; setHtml("authErr", ""); }
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-function emailErrHtml(v){ return v && !EMAIL_RE.test(v) ? `<div class="field-err">Enter a valid email address.</div>` : ""; }
-function emailInput(v){ S.auth.email = v.trim(); clearAuthErr(); setHtml("emailErr", ""); }
-function emailBlur(){ setHtml("emailErr", emailErrHtml(S.auth.email)); }
-function errHtml(msg){ return msg ? `<div class="form-err" role="alert">${esc(msg)}</div>` : ""; }
-
-/* ============================================================
-   PASSWORDS — held outside S, never written to storage
-   ============================================================ */
-var PW = { pw:"", pw2:"", show:false, touched:false, flash:false };
-function pwReset(){ PW = { pw:"", pw2:"", show:false, touched:false, flash:false }; }
-function pwRules(p){
-  p = p || "";
-  return [
-    { ok: p.length >= 8,   t: "At least 8 characters" },
-    { ok: /[a-z]/.test(p), t: "One lowercase letter" },
-    { ok: /[A-Z]/.test(p), t: "One uppercase letter" },
-    { ok: /[0-9]/.test(p), t: "One number" }
-  ];
-}
-const pwStrong = () => pwRules(PW.pw).every(r => r.ok);
-function pwRulesInner(){
-  const live = PW.touched || PW.pw.length > 0;
-  return pwRules(PW.pw).map(r => `<div class="pw-rule ${r.ok?'ok':(live?'bad':'')} ${PW.flash&&!r.ok?'pw-flash-text':''}">${r.ok?'✓':(live?'✗':'•')} ${r.t}</div>`).join("");
-}
-function pwMatchInner(){
-  const mism = (PW.touched || PW.pw2.length > 0) && PW.pw2 !== PW.pw;
-  if(mism) return `<div class="field-err ${PW.flash?'pw-flash-text':''}">✗ Passwords don't match</div>`;
-  if(PW.pw2 && PW.pw2 === PW.pw) return `<div class="field-ok">✓ Passwords match</div>`;
-  return "";
-}
-function pwPaint(){
-  const live = PW.touched || PW.pw.length > 0;
-  setHtml("pwRules", pwRulesInner());
-  setCls("pw1", "pw-bad", live && !pwStrong());
-  if(el("pw2")){ setCls("pw2", "pw-bad", (PW.touched || PW.pw2.length > 0) && PW.pw2 !== PW.pw); setHtml("pwMatch", pwMatchInner()); }
-}
-function pwInput(k, v){ PW[k] = v; clearAuthErr(); pwPaint(); }
-function pwToggleShow(){
-  PW.show = !PW.show;
-  ["pw1","pw2","pwLogin"].forEach(id => { const n = el(id); if(n) n.type = PW.show ? "text" : "password"; });
-  document.querySelectorAll(".pw-eye").forEach(b => b.textContent = PW.show ? "Hide" : "Show");
-}
-/* true = blocked; the field shakes, flashes red and the failing rules blink */
-function pwBlock(needConfirm){
-  const bad = !pwStrong() || (needConfirm && PW.pw !== PW.pw2);
-  if(!bad) return false;
-  PW.touched = true; PW.flash = true; render();
-  setTimeout(() => { PW.flash = false; pwPaint(); ["pw1","pw2"].forEach(id => setCls(id, "pw-flash", false)); }, 850);
-  return true;
-}
-function pwFieldsHtml(label){
-  const live = PW.touched || PW.pw.length > 0;
-  const weak = live && !pwStrong();
-  const mism = (PW.touched || PW.pw2.length > 0) && PW.pw2 !== PW.pw;
-  const type = PW.show ? "text" : "password";
-  return `
-  <div class="field"><label for="pw1">${label || "Create a password"}</label>
-    <div class="pw-wrap">
-      <input id="pw1" class="input ${weak?'pw-bad':''} ${PW.flash&&weak?'pw-flash':''}" type="${type}" autocomplete="new-password"
-        placeholder="Create a strong password" value="${esc(PW.pw)}" oninput="pwInput('pw',this.value)">
-      <button type="button" class="pw-eye" onclick="pwToggleShow()">${PW.show?'Hide':'Show'}</button>
-    </div>
-    <div class="pw-rules" id="pwRules">${pwRulesInner()}</div>
-  </div>
-  <div class="field"><label for="pw2">Confirm password</label>
-    <input id="pw2" class="input ${mism?'pw-bad':''} ${PW.flash&&mism?'pw-flash':''}" type="${type}" autocomplete="new-password"
-      placeholder="Type it again" value="${esc(PW.pw2)}" oninput="pwInput('pw2',this.value)">
-    <div id="pwMatch">${pwMatchInner()}</div>
-  </div>`;
-}
-function friendlyAuthError(e){
-  const m = (e && e.message) || "", c = (e && e.code) || "";
-  if(c === "weak_password" || (/password/i.test(m) && /weak|should|least|contain|characters/i.test(m))) return "That password doesn't meet the requirements.";
-  if(/different from the old/i.test(m)) return "Choose a password you haven't used before.";
-  if(/invalid login credentials/i.test(m)) return "Wrong email or password.";
-  if(/email not confirmed/i.test(m)) return "Confirm your email first.";
-  if(/signups not allowed|user not found/i.test(m)) return "There's no account with that email.";
-  if(/rate limit|too many|security purposes/i.test(m)) return "Too many attempts. Please wait a minute and try again.";
-  if(/expired|invalid/i.test(m) && /token|otp|code/i.test(m)) return "That code is wrong or has expired.";
-  if(/Failed to fetch|network/i.test(m)) return "No connection. Check your internet and try again.";
-  return m || "Something went wrong. Please try again.";
-}
-const NO_CONN = "Couldn't connect to SnapPro. Check your internet and refresh the page.";
-
-/* ============================================================
-   AUTH SCREENS
-   ============================================================ */
-function authGo(step, patch){ S.auth = Object.assign({}, S.auth, patch || {}, { step, err: null }); render(); scrollTop(); }
-function authTop(title, sub, back){
-  return `<div class="topbar">${back ? `<button class="iconbtn" aria-label="Back" onclick="${back}">${icon("back",18)}</button>` : ""}
-    <div class="grow"><div class="h3">${esc(title)}</div>${sub ? `<div class="xs muted2">${esc(sub)}</div>` : ""}</div></div>`;
-}
-
-function vWelcome(){
-  return `<div class="pad welcome">
-    <div class="center hero-mark">
-      <div class="logo-lg">${icon("cam",32,"#fff",2)}</div>
-      <div class="h1 mt16">SnapPro</div>
-      <div class="sm muted mt4">Book a photographer near you, in minutes</div>
-    </div>
-    <div class="sec-title mt24">Get started</div>
-    <button class="card tap choice" onclick="pwReset();authGo('signup',{type:'customer'})">
-      <div class="choice-ic">🙋</div>
-      <div class="grow"><div class="h3">I need a photographer</div><div class="xs muted mt4">Post a shoot, get quotes from photographers near you, and book.</div></div>
-      ${icon("chevron",18,"var(--muted-2)")}
-    </button>
-    <button class="card tap choice mt12" onclick="pwReset();authGo('signup',{type:'photographer'})">
-      <div class="choice-ic alt">📷</div>
-      <div class="grow"><div class="h3">I'm a photographer</div><div class="xs muted mt4">Get shoot requests near you and send your own quotes.</div></div>
-      ${icon("chevron",18,"var(--muted-2)")}
-    </button>
-    <div class="center mt24">
-      <button class="btn block" onclick="pwReset();authGo('login')">I already have an account</button>
-    </div>
-    <div class="how mt24">
-      <div class="sec-title">How it works</div>
-      <div class="how-row"><b>1</b><span>Tell us when, where and what you're shooting.</span></div>
-      <div class="how-row"><b>2</b><span>Photographers in your city send quotes.</span></div>
-      <div class="how-row"><b>3</b><span>Compare portfolios and prices, book, and chat in the app.</span></div>
-    </div>
-    <div class="legal">Questions? <a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a></div>
-  </div>`;
-}
-
-function vSignup(){
-  const a = S.auth, isPgType = a.type === "photographer";
-  return `${authTop(isPgType ? "Join as a photographer" : "Create your account", "Step 1 of 2", "pwReset();authGo('welcome')")}
-  <div class="pad">
-    <div class="h2">Create your account</div>
-    <div class="sm muted mt4">We'll email you a 6-digit code to confirm it's you.</div>
-    <div class="field mt16"><label for="authEmail">Email address</label>
-      <input id="authEmail" class="input" type="email" inputmode="email" autocomplete="email" autocapitalize="off" spellcheck="false"
-        placeholder="you@example.com" value="${esc(a.email)}" oninput="emailInput(this.value)" onblur="emailBlur()">
-      <div id="emailErr">${emailErrHtml(a.email)}</div>
-    </div>
-    ${pwFieldsHtml()}
-    <button class="btn primary block mt8" ${a.busy?"disabled":""} onclick="submitSignup()">${a.busy ? "Creating account…" : "Create account"}</button>
-    <div id="authErr">${errHtml(a.err)}</div>
-    <div class="center mt16"><button class="linkish" onclick="pwReset();authGo('login')">Already have an account? <b>Log in</b></button></div>
-  </div>`;
-}
-async function submitSignup(){
-  const email = (S.auth.email || "").trim().toLowerCase();
-  if(!EMAIL_RE.test(email)){ S.auth.err = "Enter a valid email address."; render(); return; }
-  if(pwBlock(true)) return;
-  if(!(await ensureSb())){ S.auth.err = NO_CONN; render(); return; }
-  S.auth.busy = true; S.auth.err = null; render();
-  const { data, error } = await sb.auth.signUp({ email, password: PW.pw });
-  S.auth.busy = false;
-  if(error){ S.auth.err = friendlyAuthError(error); render(); return; }
-  if(data && data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0){
-    S.auth.err = "An account with this email already exists. Log in instead."; render(); return;
-  }
-  pwReset(); S.auth.email = email;
-  if(data && data.session){ afterAuth(true); return; }
-  S.auth.mode = "signup"; S.auth.otp = "";
-  authGo("otp");
-  toast("Check your email", "We sent a 6-digit code to " + email, "mail");
-}
-
-function otpBoxesHtml(code){
-  return [0,1,2,3,4,5].map(i => `<div class="otp-cell ${code.length===i?'on':''}">${esc(code[i]||"")}</div>`).join("");
-}
-function otpInput(v){
-  const code = String(v).replace(/\D/g, "").slice(0, 6);
-  S.auth.otp = code; clearAuthErr();
-  const inp = el("authOtp"); if(inp && inp.value !== code) inp.value = code;
-  setHtml("otpBoxes", otpBoxesHtml(code));
-  const b = el("otpVerify"); if(b) b.disabled = !(code.length === 6 && !S.auth.busy);
-}
-function vOtp(){
-  const a = S.auth, code = String(a.otp || "");
-  const back = a.mode === "reset" ? "authGo('reset')" : "authGo('signup')";
-  return `${authTop(a.mode === "reset" ? "Reset your password" : "Confirm your email", a.email, back)}
-  <div class="pad">
-    <div class="h2">Enter your code</div>
-    <div class="sm muted mt4">We sent a 6-digit code to <b>${esc(a.email)}</b>. It can take a minute to arrive — check spam too.</div>
-    <div class="otp-row mt20" id="otpBoxes">${otpBoxesHtml(code)}</div>
-    <input id="authOtp" class="input mt16 otp-input" inputmode="numeric" maxlength="6" autocomplete="one-time-code"
-      placeholder="6-digit code" value="${esc(code)}" oninput="otpInput(this.value)" onkeydown="if(event.key==='Enter')verifyOtp()">
-    <button id="otpVerify" class="btn primary block mt12" ${code.length===6&&!a.busy?"":"disabled"} onclick="verifyOtp()">
-      ${a.busy ? "Checking…" : icon("cam",16,"#fff") + " Verify &amp; continue"}</button>
-    <div id="authErr">${errHtml(a.err)}</div>
-    <div class="center mt16"><button class="linkish" onclick="resendCode()">Didn't get it? <b>Send a new code</b></button></div>
-  </div>`;
-}
-async function resendCode(){
-  const a = S.auth; if(!a.email || !(await ensureSb())) return;
-  const res = a.mode === "reset"
-    ? await sb.auth.signInWithOtp({ email: a.email, options: { shouldCreateUser: false } })
-    : await sb.auth.resend({ type: "signup", email: a.email });
-  if(res.error){ S.auth.err = friendlyAuthError(res.error); render(); return; }
-  S.auth.otp = ""; render();
-  toast("New code sent", "Check " + a.email, "mail");
-}
-async function verifyOtp(){
-  const a = S.auth, code = String(a.otp || "").trim();
-  if(code.length !== 6){ S.auth.err = "Enter the 6-digit code."; render(); return; }
-  if(!(await ensureSb())){ S.auth.err = NO_CONN; render(); return; }
-  S.auth.busy = true; S.auth.err = null; render();
-  let { data, error } = await sb.auth.verifyOtp({ email: a.email, token: code, type: "email" });
-  if(error && a.mode === "signup") ({ data, error } = await sb.auth.verifyOtp({ email: a.email, token: code, type: "signup" }));
-  S.auth.busy = false;
-  if(error || !data || !data.user){
-    S.auth.err = friendlyAuthError(error || { message: "That code is wrong or has expired." }); S.auth.otp = ""; render(); return;
-  }
-  if(a.mode === "reset"){ pwReset(); authGo("newpw"); return; }
-  afterAuth(true);
-}
-
-function vLogin(){
-  const a = S.auth, empty = PW.touched && !PW.pw;
-  return `${authTop("Log in", "Welcome back", "pwReset();authGo('welcome')")}
-  <div class="pad">
-    <div class="center mb16"><div class="logo-md">${icon("cam",26,"#fff",2)}</div><div class="h2 mt12">Welcome back</div></div>
-    <div class="field"><label for="authEmail">Email address</label>
-      <input id="authEmail" class="input" type="email" inputmode="email" autocomplete="email" autocapitalize="off" spellcheck="false"
-        placeholder="you@example.com" value="${esc(a.email)}" oninput="emailInput(this.value)" onblur="emailBlur()">
-      <div id="emailErr">${emailErrHtml(a.email)}</div>
-    </div>
-    <div class="field"><label for="pwLogin">Password</label>
-      <div class="pw-wrap">
-        <input id="pwLogin" class="input ${empty?'pw-bad':''} ${PW.flash&&empty?'pw-flash':''}" type="${PW.show?'text':'password'}"
-          autocomplete="current-password" placeholder="Your password" value="${esc(PW.pw)}"
-          oninput="PW.pw=this.value;clearAuthErr();setCls('pwLogin','pw-bad',false)" onkeydown="if(event.key==='Enter')submitLogin()">
-        <button type="button" class="pw-eye" onclick="pwToggleShow()">${PW.show?'Hide':'Show'}</button>
-      </div>
-      <div class="right mt8"><button class="linkish accent" onclick="pwReset();authGo('reset')"><b>Forgot password?</b></button></div>
-    </div>
-    <button class="btn primary block mt8" ${a.busy?"disabled":""} onclick="submitLogin()">${a.busy ? "Logging in…" : icon("cam",18,"#fff") + " Log in"}</button>
-    <div id="authErr">${errHtml(a.err)}</div>
-    <div class="center mt16"><button class="linkish" onclick="pwReset();authGo('welcome')">New to SnapPro? <b>Create an account</b></button></div>
-  </div>`;
-}
-async function submitLogin(){
-  const email = (S.auth.email || "").trim().toLowerCase();
-  if(!EMAIL_RE.test(email)){ S.auth.err = "Enter a valid email address."; render(); return; }
-  if(!PW.pw){ PW.touched = true; PW.flash = true; render(); setTimeout(() => { PW.flash = false; setCls("pwLogin","pw-flash",false); }, 850); return; }
-  if(!(await ensureSb())){ S.auth.err = NO_CONN; render(); return; }
-  S.auth.busy = true; S.auth.err = null; render();
-  const { data, error } = await sb.auth.signInWithPassword({ email, password: PW.pw });
-  S.auth.busy = false;
-  if(error){
-    let msg = friendlyAuthError(error);
-    if(msg === "Confirm your email first."){
-      S.auth.email = email; S.auth.mode = "signup"; pwReset();
-      await sb.auth.resend({ type: "signup", email });
-      authGo("otp"); toast("Confirm your email", "We've sent you a new code", "mail"); return;
-    }
-    if(msg === "Wrong email or password.") msg += " If you've never set a password, use “Forgot password?”.";
-    S.auth.err = msg; render(); return;
-  }
-  pwReset(); S.auth.email = email;
-  afterAuth({ tag: "Welcome back" });
-}
-
-function vReset(){
-  const a = S.auth;
-  return `${authTop("Forgot password", "We'll email you a code", "authGo('login')")}
-  <div class="pad">
-    <div class="h2">Reset your password</div>
-    <div class="sm muted mt4">Enter your email. We'll send a 6-digit code, then you'll choose a new password.</div>
-    <div class="field mt16"><label for="authEmail">Email address</label>
-      <input id="authEmail" class="input" type="email" inputmode="email" autocomplete="email" autocapitalize="off" spellcheck="false"
-        placeholder="you@example.com" value="${esc(a.email)}" oninput="emailInput(this.value)" onblur="emailBlur()" onkeydown="if(event.key==='Enter')sendResetCode()">
-      <div id="emailErr">${emailErrHtml(a.email)}</div>
-    </div>
-    <button class="btn primary block" ${a.busy?"disabled":""} onclick="sendResetCode()">${a.busy ? "Sending…" : "Email me a code"}</button>
-    <div id="authErr">${errHtml(a.err)}</div>
-  </div>`;
-}
-async function sendResetCode(){
-  const email = (S.auth.email || "").trim().toLowerCase();
-  if(!EMAIL_RE.test(email)){ S.auth.err = "Enter a valid email address."; render(); return; }
-  if(!(await ensureSb())){ S.auth.err = NO_CONN; render(); return; }
-  S.auth.busy = true; S.auth.err = null; render();
-  const { error } = await sb.auth.signInWithOtp({ email, options: { shouldCreateUser: false } });
-  S.auth.busy = false;
-  if(error){ S.auth.err = friendlyAuthError(error); render(); return; }
-  S.auth.email = email; S.auth.mode = "reset"; S.auth.otp = "";
-  authGo("otp"); toast("Code sent", "Check " + email, "mail");
-}
-function vNewPw(){
-  const a = S.auth;
-  return `${authTop("Choose a new password", a.email)}
-  <div class="pad">
-    <div class="h2">New password</div>
-    <div class="sm muted mt4">Your email is confirmed. Choose a password you'll remember.</div>
-    <div class="mt16">${pwFieldsHtml("New password")}</div>
-    <button class="btn primary block mt8" ${a.busy?"disabled":""} onclick="saveNewPassword()">${a.busy ? "Saving…" : "Save password"}</button>
-    <div id="authErr">${errHtml(a.err)}</div>
-  </div>`;
-}
-async function saveNewPassword(){
-  if(pwBlock(true)) return;
-  if(!(await ensureSb())){ S.auth.err = NO_CONN; render(); return; }
-  S.auth.busy = true; S.auth.err = null; render();
-  const { error } = await sb.auth.updateUser({ password: PW.pw });
-  S.auth.busy = false;
-  if(error){ S.auth.err = friendlyAuthError(error); render(); return; }
-  pwReset(); toast("Password saved", "You're signed in", "check");
-  afterAuth(true);
-}
-
-/* ============================================================
-   AFTER SIGN-IN
-   ============================================================ */
-const needsSetup = () => !S.me || !S.me.city || !S.me.pincode || (S.me.role === "photographer" && !S.pg);
-
-async function afterAuth(withFlash){
-  const go = async () => {
-    try{ await api.loadMe(); }catch(e){ toast("Couldn't load your account", e.message, "x"); }
-    if(!S.me){ S.auth = { step:"welcome" }; render(); return; }
-    if(needsSetup()){
-      const type = S.auth.type || (S.me.role === "photographer" ? "photographer" : null);
-      const nm = S.me.name && S.me.name !== (S.email||"").split("@")[0] ? S.me.name : "";
-      S.auth = { step: type ? (type === "photographer" ? "setupPg" : "setupCust") : "setupRole", type, email: S.email,
-                 draft: { name: nm, bio:"", years: 2, cats: [], priceMult: 1, step: 1 } };
-      locInit("setup", S.me);
-      render(); scrollTop(); return;
-    }
-    enterApp();
-  };
-  if(withFlash) triggerCameraFlashTransition(go, typeof withFlash === "object" ? withFlash : null); else await go();
-}
-function enterApp(){
-  S.tab = "home"; S.stack = []; S.auth = { step:"welcome" };
-  render(); scrollTop();
-  refresh(false).then(() => render());
-  if(isCustomer()) api.photographers().then(() => softRender()).catch(() => {});
-  startPolling();
-  if(typeof trackVisit === "function") trackVisit();   // links today's visit to the account
-}
-
-/* ---------- first-time setup ---------- */
-function vSetupRole(){
-  return `${authTop("Welcome to SnapPro", "One more step")}
-  <div class="pad">
-    <div class="h2">How will you use SnapPro?</div>
-    <button class="card tap choice mt16" onclick="S.auth.type='customer';S.auth.step='setupCust';render()">
-      <div class="choice-ic">🙋</div><div class="grow"><div class="h3">I need a photographer</div></div>${icon("chevron",18,"var(--muted-2)")}</button>
-    <button class="card tap choice mt12" onclick="S.auth.type='photographer';S.auth.step='setupPg';render()">
-      <div class="choice-ic alt">📷</div><div class="grow"><div class="h3">I'm a photographer</div></div>${icon("chevron",18,"var(--muted-2)")}</button>
-  </div>`;
-}
-function nameInput(v){ S.auth.draft.name = v; setHtml("authErr", ""); }
-
-function vSetupCust(){
-  const d = S.auth.draft;
-  return `${authTop("Almost done", "Step 2 of 2")}
-  <div class="pad">
-    <div class="h2">Tell us about you</div>
-    <div class="sm muted mt4">Photographers see your first name. Your exact address is only shared after you book.</div>
-    <div class="field mt16"><label for="setupName">Your name</label>
-      <input id="setupName" class="input" autocapitalize="words" autocomplete="name" placeholder="e.g. John Doe" value="${esc(d.name)}" oninput="nameInput(this.value)"></div>
-    ${locFieldsHtml("setup")}
-    <button class="btn primary block mt8" ${S.auth.busy?"disabled":""} onclick="saveSetupCust()">${S.auth.busy ? "Saving…" : "Continue"}</button>
-    <div id="authErr">${errHtml(S.auth.err)}</div>
-  </div>`;
-}
-async function saveSetupCust(){
-  const name = (S.auth.draft.name || "").trim();
-  if(name.length < 2){ S.auth.err = "Enter your name."; render(); return; }
-  const lerr = locError("setup"); if(lerr){ S.auth.err = lerr; render(); return; }
-  S.auth.busy = true; S.auth.err = null; render();
+  /* anonymous visit count for the SnapPro dashboard: a random ID in this
+     browser, nothing personal */
   try{
-    await api.saveProfile(Object.assign({ name, role: "customer" }, locValue("setup")));
-    S.auth.busy = false; toast("You're all set, " + firstName(name) + "!", "Book your first photographer", "check");
-    enterApp();
-  }catch(e){ S.auth.busy = false; S.auth.err = e.message; render(); }
-}
-
-function pgCatToggle(c){
-  const a = S.auth.draft.cats, i = a.indexOf(c);
-  if(i >= 0) a.splice(i, 1); else if(a.length < 3) a.push(c); else { toast("Pick up to 3", "Deselect one first", "x"); return; }
-  render();
-}
-function vSetupPg(){
-  const d = S.auth.draft, st = d.step || 1;
-  const back = st > 1 ? `S.auth.draft.step=${st-1};render()` : "";
-  return `${authTop("Your photographer profile", "Step " + st + " of 3", back)}
-  <div class="pad">
-    <div class="steps">${[1,2,3].map(i => `<i class="${st>=i?'on':''}"></i>`).join("")}</div>
-    ${st === 1 ? `
-      <div class="h2">Who you are</div>
-      <div class="sm muted mt4">This is the top of your public profile.</div>
-      <div class="field mt16"><label for="setupName">Name customers will see</label>
-        <input id="setupName" class="input" autocapitalize="words" autocomplete="name" placeholder="e.g. John Doe" value="${esc(d.name)}" oninput="nameInput(this.value)"></div>
-      <div class="field"><label for="setupBio">Short bio</label>
-        <textarea id="setupBio" class="input" rows="3" maxlength="600" placeholder="What you shoot, your style, your gear." oninput="S.auth.draft.bio=this.value">${esc(d.bio)}</textarea></div>
-      <div class="field"><label>Years of experience — <span id="yrsVal">${d.years}</span></label>
-        <input type="range" min="0" max="30" value="${d.years}" oninput="S.auth.draft.years=+this.value;setHtml('yrsVal',this.value)"></div>
-      <button class="btn primary block" onclick="pgSetupNext(1)">Continue</button>
-    ` : st === 2 ? `
-      <div class="h2">What do you shoot?</div>
-      <div class="sm muted mt4">Pick up to 3. You'll be alerted about requests for these.</div>
-      <div class="grid3 mt16">
-        ${CATEGORIES.map(c => `<button class="u-card ${d.cats.includes(c.id)?'on':''}" onclick="pgCatToggle('${c.id}')">
-          <div class="u-em">${c.emoji}</div><div class="u-t">${esc(c.name)}</div></button>`).join("")}
-      </div>
-      <div class="xs muted2 mt12">${d.cats.length}/3 selected</div>
-      <button class="btn primary block mt16" onclick="pgSetupNext(2)">Continue</button>
-    ` : `
-      <div class="h2">Where you work</div>
-      <div class="sm muted mt4">You'll see requests from customers in your city.</div>
-      <div class="mt16">${locFieldsHtml("setup")}</div>
-      <div class="field"><label>Your rates vs typical — <span id="pmVal">${Math.round(d.priceMult*100)}</span>%</label>
-        <input type="range" min="0.6" max="2" step="0.05" value="${d.priceMult}" oninput="S.auth.draft.priceMult=+this.value;setHtml('pmVal',Math.round(this.value*100));setHtml('pmPrices',pgPricePreview())">
-        <div class="between xs muted2"><span>Budget</span><span>Typical</span><span>Premium</span></div></div>
-      <div class="card soft" id="pmPrices">${pgPricePreview()}</div>
-      <div class="xs muted2 mt12">These guide your suggested quotes. You always set the final price on each job.</div>
-      <button class="btn primary block mt16" ${S.auth.busy?"disabled":""} onclick="saveSetupPg()">${S.auth.busy ? "Creating profile…" : "Create my profile"}</button>
-    `}
-    <div id="authErr">${errHtml(S.auth.err)}</div>
-  </div>`;
-}
-function pgPricePreview(){
-  const d = S.auth.draft, cats = d.cats.length ? d.cats : ["portrait"];
-  return `<div class="sec-title">Typical 2-hour shoot at your rate</div>` + cats.map(c =>
-    `<div class="kv"><span>${catById(c).emoji} ${esc(catById(c).name)}</span><span>${inr(catById(c).base * d.priceMult)}</span></div>`).join("");
-}
-function pgSetupNext(st){
-  const d = S.auth.draft;
-  if(st === 1 && (d.name||"").trim().length < 2){ S.auth.err = "Enter your name."; render(); return; }
-  if(st === 2 && !d.cats.length){ S.auth.err = "Pick at least one type of shoot."; render(); return; }
-  d.step = st + 1; S.auth.err = null; render(); scrollTop();
-}
-async function saveSetupPg(){
-  const d = S.auth.draft;
-  const lerr = locError("setup"); if(lerr){ S.auth.err = lerr; render(); return; }
-  const loc = locValue("setup"), name = d.name.trim();
-  S.auth.busy = true; S.auth.err = null; render();
-  try{
-    await api.saveProfile(Object.assign({ name, role: "photographer" }, loc));
-    await api.savePg({ display_name: name, bio: (d.bio||"").trim(), categories: d.cats, years_exp: d.years,
-                       price_multiplier: d.priceMult, city: loc.city, state: loc.state, pincode: loc.pincode, is_online: true }, !S.pg);
-    S.auth.busy = false;
-    toast("Your profile is live", "Add photos of your work so customers can choose you", "cam");
-    enterApp();
-  }catch(e){ S.auth.busy = false; S.auth.err = e.message; render(); }
-}
-
-async function logout(){
-  if(!confirm("Log out of SnapPro?")) return;
-  stopPolling();
-  S.me = null; S.pg = null;
-  try{ if(sb) await sb.auth.signOut(); }catch(e){}
-  pwReset(); S.stack = []; S.tab = "home"; S.draft = null;
-  S.d = { requests: [], offers: {}, bookings: [], openRequests: [], myOffers: [], pgs: {}, pgList: [], pgListAt: 0, reviews: {}, reviewed: {}, msgs: {} };
-  S.auth = { step: "login", email: "" };
-  render(); scrollTop();
-}
-
-/* ============================================================
-   SHARED PIECES
-   ============================================================ */
-function topbar(title, sub, right){
-  return `<div class="topbar"><button class="iconbtn" aria-label="Back" onclick="pop()">${icon("back",18)}</button>
-    <div class="grow"><div class="h3 truncate">${esc(title)}</div>${sub ? `<div class="xs muted2 truncate">${esc(sub)}</div>` : ""}</div>${right||""}</div>`;
-}
-const fromPrice = pg => catById((pg.categories||[])[0] || "portrait").base * (Number(pg.price_multiplier) || 1);
-function portfolioStrip(pg, n){
-  const ph = (pg.portfolio || []).slice(0, n || 4);
-  if(!ph.length) return `<div class="no-photos">${icon("image",16,"var(--muted-2)")} No photos yet</div>`;
-  return `<div class="pstrip">${ph.map(u => `<img class="pimg" src="${esc(u)}" alt="" loading="lazy">`).join("")}</div>`;
-}
-function pgMeta(pg){
-  const bits = [];
-  if(pg.jobs_done) bits.push(pg.jobs_done + (pg.jobs_done === 1 ? " shoot" : " shoots"));
-  if(pg.years_exp) bits.push(pg.years_exp + (pg.years_exp === 1 ? " yr" : " yrs") + " experience");
-  if(pg.city) bits.push(esc(pg.city));
-  return bits.join(" · ");
-}
-function pgCardHtml(pg, extra){
-  return `<button class="card tap pgcard" onclick="push('pg',{id:'${pg.id}'})">
-    <div class="row gap12">
-      ${avatarHtml(pg.id, pg.display_name, "av-48", pg.is_online)}
-      <div class="grow" style="text-align:left">
-        <div class="row gap6"><span class="bold truncate">${esc(pg.display_name)}</span>${pg.is_verified ? `<span class="verified" title="Verified by SnapPro">${icon("shield",13,"var(--blue)")}</span>` : ""}</div>
-        <div class="xs muted mt2">${ratingHtml(pg)}</div>
-        <div class="xs muted2 mt2">${pgMeta(pg)}</div>
-      </div>
-      <div class="stack right"><div class="bold sm">${inr(fromPrice(pg))}</div><div class="xs muted2">from, 2 hrs</div></div>
-    </div>
-    ${(pg.categories||[]).length ? `<div class="chips mt8">${pg.categories.map(c => `<span class="chip">${catById(c).emoji} ${esc(catById(c).name)}</span>`).join("")}</div>` : ""}
-    <div class="mt8">${portfolioStrip(pg, 4)}</div>${extra||""}
-  </button>`;
-}
-function statusChip(label, kind){ return `<span class="chip ${kind||''}">${esc(label)}</span>`; }
-function emptyState(emoji, title, body, action){
-  return `<div class="empty"><div class="e-ic">${emoji}</div><div class="bold">${esc(title)}</div>${body ? `<div class="sm muted mt4">${body}</div>` : ""}${action||""}</div>`;
-}
-const reqIsOpen = r => (r.status === "broadcasting" || r.status === "awaiting") && (toMs(r.expires_at) > Date.now() || (S.d.offers[r.id]||[]).length > 0);
-const activeBk = b => ["confirmed","enroute","arrived","shooting"].includes(b.status);
-
-/* ============================================================
-   CUSTOMER — HOME
-   ============================================================ */
-function vCustHome(){
-  const city = meCity();
-  const active = S.d.bookings.filter(activeBk);
-  const open = S.d.requests.filter(reqIsOpen);
-  const local = S.d.pgList.filter(p => p.city && city && p.city.toLowerCase() === city.toLowerCase())
-    .sort((a,b) => (b.is_online - a.is_online) || ((b.rating||0) - (a.rating||0)) || ((b.jobs_done||0) - (a.jobs_done||0)));
-  return `<div class="pad">
-    <div class="between">
-      <div><div class="h2">Hi, ${esc(firstName(S.me.name) || "there")}</div>
-        <button class="loc-chip" onclick="push('editLoc')">${icon("pin",13,"var(--accent)")} ${esc(city || "Set your location")} ${icon("chevron",12,"var(--muted-2)")}</button></div>
-      ${avatarHtml(S.me.id, S.me.name, "av-40")}
-    </div>
-
-    ${active.map(b => bookingCard(b)).join("")}
-    ${open.map(r => requestCard(r)).join("")}
-
-    <div class="hero mt16">
-      <div class="h1">Need a photographer?</div>
-      <div class="sm muted mt8">Post your shoot and photographers in ${esc(city || "your city")} send you quotes. Compare, then book.</div>
-      <button class="btn primary block mt16" onclick="startRequest()">${icon("bolt",18,"#fff",2.2)} Book a photographer</button>
-      <div class="grid3 mt12">${URGENCY.slice(0,3).map(u => `<button class="u-card sm" onclick="startRequest('${u.id}')"><div class="u-em">${u.emoji}</div><div class="u-t">${u.label}</div></button>`).join("")}</div>
-    </div>
-
-    <div class="sec-title mt20">What are you shooting?</div>
-    <div class="hscroll">${CATEGORIES.map(c => `<button class="cat" onclick="startRequest(null,'${c.id}')"><div class="cat-em">${c.emoji}</div><div class="xs bold">${esc(c.name)}</div></button>`).join("")}</div>
-
-    <div class="between mt20 mb12"><div class="sec-title" style="margin:0">Photographers in ${esc(city || "your city")}</div>
-      <button class="xs accent bold" onclick="go('explore')">See all</button></div>
-    ${!S.d.pgListAt ? `<div class="skeleton"></div><div class="skeleton"></div>`
-      : local.length ? `<div class="stack gap10">${local.slice(0,6).map(p => pgCardHtml(p)).join("")}</div>`
-      : emptyState("📷", "No photographers in " + (city || "your city") + " yet",
-          "Post your shoot anyway — photographers who join in your city will see it and can send you a quote.",
-          `<button class="btn sm mt12" onclick="startRequest()">Post a shoot</button>`)}
-
-    <div class="note mt20">${icon("wallet",18,"var(--green)")}<div><b>Pay after the shoot.</b> You pay your photographer directly, by cash or UPI. SnapPro doesn't charge you anything.</div></div>
-  </div>`;
-}
-function requestCard(r){
-  const st = reqState(r), n = (S.d.offers[r.id]||[]).length, cat = catById(r.category);
-  return `<button class="card tap live-card mt12" onclick="push('request',{id:'${r.id}'})">
-    <div class="between"><div class="row gap8"><span class="big-em">${cat.emoji}</span>
-      <div style="text-align:left"><div class="bold sm">${esc(cat.name)} · ${esc(r.city||"")}</div><div class="xs muted2">${whenStr(r.start_at)} · ${r.duration_hrs}h</div></div></div>
-      ${statusChip(st.label, st.kind)}</div>
-    <div class="xs ${n?'accent bold':'muted'} mt8">${n ? "Tap to compare quotes →" : (toMs(r.expires_at) > Date.now() ? `Open for quotes · <span data-until="${esc(r.expires_at)}">${leftStr(r.expires_at)}</span>` : "Closed")}</div>
-  </button>`;
-}
-function bookingCard(b){
-  const pg = S.d.pgs[b.photographer_id] || { id: b.photographer_id, display_name: b.photographer_name };
-  const name = isPg() ? b.customer_name : (pg.display_name || b.photographer_name);
-  return `<button class="card tap bk-card mt12" onclick="push('${isPg()?'job':'booking'}',{id:'${b.id}'})">
-    <div class="row gap12">${avatarHtml(isPg() ? b.customer_id : pg.id, name, "av-48")}
-      <div class="grow" style="text-align:left"><div class="bold sm">${esc(name||"")}</div>
-        <div class="xs muted2">${catById(b.category).emoji} ${esc(catById(b.category).name)} · ${whenStr(b.start_at)}</div></div>
-      ${statusChip(BK_LABEL[b.status], BK_CHIP[b.status])}</div>
-    <div class="steps mt12">${BK_FLOW.slice(0,4).map((s,i) => `<i class="${BK_FLOW.indexOf(b.status)>=i?'on':''}"></i>`).join("")}</div>
-  </button>`;
-}
-
-/* ============================================================
-   CUSTOMER — EXPLORE
-   ============================================================ */
-function exFilter(){
-  const f = S.prefs.ex || (S.prefs.ex = { q:"", scope:"city", cat:"all", sort:"rated" });
-  const city = meCity().toLowerCase();
-  let list = S.d.pgList.slice();
-  if(f.scope === "city" && city) list = list.filter(p => (p.city||"").toLowerCase() === city);
-  if(f.cat !== "all") list = list.filter(p => (p.categories||[]).includes(f.cat));
-  const qv = (f.q||"").trim().toLowerCase();
-  if(qv) list = list.filter(p => (p.display_name||"").toLowerCase().includes(qv) || (p.bio||"").toLowerCase().includes(qv) || (p.city||"").toLowerCase().includes(qv));
-  list.sort(f.sort === "jobs" ? (a,b) => (b.jobs_done||0) - (a.jobs_done||0)
-          : f.sort === "new" ? (a,b) => toMs(b.created_at) - toMs(a.created_at)
-          : (a,b) => ((b.rating||0) - (a.rating||0)) || ((b.review_count||0) - (a.review_count||0)) || ((b.jobs_done||0)-(a.jobs_done||0)));
-  return list;
-}
-function exResultsHtml(){
-  const list = exFilter(), f = S.prefs.ex;
-  if(!S.d.pgListAt) return `<div class="skeleton"></div><div class="skeleton"></div>`;
-  if(!list.length) return emptyState("🔍", "No photographers found",
-    f.scope === "city" && meCity() ? `Nobody matches in ${esc(meCity())} yet. <button class="linkish accent" onclick="exSet('scope','all')"><b>Search all cities</b></button>` : "Try clearing your filters.");
-  return `<div class="xs muted2 mb8">${list.length} photographer${list.length===1?"":"s"}</div><div class="stack gap10">${list.map(p => pgCardHtml(p)).join("")}</div>`;
-}
-function exSet(k, v){ S.prefs.ex[k] = v; savePrefs(); render(); }
-function exSearch(v){ S.prefs.ex.q = v; setHtml("exResults", exResultsHtml()); }
-function vExplore(){
-  if(!S.prefs.ex) exFilter();
-  const f = S.prefs.ex;
-  if(Date.now() - S.d.pgListAt > 60000 && !S.loading.pgs){ S.loading.pgs = true; api.photographers().then(() => { S.loading.pgs = false; setHtml("exResults", exResultsHtml()); }).catch(() => S.loading.pgs = false); }
-  return `<div class="sticky-head pad">
-    <div class="h2 mb12">Photographers</div>
-    <div class="search">${icon("search",16,"var(--muted-2)")}<input id="exQ" type="search" placeholder="Search by name or style" value="${esc(f.q)}" oninput="exSearch(this.value)"></div>
-    <div class="chips mt12">
-      <button class="chip ${f.scope==='city'?'accent':''}" onclick="exSet('scope','city')">${icon("pin",11)} ${esc(meCity()||"My city")}</button>
-      <button class="chip ${f.scope==='all'?'accent':''}" onclick="exSet('scope','all')">All cities</button>
-      <span class="chip-sep"></span>
-      ${[["rated","Top rated"],["jobs","Most shoots"],["new","Newest"]].map(([k,l]) => `<button class="chip ${f.sort===k?'accent':''}" onclick="exSet('sort','${k}')">${l}</button>`).join("")}
-    </div>
-    <div class="hscroll mt8"><button class="chip ${f.cat==='all'?'accent':''}" onclick="exSet('cat','all')">All types</button>${CATEGORIES.map(c => `<button class="chip ${f.cat===c.id?'accent':''}" onclick="exSet('cat','${c.id}')">${c.emoji} ${esc(c.name)}</button>`).join("")}</div>
-  </div>
-  <div class="pad" id="exResults">${exResultsHtml()}</div>`;
-}
-
-/* ============================================================
-   CUSTOMER — PHOTOGRAPHER PROFILE
-   ============================================================ */
-function vPgProfile(p){
-  const pg = S.d.pgs[p.id];
-  if(!pg){ api.ensurePgs([p.id]).then(softRender).catch(() => {}); return `${topbar("Photographer")}<div class="pad"><div class="skeleton"></div></div>`; }
-  const reviews = S.d.reviews[pg.id];
-  if(reviews === undefined && !S.loading["rv"+pg.id]){ S.loading["rv"+pg.id] = true; api.reviewsFor(pg.id).then(() => { S.loading["rv"+pg.id] = false; softRender(); }).catch(() => { S.d.reviews[pg.id] = []; }); }
-  const offer = p.offerId ? findOffer(p.offerId) : null;
-  const photos = pg.portfolio || [];
-  return `${topbar(pg.display_name, pg.city || "")}
-  <div class="cover">${photos[0] ? `<img src="${esc(photos[0])}" alt="">` : ""}</div>
-  <div class="pad" style="margin-top:-40px">
-    ${avatarHtml(pg.id, pg.display_name, "av-72 ring", pg.is_online)}
-    <div class="row gap6 mt12"><span class="h2">${esc(pg.display_name)}</span>${pg.is_verified ? icon("shield",16,"var(--blue)") : ""}</div>
-    <div class="sm mt4">${ratingHtml(pg)} ${pg.is_online ? `<span class="chip green">Available</span>` : `<span class="chip">Away</span>`}</div>
-    <div class="xs muted2 mt4">${pgMeta(pg)}</div>
-    ${pg.bio ? `<p class="sm muted mt12 prose">${esc(pg.bio)}</p>` : ""}
-    <div class="chips mt12">${(pg.categories||[]).map(c => `<span class="chip accent">${catById(c).emoji} ${esc(catById(c).name)}</span>`).join("")}</div>
-    <div class="grid3 mt16">
-      <div class="stat"><div class="s-v">${pg.jobs_done||0}</div><div class="s-l">Shoots on SnapPro</div></div>
-      <div class="stat"><div class="s-v">${pg.years_exp||0}</div><div class="s-l">Years experience</div></div>
-      <div class="stat"><div class="s-v">${inr(fromPrice(pg))}</div><div class="s-l">From, 2 hrs</div></div>
-    </div>
-    <div class="sec-title mt24">Portfolio</div>
-    ${photos.length ? `<div class="pgrid">${photos.map(u => `<button class="pgrid-i" onclick="push('photo',{url:'${esc(u)}'})"><img src="${esc(u)}" alt="" loading="lazy"></button>`).join("")}</div>`
-      : `<div class="card soft sm muted">${esc(firstName(pg.display_name))} hasn't added portfolio photos yet.</div>`}
-    <div class="sec-title mt24">Reviews</div>
-    ${reviews === undefined ? `<div class="skeleton sm"></div>`
-      : reviews.length ? `<div class="stack gap10">${reviews.map(r => `<div class="card"><div class="between"><b class="sm">${esc(r.customer_name||"Customer")}</b><span class="rating">${"★".repeat(r.stars)}<span class="muted2">${"★".repeat(5-r.stars)}</span></span></div>${r.body ? `<div class="sm muted mt6 prose">${esc(r.body)}</div>` : ""}<div class="xs muted2 mt6">${timeAgo(r.created_at)}</div></div>`).join("")}</div>`
-      : `<div class="card soft sm muted">No reviews yet — reviews appear after completed shoots.</div>`}
-  </div>
-  ${offer ? `<div class="bottom-bar"><div><div class="xs muted2">Their quote</div><div class="h3">${inr(offer.price)}</div></div>
-    <button class="btn primary grow" onclick="push('confirm',{offerId:'${offer.id}'})">Book ${esc(firstName(pg.display_name))}</button></div>` : `<div style="height:24px"></div>`}`;
-}
-function vPhoto(p){
-  return `<div class="photo-view"><button class="iconbtn photo-close" aria-label="Close" onclick="pop()">${icon("x",20)}</button><img src="${esc(p.url)}" alt=""></div>`;
-}
-
-/* ============================================================
-   CUSTOMER — POST A REQUEST
-   ============================================================ */
-function localInputValue(d){ const p = n => String(n).padStart(2,"0"); return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate())+"T"+p(d.getHours())+":"+p(d.getMinutes()); }
-function startRequest(urgency, category){
-  S.draft = { urgency: urgency || "1h", category: category || null, hours: 2, deliverables: ["Edited photos"], custom: "", budget: 0, notes: "", step: 1 };
-  locInit("req", S.me);
-  push("newRequest");
-}
-function draftSet(k, v){ S.draft[k] = v; render(); }
-function toggleDeliverable(x){ const a = S.draft.deliverables, i = a.indexOf(x); i < 0 ? a.push(x) : a.splice(i,1); render(); }
-function draftStart(){
-  const d = S.draft;
-  if(d.urgency === "pick") return d.custom ? new Date(d.custom) : null;
-  return new Date(Date.now() + urgById(d.urgency).mins * 60000);
-}
-function vNewRequest(){
-  const d = S.draft; if(!d){ setTimeout(pop,0); return ""; }
-  const st = d.step, start = draftStart();
-  const est = d.category ? suggestedPrice(d.category, d.hours, d.urgency, 1) : 0;
-  if(st === 3 && !d.budget) d.budget = est || 3000;
-  return `${topbar("Post a shoot", "Step " + st + " of 3")}
-  <div class="pad">
-    <div class="steps">${[1,2,3].map(i => `<i class="${st>=i?'on':''}"></i>`).join("")}</div>
-    ${st === 1 ? `
-      <div class="h2">When do you need them?</div>
-      <div class="sm muted mt4">Sooner slots usually cost more.</div>
-      <div class="urgency mt16">${URGENCY.map(u => `<button class="u-card ${d.urgency===u.id?'on':''}" onclick="draftSet('urgency','${u.id}')">
-        <div class="u-em">${u.emoji}</div><div class="u-t">${u.label}</div><div class="u-s">${u.sub}</div></button>`).join("")}</div>
-      ${d.urgency === "pick" ? `<div class="field mt16"><label for="reqWhen">Date and time</label>
-        <input id="reqWhen" class="input" type="datetime-local" min="${localInputValue(new Date(Date.now()+3600e3))}" value="${esc(d.custom)}" onchange="S.draft.custom=this.value;render()"></div>` : ""}
-      <div class="field mt16"><label>How long is the shoot?</label>
-        <div class="chips">${[1,2,3,4,6,8].map(h => `<button class="chip lg ${d.hours===h?'accent':''}" onclick="draftSet('hours',${h})">${h} hr${h>1?'s':''}</button>`).join("")}</div></div>
-      ${start ? `<div class="card soft"><div class="kv"><span>Starts</span><span>${whenStr(start)}</span></div></div>` : ""}
-      <button class="btn primary block mt16" onclick="reqNext(1)">Continue</button>
-    ` : st === 2 ? `
-      <div class="h2">What are you shooting?</div>
-      <div class="sm muted mt4">Photographers who shoot this get notified.</div>
-      <div class="grid3 mt16">${CATEGORIES.map(c => `<button class="u-card ${d.category===c.id?'on':''}" onclick="draftSet('category','${c.id}')"><div class="u-em">${c.emoji}</div><div class="u-t">${esc(c.name)}</div></button>`).join("")}</div>
-      <div class="field mt16"><label>What do you need delivered?</label>
-        <div class="chips">${DELIVERABLES.map(x => `<button class="chip ${d.deliverables.includes(x)?'accent':''}" onclick="toggleDeliverable('${x}')">${d.deliverables.includes(x)?'✓ ':''}${x}</button>`).join("")}</div></div>
-      <button class="btn primary block mt16" onclick="reqNext(2)">Continue</button>
-    ` : `
-      <div class="h2">Where, and your budget</div>
-      <div class="sm muted mt4">Photographers see your city and pincode. Your exact address is only shared with the one you book.</div>
-      <div class="mt16">${locFieldsHtml("req")}</div>
-      <div class="field"><label>Your budget — <span id="budgetVal">${inr(d.budget)}</span></label>
-        <input type="range" min="500" max="100000" step="500" value="${d.budget}" oninput="S.draft.budget=+this.value;setHtml('budgetVal',inr(+this.value))">
-        <div class="between xs muted2"><span>₹500</span><span>Typical for this: ${inr(est)}</span><span>₹1,00,000</span></div></div>
-      <div class="field"><label for="reqNotes">Anything photographers should know? <span class="muted2">(optional)</span></label>
-        <textarea id="reqNotes" class="input" rows="3" maxlength="800" placeholder="Indoor or outdoor, number of people, must-have shots…" oninput="S.draft.notes=this.value">${esc(d.notes)}</textarea></div>
-      <div class="card soft">
-        <div class="kv"><span>${catById(d.category).emoji} ${esc(catById(d.category).name)}</span><span>${d.hours} hr${d.hours>1?'s':''}</span></div>
-        <div class="kv"><span>When</span><span>${whenStr(start)}</span></div>
-      </div>
-      <button class="btn primary block mt16" ${S.loading.post?"disabled":""} onclick="submitRequest()">${S.loading.post ? "Posting…" : icon("send",17,"#fff") + " Post and get quotes"}</button>
-    `}
-    <div id="formErr">${errHtml(S.formErr)}</div>
-  </div>`;
-}
-function reqNext(st){
-  const d = S.draft;
-  if(st === 1){
-    if(d.urgency === "pick"){
-      const t = d.custom ? new Date(d.custom).getTime() : 0;
-      if(!t || t < Date.now() + 30*60000){ S.formErr = "Pick a date and time at least 30 minutes from now."; render(); return; }
-    }
-  }
-  if(st === 2 && !d.category){ S.formErr = "Choose what you're shooting."; render(); return; }
-  S.formErr = null; d.step = st + 1; render(); scrollTop();
-}
-async function submitRequest(){
-  const d = S.draft;
-  const lerr = locError("req"); if(lerr){ S.formErr = lerr; render(); return; }
-  const start = draftStart();
-  if(!start || start.getTime() < Date.now() + 5*60000){ S.formErr = "That start time has passed. Go back and pick a new time."; render(); return; }
-  const loc = locValue("req"), u = urgById(d.urgency);
-  const expires = new Date(Math.min(Date.now() + u.window*60000, start.getTime() + 3600e3));
-  S.loading.post = true; S.formErr = null; render();
-  try{
-    const row = await api.createRequest({ customer_id: S.me.id, category: d.category, urgency: d.urgency, duration_hrs: d.hours,
-      city: loc.city, state: loc.state, pincode: loc.pincode, budget: d.budget, deliverables: d.deliverables, notes: (d.notes||"").trim(),
-      start_at: start.toISOString(), expires_at: expires.toISOString() });
-    S.d.requests.unshift(row); S.d.offers[row.id] = [];
-    S.loading.post = false; S.draft = null;
-    toast("Your shoot is live", "Photographers in " + loc.city + " can now send quotes", "bolt");
-    replaceStack("request", { id: row.id });
-  }catch(e){ S.loading.post = false; S.formErr = e.message; render(); }
-}
-
-/* ============================================================
-   CUSTOMER — A REQUEST AND ITS QUOTES
-   ============================================================ */
-function findOffer(id){ for(const k in S.d.offers){ const o = S.d.offers[k].find(x => x.id === id); if(o) return o; } return null; }
-function sortOffers(list){
-  const mode = S.prefs.offerSort || "best";
-  const pg = o => S.d.pgs[o.photographer_id] || {};
-  return list.slice().sort(
-    mode === "price"  ? (a,b) => a.price - b.price :
-    mode === "fast"   ? (a,b) => a.eta_min - b.eta_min :
-    mode === "rating" ? (a,b) => ((pg(b).rating||0) - (pg(a).rating||0)) || (a.price - b.price) :
-    (a,b) => (((pg(b).rating||0)*1000 - b.price/50) - ((pg(a).rating||0)*1000 - a.price/50)));
-}
-function vRequest(p){
-  const r = S.d.requests.find(x => x.id === p.id);
-  if(!r){ refresh(false); return `${topbar("Your shoot")}<div class="pad"><div class="skeleton"></div></div>`; }
-  const cat = catById(r.category), offers = sortOffers(S.d.offers[r.id] || []);
-  const open = r.status === "broadcasting" && toMs(r.expires_at) > Date.now();
-  const soon = toMs(r.start_at) - Date.now() < 3*3600e3;
-  const bk = S.d.bookings.find(b => b.request_id === r.id && b.status !== "cancelled");
-  return `${topbar(cat.name + " shoot", (r.city||"") + " · " + whenStr(r.start_at))}
-  <div class="pad">
-    ${bk ? `<button class="card tap bk-card" onclick="replaceStack('booking',{id:'${bk.id}'})"><div class="between"><div><div class="bold">Booked with ${esc(bk.photographer_name||"")}</div><div class="xs muted2 mt2">${whenStr(bk.start_at)}</div></div>${statusChip(BK_LABEL[bk.status], BK_CHIP[bk.status])}</div></button>` : ""}
-    ${r.status === "cancelled" ? `<div class="card soft">You cancelled this request.</div>` : ""}
-    ${!bk && r.status !== "cancelled" ? (offers.length ? `
-      <div class="between"><div><div class="h2">${offers.length} quote${offers.length===1?"":"s"}</div><div class="xs muted2">${open ? `Still open · <span data-until="${esc(r.expires_at)}">${leftStr(r.expires_at)}</span>` : "Pick one to book"}</div></div></div>
-      <div class="chips mt12">${[["best","Best match"],["price","Lowest price"],["fast","Soonest"],["rating","Top rated"]].map(([k,l]) => `<button class="chip ${(S.prefs.offerSort||"best")===k?'accent':''}" onclick="S.prefs.offerSort='${k}';savePrefs();render()">${l}</button>`).join("")}</div>
-      <div class="stack gap10 mt12">${offers.map((o,i) => offerCard(r, o, soon, i === 0 && (S.prefs.offerSort||"best") === "best")).join("")}</div>`
-    : open ? `
-      <div class="waiting">
-        <div class="radar"><div class="ring"></div><div class="ring" style="animation-delay:.9s"></div><div class="core">${icon("cam",26,"#fff",2)}</div></div>
-        <div class="h2 center">Your shoot is live</div>
-        <div class="sm muted center mt8">Photographers in ${esc(r.city||"your city")} who shoot ${esc(cat.name.toLowerCase())} can see it. Quotes will appear here — keep this page open or come back later.</div>
-        <div class="center mt12"><span class="chip accent">Open for quotes · <span data-until="${esc(r.expires_at)}">${leftStr(r.expires_at)}</span></span></div>
-      </div>`
-    : emptyState("⏳", "No quotes this time", "No photographer quoted before your request closed. You can post it again.",
-        `<button class="btn primary sm mt12" onclick="repostRequest('${r.id}')">Post again</button>`)) : ""}
-
-    <div class="card mt16">
-      <div class="sec-title">Your request</div>
-      <div class="kv"><span>Shoot</span><span>${cat.emoji} ${esc(cat.name)}</span></div>
-      <div class="kv"><span>When</span><span>${whenStr(r.start_at)}</span></div>
-      <div class="kv"><span>Duration</span><span>${r.duration_hrs} hr${r.duration_hrs>1?'s':''}</span></div>
-      <div class="kv"><span>Where</span><span>${esc(r.city||"")} ${esc(r.pincode||"")}</span></div>
-      <div class="kv"><span>Budget</span><span>${inr(r.budget)}</span></div>
-      ${(r.deliverables||[]).length ? `<div class="kv"><span>Deliverables</span><span class="right">${(r.deliverables||[]).map(esc).join(", ")}</span></div>` : ""}
-      ${r.notes ? `<div class="xs muted mt8 prose">“${esc(r.notes)}”</div>` : ""}
-    </div>
-    ${open && !bk ? `<button class="btn block danger mt16" onclick="cancelRequest('${r.id}')">Cancel request</button>` : ""}
-  </div>`;
-}
-function offerCard(r, o, soon, best){
-  const pg = S.d.pgs[o.photographer_id] || { id: o.photographer_id, display_name: o.photographer_name };
-  const over = r.budget && o.price > r.budget;
-  return `<div class="card offer ${best?'best':''}">
-    ${best ? `<div class="chip accent mb8">Best match</div>` : ""}
-    <button class="row gap12 w100" onclick="push('pg',{id:'${pg.id}',offerId:'${o.id}'})">
-      ${avatarHtml(pg.id, pg.display_name, "av-56", pg.is_online)}
-      <div class="grow" style="text-align:left">
-        <div class="row gap6"><span class="bold">${esc(pg.display_name || o.photographer_name)}</span>${pg.is_verified ? icon("shield",13,"var(--blue)") : ""}</div>
-        <div class="xs mt2">${ratingHtml(pg)}</div>
-        <div class="xs muted2 mt2">${pgMeta(pg)}</div>
-      </div>
-      <div class="stack right"><div class="h3 ${over?'':'green'}">${inr(o.price)}</div><div class="xs muted2">${over ? inr(o.price - r.budget) + " over budget" : "within budget"}</div></div>
-    </button>
-    ${soon ? `<div class="xs muted mt8">${icon("clock",12)} Can be there in about ${o.eta_min} min</div>` : ""}
-    ${o.note ? `<div class="quote mt8">“${esc(o.note)}”</div>` : ""}
-    <div class="mt8">${portfolioStrip(pg, 4)}</div>
-    <div class="row gap8 mt12">
-      <button class="btn sm grow" onclick="push('pg',{id:'${pg.id}',offerId:'${o.id}'})">View profile</button>
-      <button class="btn sm primary grow" onclick="push('confirm',{offerId:'${o.id}'})">Book for ${inr(o.price)}</button>
-    </div>
-  </div>`;
-}
-async function cancelRequest(id){
-  if(!confirm("Cancel this request? Photographers won't be able to quote on it any more.")) return;
-  try{ await api.cancelRequest(id); const r = S.d.requests.find(x => x.id === id); if(r) r.status = "cancelled"; toast("Request cancelled", "", "x"); render(); }
-  catch(e){ toast("Couldn't cancel", e.message, "x"); }
-}
-function repostRequest(id){
-  const r = S.d.requests.find(x => x.id === id); if(!r) return;
-  S.draft = { urgency: "3h", category: r.category, hours: r.duration_hrs, deliverables: r.deliverables || [], custom: "", budget: r.budget, notes: r.notes || "", step: 1 };
-  locInit("req", { city: r.city, state: r.state, pincode: r.pincode });
-  replaceStack("newRequest");
-}
-
-/* ============================================================
-   CUSTOMER — CONFIRM A BOOKING
-   ============================================================ */
-function vConfirm(p){
-  const o = findOffer(p.offerId);
-  if(!o) return `${topbar("Confirm booking")}${emptyState("😕","This quote isn't available","It may have been withdrawn.")}`;
-  const r = S.d.requests.find(x => x.id === o.request_id) || {};
-  const pg = S.d.pgs[o.photographer_id] || { id: o.photographer_id, display_name: o.photographer_name };
-  if(S.confirmFor !== o.id){ S.confirmFor = o.id; S.confirmAddr = ""; }
-  return `${topbar("Confirm booking", pg.display_name)}
-  <div class="pad">
-    <div class="card">
-      <div class="row gap12">${avatarHtml(pg.id, pg.display_name, "av-56", pg.is_online)}
-        <div class="grow"><div class="bold">${esc(pg.display_name)}</div><div class="xs mt2">${ratingHtml(pg)}</div></div>
-        <div class="h3">${inr(o.price)}</div></div>
-      <div class="divider"></div>
-      <div class="kv"><span>Shoot</span><span>${catById(r.category).emoji} ${esc(catById(r.category).name)}</span></div>
-      <div class="kv"><span>When</span><span>${whenStr(r.start_at)}</span></div>
-      <div class="kv"><span>Duration</span><span>${r.duration_hrs} hr${r.duration_hrs>1?'s':''}</span></div>
-      <div class="kv"><span>Area</span><span>${esc(r.city||"")} ${esc(r.pincode||"")}</span></div>
-    </div>
-    <div class="field mt16"><label for="bkAddr">Exact address for the shoot</label>
-      <textarea id="bkAddr" class="input" rows="2" maxlength="300" autocomplete="street-address" placeholder="Flat / house, building, street, landmark" oninput="S.confirmAddr=this.value;setHtml('formErr','')">${esc(S.confirmAddr)}</textarea>
-      <div class="xs muted2 mt6">Only ${esc(firstName(pg.display_name))} will see this, and only after you book.</div></div>
-    <div class="note">${icon("wallet",18,"var(--green)")}<div><b>Pay ${esc(firstName(pg.display_name))} ${inr(o.price)} after the shoot</b> — directly, by cash or UPI. SnapPro doesn't take a payment or charge you a fee.</div></div>
-    <div class="note mt8">${icon("shield",18,"var(--muted)")}<div>You can cancel for free until ${esc(firstName(pg.display_name))} sets off.</div></div>
-    <button class="btn primary block mt16" ${S.loading.book?"disabled":""} onclick="confirmBooking('${o.id}')">${S.loading.book ? "Booking…" : icon("check",17,"#fff") + " Confirm booking"}</button>
-    <div id="formErr">${errHtml(S.formErr)}</div>
-  </div>`;
-}
-async function confirmBooking(offerId){
-  const addr = (S.confirmAddr || "").trim();
-  if(addr.length < 8){ S.formErr = "Add the full address so your photographer can find you."; setHtml("formErr", errHtml(S.formErr)); return; }
-  S.loading.book = true; S.formErr = null; render();
-  try{
-    const b = await api.book(offerId, addr);
-    S.loading.book = false; S.d.bookings.unshift(b);
-    const r = S.d.requests.find(x => x.id === b.request_id); if(r) r.status = "matched";
-    toast("Booked!", b.photographer_name + " · " + whenStr(b.start_at), "check");
-    replaceStack("booking", { id: b.id });
-  }catch(e){ S.loading.book = false; S.formErr = e.message; render(); }
-}
-
-/* ============================================================
-   BOOKING (customer view)
-   ============================================================ */
-function timelineHtml(b){
-  const i = BK_FLOW.indexOf(b.status);
-  const text = { confirmed:"Your photographer is locked in", enroute:"Heading to you", arrived:"At your location", shooting:"Session in progress", completed:"All done" };
-  return `<div class="timeline">${BK_FLOW.map((s,k) => `<div class="tl ${k<=i?'on':''} ${k===i?'now':''}"><i>${k<i?icon("check",11,"var(--green)",3):""}</i><div><div class="sm ${k<=i?'bold':'muted2'}">${BK_LABEL[s]}</div><div class="xs muted2">${text[s]}</div></div></div>`).join("")}</div>`;
-}
-function vBooking(p){
-  const b = S.d.bookings.find(x => x.id === p.id);
-  if(!b){ refresh(false); return `${topbar("Booking")}<div class="pad"><div class="skeleton"></div></div>`; }
-  const pg = S.d.pgs[b.photographer_id] || { id: b.photographer_id, display_name: b.photographer_name };
-  const rv = S.d.reviewed[b.id];
-  const canCancel = b.status === "confirmed" || b.status === "enroute";
-  return `${topbar("Your booking", whenStr(b.start_at))}
-  <div class="pad">
-    <div class="card">
-      <div class="row gap12">${avatarHtml(pg.id, pg.display_name, "av-56", pg.is_online)}
-        <div class="grow"><div class="bold">${esc(pg.display_name)}</div><div class="xs mt2">${ratingHtml(pg)}</div></div>
-        ${statusChip(BK_LABEL[b.status], BK_CHIP[b.status])}</div>
-      <div class="row gap8 mt12">
-        ${b.status !== "cancelled" ? `<button class="btn sm grow" onclick="push('chat',{id:'${b.id}'})">${icon("chat",14)} Message</button>` : ""}
-        <button class="btn sm grow" onclick="push('pg',{id:'${pg.id}'})">View profile</button>
-      </div>
-    </div>
-    ${b.status === "cancelled" ? `<div class="card soft mt12 red-soft">This booking was cancelled.</div>` : `<div class="card mt12"><div class="sec-title">Status</div>${timelineHtml(b)}</div>`}
-    <div class="card mt12">
-      <div class="sec-title">Details</div>
-      <div class="kv"><span>Shoot</span><span>${catById(b.category).emoji} ${esc(catById(b.category).name)}</span></div>
-      <div class="kv"><span>When</span><span>${whenStr(b.start_at)}</span></div>
-      <div class="kv"><span>Duration</span><span>${b.duration_hrs} hr${b.duration_hrs>1?'s':''}</span></div>
-      <div class="kv"><span>Price</span><span class="bold">${inr(b.price)}</span></div>
-      <div class="kv"><span>Payment</span><span class="right">Pay ${esc(firstName(pg.display_name))} directly after the shoot</span></div>
-      <div class="kv top"><span>Address</span><span class="right">${S.editAddr === b.id ? "" : esc(b.address||"—")}</span></div>
-      ${S.editAddr === b.id ? `<textarea id="addrEdit" class="input mt8" rows="2" maxlength="300">${esc(b.address||"")}</textarea>
-        <div class="row gap8 mt8"><button class="btn sm grow" onclick="S.editAddr=null;render()">Cancel</button><button class="btn sm primary grow" onclick="saveAddr('${b.id}')">Save address</button></div>`
-        : b.status === "confirmed" ? `<div class="right mt6"><button class="xs accent bold" onclick="S.editAddr='${b.id}';render()">Edit address</button></div>` : ""}
-    </div>
-    ${b.status === "completed" && rv === null ? `<button class="btn primary block mt16" onclick="push('rate',{id:'${b.id}'})">${icon("star",16,"#fff")} Rate your shoot</button>` : ""}
-    ${rv ? `<div class="card mt12"><div class="sec-title">Your review</div><div class="rating">${"★".repeat(rv.stars)}</div>${rv.body ? `<div class="sm muted mt6">${esc(rv.body)}</div>` : ""}</div>` : ""}
-    ${canCancel ? `<button class="btn block danger mt16" onclick="cancelBooking('${b.id}')">Cancel booking</button>` : ""}
-  </div>`;
-}
-async function saveAddr(id){
-  const v = (el("addrEdit") ? el("addrEdit").value : "").trim();
-  if(v.length < 8){ toast("Add the full address", "", "x"); return; }
-  try{ const b = await api.setBooking(id, { address: v }); Object.assign(S.d.bookings.find(x => x.id === id), b); S.editAddr = null; toast("Address updated", "", "check"); render(); }
-  catch(e){ toast("Couldn't update address", e.message, "x"); }
-}
-async function cancelBooking(id){
-  if(!confirm("Cancel this booking?")) return;
-  try{ const b = await api.setBooking(id, { status: "cancelled" }); Object.assign(S.d.bookings.find(x => x.id === id), b); toast("Booking cancelled", "", "x"); refresh(false); render(); }
-  catch(e){ toast("Couldn't cancel", e.message, "x"); }
-}
-
-/* ============================================================
-   RATE A SHOOT
-   ============================================================ */
-function starsRow(n){ return [1,2,3,4,5].map(i => `<button class="star-btn ${i<=n?'on':''}" aria-label="${i} star${i>1?'s':''}" onclick="S.rate.stars=${i};setHtml('starRow',starsRow(${i}));setHtml('starLbl',['','Poor','Not great','Good','Great','Outstanding'][${i}])">★</button>`).join(""); }
-function vRate(p){
-  const b = S.d.bookings.find(x => x.id === p.id); if(!b) return `${topbar("Rate")}`;
-  if(!S.rate || S.rate.id !== b.id) S.rate = { id: b.id, stars: 5 };
-  const pg = S.d.pgs[b.photographer_id] || { id: b.photographer_id, display_name: b.photographer_name };
-  return `${topbar("Rate your shoot")}
-  <div class="pad center">
-    ${avatarHtml(pg.id, pg.display_name, "av-72")}
-    <div class="h2 mt12">How was ${esc(firstName(pg.display_name))}?</div>
-    <div class="sm muted mt4">${esc(catById(b.category).name)} · ${whenStr(b.start_at)}</div>
-    <div class="star-row mt16" id="starRow">${starsRow(S.rate.stars)}</div>
-    <div class="sm accent bold mt8" id="starLbl">${["","Poor","Not great","Good","Great","Outstanding"][S.rate.stars]}</div>
-    <textarea id="rateText" class="input mt16" rows="4" maxlength="1000" placeholder="What was it like? This helps other customers choose."></textarea>
-    <button class="btn primary block mt16" ${S.loading.rate?"disabled":""} onclick="submitReview('${b.id}')">${S.loading.rate ? "Posting…" : "Post review"}</button>
-    <div class="xs muted2 mt8">Reviews are public and show your first name.</div>
-  </div>`;
-}
-async function submitReview(id){
-  const text = el("rateText") ? el("rateText").value.trim() : "";
-  S.loading.rate = true; render();
-  try{
-    await api.review(id, S.rate.stars, text);
-    S.d.reviewed[id] = { booking_id: id, stars: S.rate.stars, body: text };
-    const b = S.d.bookings.find(x => x.id === id); if(b) delete S.d.reviews[b.photographer_id];
-    S.loading.rate = false; toast("Thanks for your review", "", "star"); pop();
-  }catch(e){ S.loading.rate = false; toast("Couldn't post review", e.message, "x"); render(); }
-}
-
-/* ============================================================
-   CHAT (both sides) — new messages repaint the list only,
-   never the box you're typing in
-   ============================================================ */
-function msgsHtml(b){
-  const list = S.d.msgs[b.id];
-  if(!list) return `<div class="center xs muted2 mt16">Loading…</div>`;
-  if(!list.length) return `<div class="center xs muted2 mt16">No messages yet. Say hello 👋</div>`;
-  return list.map(m => `<div class="bub ${m.sender_id===S.me.id?'me':'them'}">${esc(m.content)}<div class="bub-time">${clockStr(m.created_at)}</div></div>`).join("");
-}
-async function loadChat(id){
-  const b = S.d.bookings.find(x => x.id === id); if(!b) return;
-  try{
-    const list = await api.messages(id);
-    const changed = !S.d.msgs[id] || S.d.msgs[id].length !== list.length;
-    S.d.msgs[id] = list;
-    if(changed){ setHtml("chatList", msgsHtml(b)); const c = el("chatList"); if(c) c.scrollTop = c.scrollHeight; }
-  }catch(e){}
-}
-function vChat(p){
-  const b = S.d.bookings.find(x => x.id === p.id); if(!b) return `${topbar("Messages")}`;
-  const other = isPg() ? b.customer_name : b.photographer_name;
-  if(!S.d.msgs[b.id]) loadChat(b.id);
-  const closed = b.status === "cancelled";
-  return `<div class="chat-wrap">${topbar(other || "Messages", catById(b.category).name + " · " + whenStr(b.start_at))}
-    <div class="chat-scroll" id="chatList">${msgsHtml(b)}</div>
-    ${closed ? `<div class="chat-closed">This booking was cancelled, so the chat is closed.</div>` : `<div class="chat-input">
-      <input id="chatBox" placeholder="Message ${esc(firstName(other))}…" maxlength="2000" autocomplete="off" onkeydown="if(event.key==='Enter'){event.preventDefault();sendChat('${b.id}')}">
-      <button class="iconbtn send" aria-label="Send" onclick="sendChat('${b.id}')">${icon("send",16,"#fff")}</button></div>`}
-  </div>`;
-}
-async function sendChat(id){
-  const box = el("chatBox"); if(!box) return;
-  const text = box.value.trim(); if(!text) return;
-  box.value = ""; box.focus();
-  try{ await api.sendMessage(id, text); await loadChat(id); }
-  catch(e){ box.value = text; toast("Message not sent", e.message, "x"); }
-}
-
-/* ============================================================
-   CUSTOMER — ACTIVITY AND PROFILE
-   ============================================================ */
-function vActivity(){
-  const open = S.d.requests.filter(reqIsOpen);
-  const up = S.d.bookings.filter(activeBk);
-  const past = S.d.bookings.filter(b => !activeBk(b));
-  const closed = S.d.requests.filter(r => !reqIsOpen(r) && r.status !== "matched");
-  if(!open.length && !S.d.bookings.length && !closed.length)
-    return `<div class="pad"><div class="h2">Your shoots</div></div>` + emptyState("📷", "No shoots yet", "When you post a shoot, it'll show up here.", `<button class="btn primary sm mt12" onclick="startRequest()">Book a photographer</button>`);
-  return `<div class="pad"><div class="h2">Your shoots</div>
-    ${up.length ? `<div class="sec-title mt16">Upcoming</div>${up.map(bookingCard).join("")}` : ""}
-    ${open.length ? `<div class="sec-title mt16">Waiting for quotes</div>${open.map(requestCard).join("")}` : ""}
-    ${past.length ? `<div class="sec-title mt20">Past bookings</div>${past.map(bookingCard).join("")}` : ""}
-    ${closed.length ? `<div class="sec-title mt20">Closed requests</div>${closed.map(requestCard).join("")}` : ""}
-  </div>`;
-}
-function vProfile(){
-  const me = S.me;
-  return `<div class="pad">
-    <div class="row gap16 mt8">${avatarHtml(me.id, me.name, "av-72")}
-      <div class="grow"><div class="h2">${esc(me.name)}</div><div class="sm muted">${esc(S.email)}</div>
-        <div class="chips mt8"><span class="chip">${isPg() ? "📷 Photographer" : "🙋 Customer"}</span></div></div></div>
-    ${isPg() ? pgProfileExtras() : ""}
-    <div class="card mt16 list">
-      <button class="li" onclick="push('editName')">${icon("user",18,"var(--muted)")}<div class="grow"><div class="sm bold">Name</div><div class="xs muted2">${esc(me.name)}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
-      <button class="li" onclick="push('editLoc')">${icon("pin",18,"var(--muted)")}<div class="grow"><div class="sm bold">Location</div><div class="xs muted2">${esc([me.city, me.state, me.pincode].filter(Boolean).join(", ") || "Not set")}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
-      <a class="li" href="mailto:${SUPPORT_EMAIL}">${icon("mail",18,"var(--muted)")}<div class="grow"><div class="sm bold">Help and support</div><div class="xs muted2">${SUPPORT_EMAIL}</div></div>${icon("chevron",16,"var(--muted-2)")}</a>
-    </div>
-    <button class="btn block mt16" onclick="logout()">${icon("logout",16)} Log out</button>
-  </div>`;
-}
-function vEditName(){
-  return `${topbar("Your name")}
-  <div class="pad"><div class="field"><label for="nameEdit">Name</label>
-    <input id="nameEdit" class="input" autocapitalize="words" autocomplete="name" value="${esc(S.me.name)}"></div>
-    <button class="btn primary block" onclick="saveName()">Save</button><div id="formErr"></div></div>`;
-}
-async function saveName(){
-  const v = (el("nameEdit").value || "").trim();
-  if(v.length < 2){ setHtml("formErr", errHtml("Enter your name.")); return; }
-  try{ await api.saveProfile({ name: v }); if(isPg()) await api.savePg({ display_name: v }); toast("Name updated", "", "check"); pop(); }
-  catch(e){ setHtml("formErr", errHtml(e.message)); }
-}
-function vEditLoc(){
-  if(!LOCF.edit || S.locFor !== S.me.id + S.stack.length){ locInit("edit", S.me); S.locFor = S.me.id + S.stack.length; }
-  return `${topbar("Your location")}
-  <div class="pad"><div class="sm muted mb12">${isPg() ? "You'll see shoot requests from customers in this city." : "We'll show you photographers in this city."}</div>
-    ${locFieldsHtml("edit")}
-    <button class="btn primary block mt8" onclick="saveLoc()">Save location</button><div id="formErr"></div></div>`;
-}
-async function saveLoc(){
-  const e = locError("edit"); if(e){ setHtml("formErr", errHtml(e)); return; }
-  const v = locValue("edit");
-  try{
-    await api.saveProfile(v);
-    if(isPg()) await api.savePg({ city: v.city, state: v.state, pincode: v.pincode });
-    toast("Location saved", v.city + ", " + v.state, "pin"); S.locFor = null; pop();
-  }catch(err){ setHtml("formErr", errHtml(err.message)); }
-}
-
-/* ============================================================
-   PHOTOGRAPHER
-   ============================================================ */
-const myOfferFor = reqId => S.d.myOffers.find(o => o.request_id === reqId);
-const isPassed = id => S.prefs.passed.includes(id);
-function passRequest(id){ if(!isPassed(id)){ S.prefs.passed.push(id); S.prefs.passed = S.prefs.passed.slice(-200); savePrefs(); } render(); }
-function newForMe(){ return S.d.openRequests.filter(r => matchesMe(r) && !myOfferFor(r.id) && !isPassed(r.id)); }
-
-async function toggleOnline(){
-  if(!S.pg) return;
-  const on = !S.pg.is_online;
-  try{ await api.savePg({ is_online: on }); toast(on ? "You're available" : "You're away", on ? "Customers see you as available" : "You'll still see requests, but show as away", "power"); render(); }
-  catch(e){ toast("Couldn't update", e.message, "x"); }
-}
-function earnings(){
-  const done = S.d.bookings.filter(b => b.status === "completed");
-  const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0,0,0,0);
-  const month = done.filter(b => toMs(b.start_at) >= monthStart.getTime());
-  return { total: done.reduce((s,b) => s + (b.price||0), 0), month: month.reduce((s,b) => s + (b.price||0), 0), jobs: done.length, monthJobs: month.length };
-}
-
-function reqCardPg(r, compact){
-  const cat = catById(r.category), mine = myOfferFor(r.id);
-  return `<div class="card req-card mt12">
-    <div class="between"><div class="row gap8"><span class="big-em">${cat.emoji}</span>
-      <div><div class="bold sm">${esc(cat.name)} · ${r.duration_hrs} hr${r.duration_hrs>1?'s':''}</div>
-        <div class="xs muted2">${esc(r.customer_name||"Customer")} · ${esc(r.city||"")} ${esc(r.pincode||"")}</div></div></div>
-      <div class="stack right"><div class="bold sm">${inr(r.budget)}</div><div class="xs muted2">budget</div></div></div>
-    <div class="row gap8 mt8 xs muted">${icon("calendar",13)} ${whenStr(r.start_at)} <span class="muted2">·</span> <span data-until="${esc(r.expires_at)}">${leftStr(r.expires_at)}</span> to quote</div>
-    ${!compact && (r.deliverables||[]).length ? `<div class="chips mt8">${r.deliverables.map(x => `<span class="chip">${esc(x)}</span>`).join("")}</div>` : ""}
-    ${!compact && r.notes ? `<div class="quote mt8">“${esc(r.notes)}”</div>` : ""}
-    ${mine ? `<div class="row gap8 mt12"><span class="chip green">You quoted ${inr(mine.price)}</span><div class="grow"></div><button class="btn sm" onclick="withdrawOffer('${mine.id}')">Withdraw</button></div>`
-      : `<div class="row gap8 mt12"><button class="btn sm grow" onclick="passRequest('${r.id}')">Not for me</button>
-         <button class="btn sm primary grow" onclick="push('quote',{id:'${r.id}'})">Send a quote</button></div>`}
-  </div>`;
-}
-
-function vPgHome(){
-  const pg = S.pg || {}, e = earnings();
-  const fresh = newForMe(), active = S.d.bookings.filter(activeBk);
-  const photos = (pg.portfolio || []).length;
-  return `<div class="pad">
-    <div class="between">
-      <div><div class="h2">Hi, ${esc(firstName(pg.display_name || S.me.name))}</div>
-        <button class="loc-chip" onclick="push('editLoc')">${icon("pin",13,"var(--accent)")} ${esc(meCity() || "Set your city")} ${icon("chevron",12,"var(--muted-2)")}</button></div>
-      <button class="toggle ${pg.is_online?'on':''}" onclick="toggleOnline()" aria-pressed="${!!pg.is_online}"><i></i><span>${pg.is_online ? "Available" : "Away"}</span></button>
-    </div>
-
-    ${!photos ? `<button class="card tap warn-card mt16" onclick="push('portfolio')">${icon("image",20,"var(--accent)")}<div class="grow" style="text-align:left"><div class="bold sm">Add photos of your work</div><div class="xs muted">Customers compare portfolios before booking. Profiles with photos get chosen far more often.</div></div>${icon("chevron",16,"var(--muted-2)")}</button>` : ""}
-
-    <div class="grid3 mt16">
-      <div class="stat"><div class="s-v">${inr(e.month)}</div><div class="s-l">This month</div></div>
-      <div class="stat"><div class="s-v">${e.jobs}</div><div class="s-l">Shoots done</div></div>
-      <div class="stat"><div class="s-v">${pg.review_count ? "★ " + Number(pg.rating).toFixed(1) : "New"}</div><div class="s-l">${pg.review_count ? pg.review_count + " review" + (pg.review_count>1?"s":"") : "No reviews yet"}</div></div>
-    </div>
-
-    ${active.length ? `<div class="sec-title mt20">Upcoming shoots</div>${active.map(bookingCard).join("")}` : ""}
-
-    <div class="between mt20"><div class="sec-title" style="margin:0">New requests for you</div>
-      <button class="xs accent bold" onclick="go('requests')">See all</button></div>
-    ${fresh.length ? fresh.slice(0,5).map(r => reqCardPg(r, true)).join("")
-      : `<div class="card soft mt12 center"><div class="big-em">📭</div><div class="bold sm mt8">No new requests right now</div>
-         <div class="xs muted mt4">When a customer in ${esc(meCity() || "your city")} posts a ${esc((pg.categories||[]).map(c => catById(c).name.toLowerCase()).join(", ") || "shoot")} request, it'll show up here and you'll get an alert while the app is open.</div></div>`}
-  </div>`;
-}
-
-function vPgRequests(){
-  const mode = S.prefs.reqMode || "match";
-  const city = meCity().toLowerCase();
-  let list = S.d.openRequests.filter(r => !myOfferFor(r.id));
-  if(mode === "match") list = list.filter(r => matchesMe(r) && !isPassed(r.id));
-  else list = list.filter(r => !city || (r.city||"").toLowerCase() === city);
-  const quoted = S.d.myOffers.map(o => ({ o, r: S.d.openRequests.find(r => r.id === o.request_id) }));
-  return `<div class="pad">
-    <div class="h2">Requests</div>
-    <div class="chips mt12">
-      <button class="chip ${mode==='match'?'accent':''}" onclick="S.prefs.reqMode='match';savePrefs();render()">For you</button>
-      <button class="chip ${mode==='city'?'accent':''}" onclick="S.prefs.reqMode='city';savePrefs();render()">Everything in ${esc(meCity()||"your city")}</button>
-      <button class="chip ${mode==='quoted'?'accent':''}" onclick="S.prefs.reqMode='quoted';savePrefs();render()">Your quotes${S.d.myOffers.length ? " (" + S.d.myOffers.length + ")" : ""}</button>
-    </div>
-    ${mode === "quoted"
-      ? (quoted.length ? quoted.map(({o, r}) => r ? reqCardPg(r) : `<div class="card mt12"><div class="between"><div class="sm">Quote of <b>${inr(o.price)}</b></div><span class="chip">Closed</span></div><div class="xs muted2 mt4">Sent ${timeAgo(o.created_at)}. The customer booked someone else or the request closed.</div></div>`).join("")
-        : emptyState("💬", "No quotes yet", "Quotes you send appear here until the customer decides."))
-      : (list.length ? list.map(r => reqCardPg(r)).join("")
-        : emptyState("📭", "Nothing open right now", mode === "match" ? "Try “Everything in " + esc(meCity()||"your city") + "” to see other types of shoot." : "New requests appear here automatically."))}
-    ${mode === "match" && S.prefs.passed.length ? `<div class="center mt16"><button class="linkish xs" onclick="S.prefs.passed=[];savePrefs();render()">Show requests you passed on</button></div>` : ""}
-  </div>`;
-}
-
-/* ---------- send a quote ---------- */
-function vQuote(p){
-  const r = S.d.openRequests.find(x => x.id === p.id);
-  if(!r) return `${topbar("Send a quote")}${emptyState("⏳", "This request has closed", "The customer booked someone or it expired.")}`;
-  const cat = catById(r.category);
-  const suggest = suggestedPrice(r.category, r.duration_hrs, r.urgency, (S.pg && S.pg.price_multiplier) || 1);
-  if(!S.quote || S.quote.id !== r.id) S.quote = { id: r.id, price: suggest, eta: 30, note: "" };
-  const soon = toMs(r.start_at) - Date.now() < 3*3600e3;
-  return `${topbar("Send a quote", cat.name + " · " + whenStr(r.start_at))}
-  <div class="pad">
-    <div class="card">
-      <div class="kv"><span>Customer</span><span>${esc(r.customer_name||"Customer")}</span></div>
-      <div class="kv"><span>Shoot</span><span>${cat.emoji} ${esc(cat.name)}, ${r.duration_hrs} hr${r.duration_hrs>1?'s':''}</span></div>
-      <div class="kv"><span>When</span><span>${whenStr(r.start_at)}</span></div>
-      <div class="kv"><span>Area</span><span>${esc(r.city||"")} ${esc(r.pincode||"")}</span></div>
-      <div class="kv"><span>Their budget</span><span class="bold">${inr(r.budget)}</span></div>
-      ${(r.deliverables||[]).length ? `<div class="kv"><span>Wants</span><span class="right">${r.deliverables.map(esc).join(", ")}</span></div>` : ""}
-      ${r.notes ? `<div class="quote mt8">“${esc(r.notes)}”</div>` : ""}
-    </div>
-    <div class="field mt16"><label for="qPrice">Your price (₹)</label>
-      <input id="qPrice" class="input big" type="number" inputmode="numeric" min="100" max="1000000" step="50" value="${S.quote.price}" oninput="S.quote.price=Math.round(+this.value||0);setHtml('qHint',quoteHint(${r.budget}))">
-      <div class="chips mt8">${[["Their budget", r.budget], ["Your usual", suggest]].map(([l,v]) => `<button class="chip" onclick="S.quote.price=${v};el('qPrice').value=${v};setHtml('qHint',quoteHint(${r.budget}))">${l}: ${inr(v)}</button>`).join("")}</div>
-      <div id="qHint" class="mt6">${quoteHint(r.budget)}</div>
-    </div>
-    ${soon ? `<div class="field"><label>How soon can you get there?</label>
-      <div class="chips">${[15,30,45,60,90].map(m => `<button class="chip lg ${S.quote.eta===m?'accent':''}" onclick="S.quote.eta=${m};render()">${m} min</button>`).join("")}</div></div>` : ""}
-    <div class="field"><label for="qNote">Message to the customer <span class="muted2">(optional)</span></label>
-      <textarea id="qNote" class="input" rows="3" maxlength="500" placeholder="e.g. I shoot on a full-frame camera and deliver 50+ edited photos within 48 hours." oninput="S.quote.note=this.value">${esc(S.quote.note)}</textarea></div>
-    <div class="note">${icon("wallet",18,"var(--green)")}<div>The customer pays you directly after the shoot. SnapPro doesn't take a commission.</div></div>
-    <button class="btn primary block mt16" ${S.loading.quote?"disabled":""} onclick="sendQuote('${r.id}')">${S.loading.quote ? "Sending…" : icon("send",16,"#fff") + " Send quote"}</button>
-    <div id="formErr">${errHtml(S.formErr)}</div>
-  </div>`;
-}
-function quoteHint(budget){
-  const p = S.quote ? S.quote.price : 0;
-  if(!p || p < 100) return `<div class="field-err">Enter a price of at least ₹100.</div>`;
-  if(p > 1000000) return `<div class="field-err">That's above the ₹10,00,000 limit.</div>`;
-  if(budget && p > budget) return `<div class="xs muted">${inr(p - budget)} above their budget — add a note explaining what's included.</div>`;
-  return `<div class="xs green">Within their budget.</div>`;
-}
-async function sendQuote(id){
-  const qv = S.quote, pv = el("qPrice") ? Math.round(+el("qPrice").value || 0) : qv.price;
-  qv.price = pv;
-  if(!pv || pv < 100 || pv > 1000000){ S.formErr = "Enter a price between ₹100 and ₹10,00,000."; render(); return; }
-  S.loading.quote = true; S.formErr = null; render();
-  try{
-    await api.sendOffer(id, pv, qv.eta, (qv.note||"").trim());
-    S.d.myOffers = await api.myOffers();
-    S.loading.quote = false; S.quote = null;
-    toast("Quote sent", "We'll let you know if you're booked", "send"); pop();
-  }catch(e){ S.loading.quote = false; S.formErr = e.message; render(); }
-}
-async function withdrawOffer(id){
-  if(!confirm("Withdraw this quote?")) return;
-  try{ await api.withdrawOffer(id); S.d.myOffers = S.d.myOffers.filter(o => o.id !== id); toast("Quote withdrawn", "", "x"); render(); }
-  catch(e){ toast("Couldn't withdraw", e.message, "x"); }
-}
-
-/* ---------- jobs ---------- */
-function vJobs(){
-  const e = earnings();
-  const up = S.d.bookings.filter(activeBk).sort((a,b) => toMs(a.start_at) - toMs(b.start_at));
-  const past = S.d.bookings.filter(b => !activeBk(b));
-  return `<div class="pad">
-    <div class="h2">Your shoots</div>
-    <div class="grid2 mt12">
-      <div class="stat"><div class="s-v">${inr(e.month)}</div><div class="s-l">Earned this month · ${e.monthJobs} shoot${e.monthJobs===1?"":"s"}</div></div>
-      <div class="stat"><div class="s-v">${inr(e.total)}</div><div class="s-l">All time · ${e.jobs} shoot${e.jobs===1?"":"s"}</div></div>
-    </div>
-    <div class="xs muted2 mt8">Totals count completed shoots at the price you quoted.</div>
-    ${up.length ? `<div class="sec-title mt20">Upcoming</div>${up.map(bookingCard).join("")}` : ""}
-    ${past.length ? `<div class="sec-title mt20">Past</div>${past.map(bookingCard).join("")}` : ""}
-    ${!up.length && !past.length ? emptyState("📅", "No bookings yet", "When a customer books your quote, the shoot appears here.") : ""}
-  </div>`;
-}
-const NEXT_STEP = {
-  confirmed: { to: "enroute",   label: "I'm on my way",     ic: "send" },
-  enroute:   { to: "arrived",   label: "I've arrived",      ic: "pin" },
-  arrived:   { to: "shooting",  label: "Start the shoot",   ic: "cam" },
-  shooting:  { to: "completed", label: "Mark as complete",  ic: "check" }
-};
-function vJob(p){
-  const b = S.d.bookings.find(x => x.id === p.id);
-  if(!b){ refresh(false); return `${topbar("Shoot")}<div class="pad"><div class="skeleton"></div></div>`; }
-  const nx = NEXT_STEP[b.status];
-  const canCancel = b.status === "confirmed" || b.status === "enroute";
-  const maps = b.address ? "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(b.address + ", " + (b.city||"") + " " + (b.pincode||"")) : "";
-  return `${topbar(b.customer_name || "Shoot", catById(b.category).name + " · " + whenStr(b.start_at))}
-  <div class="pad">
-    <div class="card">
-      <div class="row gap12">${avatarHtml(b.customer_id, b.customer_name, "av-56")}
-        <div class="grow"><div class="bold">${esc(b.customer_name||"Customer")}</div><div class="xs muted2">${catById(b.category).emoji} ${esc(catById(b.category).name)}</div></div>
-        ${statusChip(BK_LABEL[b.status], BK_CHIP[b.status])}</div>
-      ${b.status !== "cancelled" ? `<button class="btn sm block mt12" onclick="push('chat',{id:'${b.id}'})">${icon("chat",14)} Message ${esc(firstName(b.customer_name))}</button>` : ""}
-    </div>
-    ${b.status === "cancelled" ? `<div class="card soft mt12">This booking was cancelled.</div>` : `<div class="card mt12"><div class="sec-title">Status</div>${timelineHtml(b)}</div>`}
-    <div class="card mt12">
-      <div class="kv"><span>When</span><span>${whenStr(b.start_at)}</span></div>
-      <div class="kv"><span>Duration</span><span>${b.duration_hrs} hr${b.duration_hrs>1?'s':''}</span></div>
-      <div class="kv"><span>You'll be paid</span><span class="bold">${inr(b.price)}</span></div>
-      <div class="kv top"><span>Address</span><span class="right">${esc(b.address||"—")}<br><span class="xs muted2">${esc(b.city||"")} ${esc(b.pincode||"")}</span></span></div>
-      ${maps && b.status !== "cancelled" && b.status !== "completed" ? `<a class="btn sm block mt8" href="${maps}" target="_blank" rel="noopener">${icon("pin",14)} Open in Maps</a>` : ""}
-    </div>
-    ${nx ? `<button class="btn primary block mt16" ${S.loading.step?"disabled":""} onclick="jobStep('${b.id}','${nx.to}')">${icon(nx.ic,16,"#fff")} ${nx.label}</button>` : ""}
-    ${b.status === "completed" ? `<div class="note mt16">${icon("check",18,"var(--green)")}<div>Shoot complete. Collect ${inr(b.price)} from ${esc(firstName(b.customer_name))} if you haven't already.</div></div>` : ""}
-    ${canCancel ? `<button class="btn block danger mt12" onclick="jobStep('${b.id}','cancelled')">Cancel this booking</button>` : ""}
-  </div>`;
-}
-async function jobStep(id, to){
-  if(to === "cancelled" && !confirm("Cancel this booking? The customer will be told and can book someone else.")) return;
-  if(to === "completed" && !confirm("Mark this shoot as complete?")) return;
-  S.loading.step = true; render();
-  try{
-    const b = await api.setBooking(id, { status: to });
-    Object.assign(S.d.bookings.find(x => x.id === id), b);
-    S.loading.step = false;
-    toast(BK_LABEL[to], to === "completed" ? "Nice work! " + inr(b.price) + " added to your earnings" : "The customer can see this now", to === "cancelled" ? "x" : "check");
-    if(to === "completed") api.loadMe().then(softRender).catch(() => {});
-    render();
-  }catch(e){ S.loading.step = false; toast("Couldn't update", e.message, "x"); render(); }
-}
-
-/* ---------- profile, portfolio, editing ---------- */
-function pgProfileExtras(){
-  const pg = S.pg || {};
-  return `<div class="card mt16 list">
-    <button class="li" onclick="push('pg',{id:'${pg.id}'})">${icon("user",18,"var(--muted)")}<div class="grow"><div class="sm bold">See your public profile</div><div class="xs muted2">What customers see</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
-    <button class="li" onclick="push('portfolio')">${icon("image",18,"var(--muted)")}<div class="grow"><div class="sm bold">Portfolio</div><div class="xs muted2">${(pg.portfolio||[]).length} photo${(pg.portfolio||[]).length===1?"":"s"}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
-    <button class="li" onclick="push('editPg')">${icon("edit",18,"var(--muted)")}<div class="grow"><div class="sm bold">Bio, shoot types and rates</div><div class="xs muted2">${(pg.categories||[]).map(c => esc(catById(c).name)).join(", ") || "Not set"}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
-  </div>`;
-}
-function vPortfolio(){
-  const ph = (S.pg && S.pg.portfolio) || [];
-  return `${topbar("Portfolio", ph.length + " of 30 photos")}
-  <div class="pad">
-    <div class="sm muted">Show your best work. Photos are resized automatically and appear on your public profile.</div>
-    <label class="btn primary block mt16 file-btn">${icon("plus",16,"#fff")} Add photos
-      <input type="file" accept="image/jpeg,image/png,image/webp" multiple onchange="uploadPortfolio(this.files);this.value=''"></label>
-    <div id="busyNote" class="busy-note" style="display:none"></div>
-    ${ph.length ? `<div class="pgrid mt16">${ph.map(u => `<div class="pgrid-i"><img src="${esc(u)}" alt="" loading="lazy"><button class="del" aria-label="Remove photo" onclick="removePortfolio('${esc(u)}')">${icon("trash",14,"#fff")}</button></div>`).join("")}</div>`
-      : emptyState("🖼️", "No photos yet", "Add 6–12 of your best shots across the types of shoot you do.")}
-  </div>`;
-}
-function vEditPg(){
-  const pg = S.pg || {};
-  if(!S.editPg) S.editPg = { bio: pg.bio || "", cats: (pg.categories||[]).slice(), years: pg.years_exp || 0, pm: Number(pg.price_multiplier) || 1 };
-  const d = S.editPg;
-  return `${topbar("Your details")}
-  <div class="pad">
-    <div class="field"><label for="epBio">Bio</label>
-      <textarea id="epBio" class="input" rows="4" maxlength="600" oninput="S.editPg.bio=this.value">${esc(d.bio)}</textarea></div>
-    <div class="field"><label>Years of experience — <span id="epYrs">${d.years}</span></label>
-      <input type="range" min="0" max="30" value="${d.years}" oninput="S.editPg.years=+this.value;setHtml('epYrs',this.value)"></div>
-    <div class="field"><label>Types of shoot (up to 3)</label>
-      <div class="grid3">${CATEGORIES.map(c => `<button class="u-card ${d.cats.includes(c.id)?'on':''}" onclick="epCat('${c.id}')"><div class="u-em">${c.emoji}</div><div class="u-t">${esc(c.name)}</div></button>`).join("")}</div></div>
-    <div class="field"><label>Your rates vs typical — <span id="epPm">${Math.round(d.pm*100)}</span>%</label>
-      <input type="range" min="0.6" max="2" step="0.05" value="${d.pm}" oninput="S.editPg.pm=+this.value;setHtml('epPm',Math.round(this.value*100))"></div>
-    <button class="btn primary block" onclick="saveEditPg()">Save</button>
-    <div id="formErr"></div>
-  </div>`;
-}
-function epCat(c){
-  const a = S.editPg.cats, i = a.indexOf(c);
-  if(i >= 0) a.splice(i,1); else if(a.length < 3) a.push(c); else { toast("Pick up to 3", "Deselect one first", "x"); return; }
-  render();
-}
-async function saveEditPg(){
-  const d = S.editPg;
-  if(!d.cats.length){ setHtml("formErr", errHtml("Pick at least one type of shoot.")); return; }
-  try{ await api.savePg({ bio: d.bio.trim(), categories: d.cats, years_exp: d.years, price_multiplier: d.pm }); S.editPg = null; toast("Profile updated", "", "check"); pop(); }
-  catch(e){ setHtml("formErr", errHtml(e.message)); }
-}
-
-/* ============================================================
-   NAVIGATION
-   ============================================================ */
-const AUTH_VIEWS = { welcome: vWelcome, signup: vSignup, otp: vOtp, login: vLogin, reset: vReset, newpw: vNewPw,
-                     setupRole: vSetupRole, setupCust: vSetupCust, setupPg: vSetupPg };
-const STACK_VIEWS = { pg: vPgProfile, photo: vPhoto, newRequest: vNewRequest, request: vRequest, confirm: vConfirm,
-                      booking: vBooking, rate: vRate, chat: vChat, editName: vEditName, editLoc: vEditLoc,
-                      quote: vQuote, job: vJob, portfolio: vPortfolio, editPg: vEditPg };
-const CUST_TABS = [ ["home","Home","home",vCustHome], ["explore","Explore","search",vExplore], ["activity","Shoots","calendar",vActivity], ["profile","Profile","user",vProfile] ];
-const PG_TABS   = [ ["home","Home","home",vPgHome], ["requests","Requests","bolt",vPgRequests], ["jobs","Shoots","calendar",vJobs], ["profile","Profile","user",vProfile] ];
-const tabsFor = () => isPg() ? PG_TABS : CUST_TABS;
-
-function scrollTop(){ try{ window.scrollTo(0, 0); }catch(e){} }
-let ignorePop = 0;
-function push(v, p){
-  S.formErr = null; S.editPg = null;
-  S.stack.push({ v, p: p || {} });
-  try{ history.pushState({ snap: S.stack.length }, ""); }catch(e){}
-  render(); scrollTop();
-}
-function pop(){
-  if(!S.stack.length) return;
-  S.stack.pop(); S.formErr = null;
-  if(history.state && history.state.snap){ ignorePop++; try{ history.back(); }catch(e){ ignorePop--; } }
-  render();
-}
-function replaceStack(v, p){
-  S.formErr = null;
-  if(S.stack.length) S.stack[S.stack.length - 1] = { v, p: p || {} }; else { S.stack.push({ v, p: p || {} }); try{ history.pushState({ snap: 1 }, ""); }catch(e){} }
-  render(); scrollTop();
-}
-function go(tab){ S.tab = tab; S.stack = []; S.formErr = null; render(); scrollTop(); }
-window.addEventListener("popstate", () => {
-  if(ignorePop){ ignorePop--; return; }
-  if(S.stack.length){ S.stack.pop(); S.formErr = null; render(); }
-});
-
-function tabBadge(id){
-  if(isCustomer() && id === "activity") return S.d.requests.filter(r => r.status === "broadcasting" && (S.d.offers[r.id]||[]).length).length;
-  if(isPg() && id === "requests") return newForMe().length;
-  return 0;
-}
-function tabbarHtml(){
-  return `<nav class="tabbar">${tabsFor().map(([id, label, ic]) => {
-    const n = tabBadge(id);
-    return `<button class="tab ${S.tab===id?'on':''}" onclick="go('${id}')" aria-label="${label}">${icon(ic,21)}<span>${label}</span>${n ? `<span class="badge">${n}</span>` : ""}</button>`;
-  }).join("")}</nav>`;
-}
-
-function render(){
-  const screen = el("screen"), tabs = el("tabs");
-  if(!screen) return;
-  pendingRender = false;
-  let html = "", showTabs = false, mode = "";
-  if(!S.booted){
-    html = `<div class="splash"><div class="center"><div class="logo-lg">${icon("cam",32,"#fff",2)}</div><div class="h2 mt16">SnapPro</div></div></div>`;
-  } else if(!S.me || /^setup/.test(S.auth.step || "")){
-    html = (AUTH_VIEWS[S.auth.step] || vWelcome)();
-  } else if(S.stack.length){
-    const top = S.stack[S.stack.length - 1];
-    html = (STACK_VIEWS[top.v] || (() => ""))(top.p || {});
-    if(top.v === "chat") mode = "chat-mode";
-  } else {
-    const t = tabsFor().find(x => x[0] === S.tab) || tabsFor()[0];
-    S.tab = t[0]; html = t[3](); showTabs = true;
-  }
-  screen.innerHTML = html;
-  screen.className = (showTabs ? "" : "no-tabs ") + mode;
-  if(tabs) tabs.innerHTML = showTabs ? tabbarHtml() : "";
-  syncChatTimer();
-}
-
-/* chat refreshes every 3 seconds while it's open */
-function syncChatTimer(){
-  const top = S.stack[S.stack.length - 1];
-  const id = top && top.v === "chat" ? top.p.id : null;
-  if(id && S.chatId === id && chatTimer) return;
-  if(chatTimer){ clearInterval(chatTimer); chatTimer = null; }
-  S.chatId = id;
-  if(id){
-    chatTimer = setInterval(() => { if(!document.hidden) loadChat(id); }, 3000);
-    const c = el("chatList"); if(c) c.scrollTop = c.scrollHeight;
-  }
-}
-
-/* "12m left" counters tick without redrawing the page */
-setInterval(() => {
-  document.querySelectorAll("[data-until]").forEach(n => { n.textContent = leftStr(n.getAttribute("data-until")); });
-}, 15000);
-
-document.addEventListener("visibilitychange", () => { if(!document.hidden && S.me && !/^setup/.test(S.auth.step||"")) refresh(true); });
-
-/* ============================================================
-   START
-   ============================================================ */
-/* Visitor count for the admin dashboard: a random ID kept in this browser.
-   No name, email or IP address is sent. */
-function visitorId(){
-  const k = "snappro.vid";
-  try{
-    let id = localStorage.getItem(k);
+    var k = "snappro.vid", id = localStorage.getItem(k);
     if(!id || !/^[0-9a-f-]{36}$/i.test(id)){
       id = (window.crypto && crypto.randomUUID) ? crypto.randomUUID()
-         : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => { const r = Math.random()*16|0; return (c === "x" ? r : (r&3|8)).toString(16); });
+         : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function(c){ var r = Math.random()*16|0; return (c === "x" ? r : (r&3|8)).toString(16); });
       localStorage.setItem(k, id);
     }
-    return id;
-  }catch(e){ return null; }
-}
-function trackVisit(){
-  try{
-    if(!sb) return;
-    const id = visitorId(); if(!id) return;
-    const ua = navigator.userAgent || "";
-    const device = /iPad|Tablet/i.test(ua) ? "tablet" : /Mobi|Android|iPhone/i.test(ua) ? "mobile" : "desktop";
-    let ref = null;
-    try{ if(document.referrer){ const h = new URL(document.referrer).hostname; if(h && h !== location.hostname) ref = h.replace(/^www\./, ""); } }catch(e){}
-    Promise.resolve(sb.rpc("track_visit", { p_visitor: id, p_path: location.pathname, p_referrer: ref, p_device: device })).catch(() => {});
+    var ua = navigator.userAgent || "", ref = null;
+    try{ if(document.referrer){ var h = new URL(document.referrer).hostname; if(h && h !== location.hostname) ref = h.replace(/^www\./, ""); } }catch(e){}
+    fetch("https://eafudrjxjtenqoorjzsc.supabase.co/rest/v1/rpc/track_visit", {
+      method: "POST", keepalive: true,
+      headers: { "apikey": "sb_publishable_n8ub8dzUbfa5uJqA_PHDXw_QLJJINCd", "Content-Type": "application/json" },
+      body: JSON.stringify({ p_visitor: id, p_path: location.pathname, p_referrer: ref,
+        p_device: /iPad|Tablet/i.test(ua) ? "tablet" : /Mobi|Android|iPhone/i.test(ua) ? "mobile" : "desktop" })
+    }).catch(function(){});
   }catch(e){}
-}
-
-async function boot(){
-  render();
-  const ok = await ensureSb();
-  S.booted = true;
-  if(ok) trackVisit();
-  if(!ok){ S.auth = { step: "welcome" }; render(); toast("Couldn't connect", "Check your internet and refresh the page", "x"); return; }
-  let session = null;
-  try{ const { data } = await sb.auth.getSession(); session = data && data.session; }catch(e){}
-  if(session){ await afterAuth(false); }
-  else { S.auth = { step: "welcome" }; render(); }
-  sb.auth.onAuthStateChange(ev => {
-    if(ev === "SIGNED_OUT" && S.me){
-      stopPolling(); S.me = null; S.pg = null; S.stack = []; S.auth = { step: "login", email: "" };
-      render(); toast("You've been logged out", "Please log in again", "logout");
-    }
-  });
-}
-if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
-
+})();
 </script>
 </body>
 </html>
