@@ -781,6 +781,191 @@ grant execute on function public.invite_email_ready()      to authenticated;
 grant execute on function public.invite_email_status()     to authenticated;
 
 -- =====================================================================
+-- 8b. ADMIN INSIGHTS — visitors, charts, KPIs, user list
+--     Visitors are counted with a random ID the site keeps in the
+--     browser: no names, emails or IP addresses are stored. Only staff
+--     can read any of this.
+-- =====================================================================
+
+create table if not exists public.site_visits (
+  visitor_id uuid        not null,
+  day        date        not null,
+  first_at   timestamptz not null default now(),
+  last_at    timestamptz not null default now(),
+  views      integer     not null default 1,
+  user_id    uuid,
+  path       text,
+  referrer   text,
+  device     text,
+  primary key (visitor_id, day)
+);
+create index if not exists idx_site_visits_day on public.site_visits(day);
+alter table public.site_visits enable row level security;
+drop policy if exists site_visits_staff_read on public.site_visits;
+create policy site_visits_staff_read on public.site_visits for select to authenticated using (public.is_staff());
+
+-- Called by the website once per page load. The day is always "today" in
+-- India time, whatever the browser says.
+create or replace function public.track_visit(p_visitor uuid, p_path text default null,
+                                              p_referrer text default null, p_device text default null)
+returns void language plpgsql security definer set search_path = public
+as $$
+declare d date := (now() at time zone 'Asia/Kolkata')::date;
+begin
+  if p_visitor is null then return; end if;
+  insert into public.site_visits (visitor_id, day, user_id, path, referrer, device)
+  values (p_visitor, d, auth.uid(), left(p_path, 200), left(p_referrer, 200),
+          case when p_device in ('mobile','tablet','desktop') then p_device end)
+  on conflict (visitor_id, day) do update
+     set views   = least(public.site_visits.views + 1, 10000),
+         last_at = now(),
+         user_id = coalesce(public.site_visits.user_id, excluded.user_id);
+end $$;
+
+create or replace function public._ist(ts timestamptz)
+returns date language sql immutable as $$ select (ts at time zone 'Asia/Kolkata')::date $$;
+
+-- One row per day / week / month / year between two dates, zero-filled.
+-- Booking values are hidden (null) from managers.
+create or replace function public.admin_series(p_from date, p_to date, p_bucket text)
+returns table(bucket date, visitors int, signups int, customers int, photographers int,
+              requests int, bookings int, completed int, cancelled int,
+              booked_value bigint, completed_value bigint)
+language plpgsql stable security definer set search_path = public
+as $$
+declare money boolean := coalesce(public.staff_role() in ('super_admin','admin'), false); t date;
+begin
+  if not public.is_staff() then return; end if;
+  if p_bucket not in ('day','week','month','year') then raise exception 'Unknown period'; end if;
+  if p_from is null or p_to is null then raise exception 'Choose a start and end date'; end if;
+  if p_to < p_from then t := p_from; p_from := p_to; p_to := t; end if;
+  if p_to - p_from > 3700 then raise exception 'Choose a range of 10 years or less'; end if;
+  return query
+  with b as (
+    select g::date as bk
+      from generate_series(date_trunc(p_bucket, p_from::timestamp), date_trunc(p_bucket, p_to::timestamp),
+                           ('1 ' || p_bucket)::interval) g),
+  v as (select date_trunc(p_bucket, s.day::timestamp)::date bk, count(distinct s.visitor_id) n
+          from public.site_visits s where s.day between p_from and p_to group by 1),
+  u as (select date_trunc(p_bucket, public._ist(p.created_at)::timestamp)::date bk, count(*) n,
+               count(*) filter (where p.role = 'customer') c, count(*) filter (where p.role = 'photographer') ph
+          from public.profiles p
+         where public._ist(p.created_at) between p_from and p_to
+           and not exists (select 1 from public.staff st where st.id = p.id)
+         group by 1),
+  r as (select date_trunc(p_bucket, public._ist(q.created_at)::timestamp)::date bk, count(*) n
+          from public.requests q where public._ist(q.created_at) between p_from and p_to group by 1),
+  k as (select date_trunc(p_bucket, public._ist(x.created_at)::timestamp)::date bk,
+               count(*) filter (where x.status <> 'cancelled') n,
+               count(*) filter (where x.status = 'completed') done,
+               count(*) filter (where x.status = 'cancelled') canc,
+               coalesce(sum(x.price) filter (where x.status <> 'cancelled'), 0) bv,
+               coalesce(sum(x.price) filter (where x.status = 'completed'), 0) cv
+          from public.bookings x where public._ist(x.created_at) between p_from and p_to group by 1)
+  select b.bk, coalesce(v.n,0)::int, coalesce(u.n,0)::int, coalesce(u.c,0)::int, coalesce(u.ph,0)::int,
+         coalesce(r.n,0)::int, coalesce(k.n,0)::int, coalesce(k.done,0)::int, coalesce(k.canc,0)::int,
+         case when money then coalesce(k.bv,0)::bigint end, case when money then coalesce(k.cv,0)::bigint end
+    from b left join v on v.bk = b.bk left join u on u.bk = b.bk
+           left join r on r.bk = b.bk left join k on k.bk = b.bk
+   order by b.bk;
+end $$;
+
+-- Headline numbers for a date range, plus a few "right now" figures.
+create or replace function public.admin_kpis(p_from date, p_to date)
+returns jsonb language plpgsql stable security definer set search_path = public
+as $$
+declare money boolean := coalesce(public.staff_role() in ('super_admin','admin'), false);
+        res jsonb; today date := public._ist(now());
+begin
+  if not public.is_staff() then return null; end if;
+  with
+  vis as (select * from public.site_visits where day between p_from and p_to),
+  prof as (select p.* from public.profiles p where not exists (select 1 from public.staff st where st.id = p.id)),
+  req as (select * from public.requests where public._ist(created_at) between p_from and p_to),
+  firstq as (select r.id, (select min(o.created_at) from public.offers o where o.request_id = r.id) fq,
+                    (select count(*) from public.offers o where o.request_id = r.id) nq, r.created_at
+               from req r),
+  bk as (select * from public.bookings where public._ist(created_at) between p_from and p_to)
+  select jsonb_build_object(
+    'visitors',            (select count(distinct visitor_id) from vis),
+    'returning_visitors',  (select count(*) from (select visitor_id from vis group by 1 having count(*) > 1) z),
+    'page_views',          (select coalesce(sum(views),0) from vis),
+    'mobile_share',        (select round(100.0 * count(*) filter (where device = 'mobile') / nullif(count(*),0)) from vis),
+    'signups',             (select count(*) from prof where public._ist(created_at) between p_from and p_to),
+    'signups_customers',   (select count(*) from prof where role = 'customer' and public._ist(created_at) between p_from and p_to),
+    'signups_photographers',(select count(*) from prof where role = 'photographer' and public._ist(created_at) between p_from and p_to),
+    'total_customers',     (select count(*) from prof where role = 'customer'),
+    'total_photographers', (select count(*) from prof where role = 'photographer'),
+    'setup_incomplete',    (select count(*) from prof where city is null or pincode is null),
+    'requests',            (select count(*) from req),
+    'requests_quoted',     (select count(*) from firstq where fq is not null),
+    'requests_booked',     (select count(*) from req where status = 'matched'),
+    'avg_quotes',          (select round(avg(nq)::numeric, 1) from firstq),
+    'median_first_quote_min', (select round(percentile_cont(0.5) within group (order by extract(epoch from fq - created_at) / 60)::numeric)
+                                 from firstq where fq is not null),
+    'bookings',            (select count(*) from bk where status <> 'cancelled'),
+    'completed',           (select count(*) from bk where status = 'completed'),
+    'cancelled',           (select count(*) from bk where status = 'cancelled'),
+    'booked_value',        case when money then (select coalesce(sum(price),0) from bk where status <> 'cancelled') end,
+    'completed_value',     case when money then (select coalesce(sum(price),0) from bk where status = 'completed') end,
+    'avg_booking_value',   case when money then (select round(avg(price)) from bk where status <> 'cancelled') end,
+    'repeat_customers',    (select count(*) from (select customer_id from public.bookings where status <> 'cancelled'
+                                                   group by 1 having count(*) > 1) z),
+    'reviews',             (select count(*) from public.reviews where public._ist(created_at) between p_from and p_to),
+    'avg_rating',          (select round(avg(stars)::numeric, 1) from public.reviews where public._ist(created_at) between p_from and p_to),
+    'messages',            (select count(*) from public.messages where public._ist(created_at) between p_from and p_to),
+    'now_visitors_today',  (select count(*) from public.site_visits where day = today),
+    'now_photographers_available', (select count(*) from public.photographers where is_online),
+    'now_open_requests',   (select count(*) from public.requests where status = 'broadcasting' and expires_at > now()),
+    'now_upcoming_shoots', (select count(*) from public.bookings where status in ('confirmed','enroute','arrived','shooting')),
+    'photographers_with_photos', (select count(*) from public.photographers where coalesce(array_length(portfolio,1),0) > 0),
+    'photographers_verified',    (select count(*) from public.photographers where is_verified),
+    'top_cities',     (select coalesce(jsonb_agg(z order by z.n desc), '[]') from
+                        (select coalesce(city,'—') city, count(*) n from req group by 1 order by 2 desc limit 6) z),
+    'top_categories', (select coalesce(jsonb_agg(z order by z.n desc), '[]') from
+                        (select category, count(*) n from req group by 1 order by 2 desc limit 6) z),
+    'top_referrers',  (select coalesce(jsonb_agg(z order by z.n desc), '[]') from
+                        (select coalesce(nullif(referrer,''),'Direct') referrer, count(distinct visitor_id) n from vis group by 1 order by 2 desc limit 6) z)
+  ) into res;
+  return res;
+end $$;
+
+-- Everyone who has an account. Admins and super admins only.
+create or replace function public.admin_users()
+returns table(id uuid, name text, email text, phone text, role text, city text, state text, pincode text,
+              joined timestamptz, last_sign_in timestamptz, confirmed boolean, is_staff boolean,
+              requests int, bookings int, jobs_done int, rating numeric, review_count int,
+              is_verified boolean, is_online boolean, photos int)
+language plpgsql stable security definer set search_path = public
+as $$
+begin
+  if coalesce(public.staff_role() in ('super_admin','admin'), false) is not true then return; end if;
+  return query
+  select u.id, p.name, coalesce(u.email, p.email)::text, coalesce(p.phone, u.phone)::text,
+         coalesce(p.role, 'customer'), p.city, p.state, p.pincode,
+         coalesce(p.created_at, u.created_at), u.last_sign_in_at, (u.email_confirmed_at is not null),
+         exists (select 1 from public.staff st where st.id = u.id),
+         (select count(*)::int from public.requests q where q.customer_id = u.id),
+         (select count(*)::int from public.bookings b where (b.customer_id = u.id or b.photographer_id = u.id) and b.status <> 'cancelled'),
+         g.jobs_done, g.rating, g.review_count, g.is_verified, g.is_online,
+         coalesce(array_length(g.portfolio,1), 0)
+    from auth.users u
+    left join public.profiles p on p.id = u.id
+    left join public.photographers g on g.id = u.id
+   order by coalesce(p.created_at, u.created_at) desc
+   limit 5000;
+end $$;
+
+revoke all on function public.track_visit(uuid, text, text, text) from public;
+revoke all on function public.admin_series(date, date, text)      from public, anon;
+revoke all on function public.admin_kpis(date, date)              from public, anon;
+revoke all on function public.admin_users()                       from public, anon;
+grant execute on function public.track_visit(uuid, text, text, text) to anon, authenticated;
+grant execute on function public.admin_series(date, date, text)      to authenticated;
+grant execute on function public.admin_kpis(date, date)              to authenticated;
+grant execute on function public.admin_users()                       to authenticated;
+
+-- =====================================================================
 -- 9. ONE-OFF CLEAN-UP
 -- =====================================================================
 
@@ -817,7 +1002,7 @@ select
   (select bool_and(rowsecurity) from pg_tables
      where schemaname = 'public'
        and tablename in ('profiles','photographers','requests','offers','bookings',
-                         'messages','reviews','staff','staff_invites'))                      as rls_everywhere,
+                         'messages','reviews','staff','staff_invites','site_visits'))                      as rls_everywhere,
   exists (select 1 from pg_trigger where tgname = 'on_auth_user_created')                  as signup_trigger,
   exists (select 1 from pg_trigger where tgname = 'booking_before_update')                 as booking_guard,
   exists (select 1 from pg_trigger where tgname = 'photographer_guard')                    as rating_guard,

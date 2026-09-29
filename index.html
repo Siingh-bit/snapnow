@@ -1668,6 +1668,7 @@ function enterApp(){
   refresh(false).then(() => render());
   if(isCustomer()) api.photographers().then(() => softRender()).catch(() => {});
   startPolling();
+  if(typeof trackVisit === "function") trackVisit();   // links today's visit to the account
 }
 
 /* ---------- first-time setup ---------- */
@@ -2736,10 +2737,37 @@ document.addEventListener("visibilitychange", () => { if(!document.hidden && S.m
 /* ============================================================
    START
    ============================================================ */
+/* Visitor count for the admin dashboard: a random ID kept in this browser.
+   No name, email or IP address is sent. */
+function visitorId(){
+  const k = "snappro.vid";
+  try{
+    let id = localStorage.getItem(k);
+    if(!id || !/^[0-9a-f-]{36}$/i.test(id)){
+      id = (window.crypto && crypto.randomUUID) ? crypto.randomUUID()
+         : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => { const r = Math.random()*16|0; return (c === "x" ? r : (r&3|8)).toString(16); });
+      localStorage.setItem(k, id);
+    }
+    return id;
+  }catch(e){ return null; }
+}
+function trackVisit(){
+  try{
+    if(!sb) return;
+    const id = visitorId(); if(!id) return;
+    const ua = navigator.userAgent || "";
+    const device = /iPad|Tablet/i.test(ua) ? "tablet" : /Mobi|Android|iPhone/i.test(ua) ? "mobile" : "desktop";
+    let ref = null;
+    try{ if(document.referrer){ const h = new URL(document.referrer).hostname; if(h && h !== location.hostname) ref = h.replace(/^www\./, ""); } }catch(e){}
+    Promise.resolve(sb.rpc("track_visit", { p_visitor: id, p_path: location.pathname, p_referrer: ref, p_device: device })).catch(() => {});
+  }catch(e){}
+}
+
 async function boot(){
   render();
   const ok = await ensureSb();
   S.booted = true;
+  if(ok) trackVisit();
   if(!ok){ S.auth = { step: "welcome" }; render(); toast("Couldn't connect", "Check your internet and refresh the page", "x"); return; }
   let session = null;
   try{ const { data } = await sb.auth.getSession(); session = data && data.session; }catch(e){}

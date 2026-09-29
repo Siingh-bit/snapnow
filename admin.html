@@ -6,6 +6,7 @@
 <meta name="robots" content="noindex,nofollow">
 <title>SnapPro Operations</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <style>
 :root{
   --bg:#0a0a0f; --surface:#14141c; --surface-2:#1c1c26; --surface-3:#252533;
@@ -80,6 +81,14 @@ td{padding:11px 8px;border-bottom:1px solid var(--border-soft);vertical-align:mi
 .sw{display:inline-flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:var(--muted);cursor:pointer}
 .sw input{accent-color:var(--green);width:16px;height:16px}
 .empty{text-align:center;padding:40px 20px;color:var(--muted-2)}
+.wrap{max-width:1240px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px}
+.grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+.chart-box{position:relative;height:280px;margin-top:10px}
+.stat.hl{border-color:rgba(255,90,31,.35);background:linear-gradient(145deg,rgba(255,90,31,.12),var(--surface))}
+.live-dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 0 0 rgba(40,199,111,.6);animation:live 2s infinite}
+@keyframes live{0%{box-shadow:0 0 0 0 rgba(40,199,111,.6)}70%{box-shadow:0 0 0 8px rgba(40,199,111,0)}100%{box-shadow:0 0 0 0 rgba(40,199,111,0)}}
+.tab{white-space:nowrap}
 .spin{width:44px;height:44px;margin:0 auto;border-radius:50%;border:3px solid var(--surface-3);
   border-top-color:var(--accent);animation:sp .8s linear infinite}
 @keyframes sp{to{transform:rotate(360deg)}}
@@ -126,6 +135,8 @@ const S = {
   tab: "overview",
   stats: null, staff: [], invites: [], bookings: [], requests: [], photographers: [],
   emailReady: null, emailStatus: {},
+  period: { mode: "day", from: "", to: "" }, insights: null, insightErr: "", insightBusy: false, updatedAt: null,
+  users: null, usersErr: "", usersFilter: "all", usersQ: "",
   inviteEmail: "", inviteRole: "manager"
 };
 
@@ -229,6 +240,12 @@ function friendly(e){
   return m||"Something went wrong. Try again.";
 }
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+function openTab(k){
+  S.tab = k; S.err = ''; S.note = '';
+  render();
+  if(k === 'overview') loadInsights(!!S.insights);
+  if(k === 'users') loadUsers(!!S.users);
+}
 function go(view, patch){ Object.assign(S, patch||{}, { view, err:"" }); render(); }
 
 async function boot(){
@@ -262,6 +279,7 @@ async function loadMe(){
   if(row.status !== 'active'){ S.view="denied"; S.deniedEmail=u.user.email; S.suspended=true; render(); return; }
   S.me = row; S.view = "console"; render();
   loadData();
+  loadInsights();
 }
 
 async function signIn(){
@@ -463,6 +481,253 @@ async function cancelInvite(id){
   S.note="Invite cancelled."; await loadData();
 }
 
+/* ========================= insights ========================== */
+/* All dates are India time, whatever the computer's clock is set to. */
+const IST_MS = 5.5 * 3600e3;
+const istToday = () => new Date(Date.now() + IST_MS).toISOString().slice(0, 10);
+const addDays = (d, n) => { const x = new Date(d + "T00:00:00Z"); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
+const dayDiff = (a, b) => Math.round((Date.parse(b + "T00:00:00Z") - Date.parse(a + "T00:00:00Z")) / 864e5);
+const PERIODS = [["day","Daily"],["week","Weekly"],["month","Monthly"],["year","Yearly"],["custom","Custom"]];
+
+function periodRange(){
+  const p = S.period, t = istToday();
+  if(p.mode === "day")  return { from: addDays(t, -29), to: t, bucket: "day",  label: "Last 30 days" };
+  if(p.mode === "week"){ const dow = (new Date(t + "T00:00:00Z").getUTCDay() + 6) % 7;
+                         return { from: addDays(addDays(t, -dow), -77), to: t, bucket: "week", label: "Last 12 weeks" }; }
+  if(p.mode === "month"){ const [y, m] = t.split("-").map(Number); const d = new Date(Date.UTC(y, m - 12, 1));
+                         return { from: d.toISOString().slice(0, 10), to: t, bucket: "month", label: "Last 12 months" }; }
+  if(p.mode === "year") return { from: (Number(t.slice(0, 4)) - 4) + "-01-01", to: t, bucket: "year", label: "Last 5 years" };
+  let from = p.from || addDays(t, -29), to = p.to || t;
+  if(from > to){ const x = from; from = to; to = x; }
+  const n = dayDiff(from, to);
+  const bucket = n <= 62 ? "day" : n <= 182 ? "week" : n <= 1100 ? "month" : "year";
+  return { from, to, bucket, label: fmtDay(from) + " – " + fmtDay(to) };
+}
+function fmtDay(d){ return new Date(d + "T00:00:00Z").toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }); }
+function bucketLabel(d, b){
+  const x = new Date(String(d).slice(0, 10) + "T00:00:00Z"), o = { timeZone: "UTC" };
+  if(b === "day")   return x.toLocaleDateString("en-IN", { ...o, day: "numeric", month: "short" });
+  if(b === "week")  return "w/c " + x.toLocaleDateString("en-IN", { ...o, day: "numeric", month: "short" });
+  if(b === "month") return x.toLocaleDateString("en-IN", { ...o, month: "short", year: "numeric" });
+  return String(x.getUTCFullYear());
+}
+
+let insightSeq = 0;
+async function loadInsights(quiet){
+  const r = periodRange(), seq = ++insightSeq;
+  if(!quiet){ S.insightErr = ""; S.insightBusy = true; render(); }
+  const [se, kp] = await Promise.all([
+    sb.rpc("admin_series", { p_from: r.from, p_to: r.to, p_bucket: r.bucket }),
+    sb.rpc("admin_kpis",   { p_from: r.from, p_to: r.to })
+  ]);
+  if(seq !== insightSeq) return;                 // a newer period was picked meanwhile
+  S.insightBusy = false;
+  const err = (se && se.error) || (kp && kp.error);
+  if(err){
+    S.insightErr = /admin_series|admin_kpis|function/i.test(err.message)
+      ? "Charts need the latest database update — run supabase/snappro.sql in the Supabase SQL Editor."
+      : "Couldn't load charts: " + err.message;
+    render(); return;
+  }
+  const next = { series: se.data || [], kpis: kp.data || null, range: r };
+  const changed = JSON.stringify(next) !== JSON.stringify(S.insights);
+  S.insights = next; S.updatedAt = new Date();
+  if(!quiet || changed) render(); else paintUpdated();
+}
+function setPeriod(mode){
+  S.period.mode = mode;
+  if(mode === "custom" && !S.period.from){ S.period.to = istToday(); S.period.from = addDays(S.period.to, -89); }
+  loadInsights();
+}
+function applyCustom(){
+  const f = el("pFrom"), t = el("pTo");
+  if(!f.value || !t.value){ S.insightErr = "Choose both dates."; render(); return; }
+  S.period.from = f.value; S.period.to = t.value; loadInsights();
+}
+function paintUpdated(){ const n = el("liveAt"); if(n && S.updatedAt) n.textContent = "updated " + S.updatedAt.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", second: "2-digit" }); }
+
+/* live: refresh every 60 seconds while the console is open and visible */
+setInterval(() => {
+  if(document.hidden || S.view !== "console" || !S.me) return;
+  const a = document.activeElement;
+  if(a && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName)) return;   // never interrupt typing
+  if(S.tab === "overview") loadInsights(true);
+  if(S.tab === "users") loadUsers(true);
+}, 60000);
+
+const pct = (a, b) => b ? Math.round(100 * a / b) + "%" : "—";
+const num = n => (n == null ? "—" : Number(n).toLocaleString("en-IN"));
+function kpi(v, l, sub, cls){ return `<div class="stat ${cls||''}"><div class="v">${v}</div><div class="l">${l}</div>${sub ? `<div class="xs muted2 mt8">${sub}</div>` : ""}</div>`; }
+function miniTable(title, rows, key, label){
+  return `<div class="card"><div class="sec">${title}</div>${rows && rows.length
+    ? `<table><tbody>${rows.map(r => `<tr><td>${esc(label ? label(r[key]) : r[key])}</td><td style="text-align:right;font-weight:700">${num(r.n)}</td></tr>`).join("")}</tbody></table>`
+    : `<div class="xs muted2">Nothing yet in this period.</div>`}</div>`;
+}
+
+function vOverview(){
+  const money = S.me.role !== "manager";
+  const I = S.insights, k = I && I.kpis, r = periodRange();
+  const head = `
+  <div class="between" style="flex-wrap:wrap;gap:12px">
+    <div class="tabs" style="width:fit-content">${PERIODS.map(([m, l]) => `<button class="tab ${S.period.mode===m?'on':''}" onclick="setPeriod('${m}')">${l}</button>`).join("")}</div>
+    <div class="row xs muted2"><span class="live-dot"></span><span>Live</span><span id="liveAt">${S.updatedAt ? "updated " + S.updatedAt.toLocaleTimeString("en-IN",{hour:"numeric",minute:"2-digit",second:"2-digit"}) : ""}</span></div>
+  </div>
+  ${S.period.mode === "custom" ? `<div class="row mt12" style="flex-wrap:wrap">
+      <label class="xs muted">From <input id="pFrom" class="input" type="date" style="width:auto;padding:8px 10px" value="${esc(S.period.from)}" max="${istToday()}"></label>
+      <label class="xs muted">To <input id="pTo" class="input" type="date" style="width:auto;padding:8px 10px" value="${esc(S.period.to)}" max="${istToday()}"></label>
+      <button class="btn sm primary" onclick="applyCustom()">Apply</button></div>` : ""}
+  <div class="xs muted2 mt8">${esc(r.label)} · grouped by ${r.bucket}${S.insightBusy ? " · loading…" : ""}</div>
+  ${S.insightErr ? `<div class="warn mt12">${esc(S.insightErr)}</div>` : ""}`;
+  if(!k) return head + (S.insightErr ? "" : `<div class="empty">Loading…</div>`);
+
+  const bookedAll = (k.bookings||0) + (k.cancelled||0);
+  return head + `
+  <div class="sec mt24">Right now</div>
+  <div class="grid">
+    ${kpi(num(k.now_visitors_today), "Visitors today")}
+    ${kpi(num(k.now_photographers_available), "Photographers available")}
+    ${kpi(num(k.now_open_requests), "Requests waiting for quotes")}
+    ${kpi(num(k.now_upcoming_shoots), "Upcoming shoots")}
+  </div>
+
+  <div class="sec mt24">${esc(r.label)}</div>
+  <div class="grid">
+    ${money ? kpi(inr(k.booked_value), "Booking value (GMV)", "Completed: " + inr(k.completed_value), "hl") : ""}
+    ${money ? kpi(k.avg_booking_value ? inr(k.avg_booking_value) : "—", "Average booking") : ""}
+    ${kpi(num(k.visitors), "Unique visitors", num(k.returning_visitors) + " came back · " + num(k.page_views) + " page views" + (k.mobile_share != null ? " · " + k.mobile_share + "% mobile" : ""))}
+    ${kpi(num(k.signups), "New sign-ups", num(k.signups_customers) + " customers · " + num(k.signups_photographers) + " photographers")}
+    ${kpi(pct(k.signups, k.visitors), "Visitor → sign-up")}
+    ${kpi(num(k.requests), "Shoot requests", pct(k.requests_quoted, k.requests) + " got a quote · " + pct(k.requests_booked, k.requests) + " booked")}
+    ${kpi(k.avg_quotes != null ? k.avg_quotes : "—", "Quotes per request", k.median_first_quote_min != null ? "First quote in ~" + k.median_first_quote_min + " min (median)" : "")}
+    ${kpi(num(k.bookings), "Bookings", num(k.completed) + " completed")}
+    ${kpi(pct(k.cancelled, bookedAll), "Cancellation rate", num(k.cancelled) + " cancelled")}
+    ${kpi(k.avg_rating != null ? k.avg_rating + "★" : "—", "Average rating", num(k.reviews) + " reviews")}
+    ${kpi(num(k.messages), "Chat messages")}
+  </div>
+
+  ${money ? `<div class="card mt16"><div class="between"><div class="sec" style="margin:0">Revenue — booking value</div>
+      <div class="xs muted2">SnapPro takes no commission yet, so this is what customers pay photographers.</div></div>
+      <div class="chart-box"><canvas id="chRevenue"></canvas></div></div>` : ""}
+  <div class="grid2 mt16">
+    <div class="card"><div class="sec">Unique visitors &amp; sign-ups</div><div class="chart-box"><canvas id="chVisitors"></canvas></div></div>
+    <div class="card"><div class="sec">Requests &amp; bookings</div><div class="chart-box"><canvas id="chFunnel"></canvas></div></div>
+  </div>
+  ${!window.Chart ? `<div class="xs muted2 mt8">Charts couldn't load (check your connection). The numbers above are still live.</div>` : ""}
+
+  <div class="sec mt24">All time</div>
+  <div class="grid">
+    ${kpi(num(k.total_customers), "Customers")}
+    ${kpi(num(k.total_photographers), "Photographers", num(k.photographers_with_photos) + " with portfolio · " + num(k.photographers_verified) + " verified")}
+    ${kpi(num(k.repeat_customers), "Repeat customers", "2+ bookings")}
+    ${kpi(num(k.setup_incomplete), "Sign-ups not finished", "No city or pincode yet")}
+  </div>
+
+  <div class="grid3 mt16">
+    ${miniTable("Top cities", k.top_cities, "city")}
+    ${miniTable("Top shoot types", k.top_categories, "category", c => c ? c.charAt(0).toUpperCase() + c.slice(1) : "—")}
+    ${miniTable("Where visitors come from", k.top_referrers, "referrer")}
+  </div>`;
+}
+
+let charts = [];
+function drawCharts(){
+  charts.forEach(c => { try{ c.destroy(); }catch(e){} }); charts = [];
+  if(S.view !== "console" || S.tab !== "overview" || !window.Chart || !S.insights) return;
+  const rows = S.insights.series, b = S.insights.range.bucket;
+  const labels = rows.map(x => bucketLabel(x.bucket, b));
+  const grid = "rgba(255,255,255,.06)", tick = "#8b8b9e";
+  const base = (money) => ({
+    responsive: true, maintainAspectRatio: false, animation: false,
+    interaction: { mode: "index", intersect: false },
+    plugins: { legend: { labels: { color: "#c9c9d6", boxWidth: 12, font: { size: 11 } } },
+      tooltip: { callbacks: money ? { label: c => c.dataset.label + ": " + inr(c.parsed.y) } : {} } },
+    scales: { x: { grid: { color: grid }, ticks: { color: tick, maxRotation: 0, autoSkip: true, maxTicksLimit: 10 } },
+              y: { beginAtZero: true, grid: { color: grid }, ticks: money ? { color: tick, precision: 0, callback: v => inr(v) } : { color: tick, precision: 0 } } }
+  });
+  const mk = (id, cfg) => { const c = el(id); if(c) charts.push(new Chart(c, cfg)); };
+  mk("chRevenue", { type: "bar", options: base(true), data: { labels, datasets: [
+    { type: "bar",  label: "Booked",    data: rows.map(x => Number(x.booked_value || 0)),    backgroundColor: "rgba(255,90,31,.55)", borderRadius: 4 },
+    { type: "line", label: "Completed", data: rows.map(x => Number(x.completed_value || 0)), borderColor: "#28c76f", backgroundColor: "#28c76f", tension: .3, pointRadius: 2 } ] } });
+  mk("chVisitors", { type: "bar", options: base(false), data: { labels, datasets: [
+    { type: "line", label: "Unique visitors", data: rows.map(x => x.visitors), borderColor: "#4d8dff", backgroundColor: "rgba(77,141,255,.15)", fill: true, tension: .3, pointRadius: 2 },
+    { type: "bar",  label: "Customer sign-ups",     data: rows.map(x => x.customers),     backgroundColor: "rgba(255,90,31,.6)", borderRadius: 3 },
+    { type: "bar",  label: "Photographer sign-ups", data: rows.map(x => x.photographers), backgroundColor: "rgba(166,124,255,.7)", borderRadius: 3 } ] } });
+  mk("chFunnel", { type: "bar", options: base(false), data: { labels, datasets: [
+    { label: "Requests",  data: rows.map(x => x.requests),  backgroundColor: "rgba(77,141,255,.6)", borderRadius: 3 },
+    { label: "Bookings",  data: rows.map(x => x.bookings),  backgroundColor: "rgba(255,90,31,.6)", borderRadius: 3 },
+    { label: "Completed", data: rows.map(x => x.completed), backgroundColor: "rgba(40,199,111,.6)", borderRadius: 3 },
+    { label: "Cancelled", data: rows.map(x => x.cancelled), backgroundColor: "rgba(255,77,94,.5)", borderRadius: 3 } ] } });
+}
+
+/* =========================== users =========================== */
+async function loadUsers(quiet){
+  const { data, error } = await sb.rpc("admin_users");
+  if(error){ S.usersErr = /admin_users|function/i.test(error.message) ? "The user list needs the latest database update — run supabase/snappro.sql in the Supabase SQL Editor." : "Couldn't load users: " + error.message; if(!quiet) render(); return; }
+  const next = data || [];
+  const changed = JSON.stringify(next) !== JSON.stringify(S.users);
+  S.users = next; S.usersErr = "";
+  if(!quiet || changed) render();
+}
+const USER_FILTERS = [["all","Everyone"],["customer","Customers"],["photographer","Photographers"],["incomplete","Sign-up not finished"],["staff","Staff"]];
+function userMatches(u){
+  const f = S.usersFilter;
+  if(f === "customer" && (u.role !== "customer" || u.is_staff)) return false;
+  if(f === "photographer" && u.role !== "photographer") return false;
+  if(f === "incomplete" && (u.city && u.pincode)) return false;
+  if(f === "staff" && !u.is_staff) return false;
+  const q = (S.usersQ || "").trim().toLowerCase();
+  if(!q) return true;
+  return [u.name, u.email, u.phone, u.city, u.state, u.pincode].some(v => v && String(v).toLowerCase().includes(q));
+}
+const ago = d => { if(!d) return "Never"; const s = (Date.now() - Date.parse(d)) / 1000;
+  if(s < 3600) return Math.max(1, Math.floor(s/60)) + " min ago"; if(s < 86400) return Math.floor(s/3600) + " h ago";
+  if(s < 86400*30) return Math.floor(s/86400) + " d ago"; return fmt(d); };
+function userRowsHtml(){
+  const list = (S.users || []).filter(userMatches);
+  if(!list.length) return `<tr><td colspan="7"><div class="empty">No one matches.</div></td></tr>`;
+  return list.map(u => `<tr>
+    <td><div style="font-weight:600">${esc(u.name || "—")}</div><div class="xs muted2">${esc(u.email || "")}</div>${u.phone ? `<div class="xs muted2">${esc(u.phone)}</div>` : ""}</td>
+    <td>${u.is_staff ? `<span class="chip super">Staff</span>` : u.role === "photographer" ? `<span class="chip manager">Photographer</span>` : `<span class="chip admin">Customer</span>`}</td>
+    <td>${u.city ? esc(u.city) + `<div class="xs muted2">${esc([u.state, u.pincode].filter(Boolean).join(" · "))}</div>` : `<span class="chip amber">Not finished</span>`}</td>
+    <td class="muted">${fmt(u.joined)}</td>
+    <td class="muted">${ago(u.last_sign_in)}</td>
+    <td class="sm">${u.role === "photographer"
+        ? `${num(u.jobs_done || 0)} shoots · ${u.review_count ? Number(u.rating).toFixed(1) + "★" : "no reviews"}<div class="xs muted2">${num(u.photos)} photos${u.is_verified ? " · verified" : ""}${u.is_online ? " · available" : ""}</div>`
+        : `${num(u.requests)} requests · ${num(u.bookings)} bookings`}</td>
+    <td>${u.confirmed ? `<span class="chip green">Email confirmed</span>` : `<span class="chip amber">Not confirmed</span>`}</td>
+  </tr>`).join("");
+}
+function usersSearch(v){ S.usersQ = v; setHtml("usersBody", userRowsHtml()); setHtml("usersCount", usersCountText()); }
+function usersCountText(){ const n = (S.users || []).filter(userMatches).length; return n + (n === 1 ? " person" : " people"); }
+function exportUsers(){
+  const cols = ["name","email","phone","role","city","state","pincode","joined","last_sign_in","confirmed","requests","bookings","jobs_done","rating","review_count","is_verified"];
+  const q = v => { v = v == null ? "" : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+  const rows = (S.users || []).filter(userMatches).map(u => cols.map(c => q(c === "role" && u.is_staff ? "staff" : u[c])).join(","));
+  const blob = new Blob([cols.join(",") + "\n" + rows.join("\n")], { type: "text/csv" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "snappro-users-" + istToday() + ".csv";
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+}
+function vUsers(){
+  if(S.usersErr) return `<div class="warn">${esc(S.usersErr)}</div>`;
+  if(!S.users) return `<div class="empty">Loading…</div>`;
+  const all = S.users, count = f => all.filter(u => f(u)).length;
+  return `<div class="grid">
+      ${kpi(num(count(u => !u.is_staff)), "Accounts")}
+      ${kpi(num(count(u => u.role === "customer" && !u.is_staff)), "Customers")}
+      ${kpi(num(count(u => u.role === "photographer")), "Photographers")}
+      ${kpi(num(count(u => !u.city || !u.pincode)), "Sign-up not finished")}
+    </div>
+    <div class="between mt16" style="flex-wrap:wrap;gap:10px">
+      <div class="tabs" style="width:fit-content;flex-wrap:wrap">${USER_FILTERS.map(([k, l]) => `<button class="tab ${S.usersFilter===k?'on':''}" onclick="S.usersFilter='${k}';render()">${l}</button>`).join("")}</div>
+      <div class="row"><input id="usersQ" class="input" style="width:240px;padding:9px 12px" placeholder="Search name, email, city, phone" value="${esc(S.usersQ)}" oninput="usersSearch(this.value)">
+        <button class="btn sm" onclick="exportUsers()">Download CSV</button></div>
+    </div>
+    <div class="xs muted2 mt8" id="usersCount">${usersCountText()}</div>
+    <div class="card tblwrap mt8"><table>
+      <thead><tr><th>Person</th><th>Type</th><th>Location</th><th>Joined</th><th>Last sign-in</th><th>Activity</th><th>Email</th></tr></thead>
+      <tbody id="usersBody">${userRowsHtml()}</tbody></table></div>`;
+}
+
 /* ============================ views =========================== */
 
 function vLogin(){
@@ -576,7 +841,10 @@ function vDenied(){
 function vConsole(){
   const me = S.me;
   const isSuper = me.role === 'super_admin';
-  const tabs = [["overview","Overview"],["bookings","Bookings"],["requests","Requests"],["pros","Photographers"]];
+  const canUsers = me.role !== 'manager';
+  const tabs = [["overview","Overview"]];
+  if(canUsers) tabs.push(["users","Users"]);
+  tabs.push(["bookings","Bookings"],["requests","Requests"],["pros","Photographers"]);
   if(isSuper) tabs.push(["team","Team"]);
 
   return `<div class="wrap">
@@ -593,7 +861,7 @@ function vConsole(){
     </div>
 
     <div class="tabs mt16" style="width:fit-content;flex-wrap:wrap">
-      ${tabs.map(([k,l])=>`<button class="tab ${S.tab===k?'on':''}" onclick="S.tab='${k}';S.err='';S.note='';render()">${l}</button>`).join('')}
+      ${tabs.map(([k,l])=>`<button class="tab ${S.tab===k?'on':''}" onclick="openTab('${k}')">${l}</button>`).join('')}
     </div>
 
     ${S.note?`<div class="ok mt12">${esc(S.note)}</div>`:''}
@@ -601,27 +869,13 @@ function vConsole(){
 
     <div class="mt16">${
       S.tab==='overview' ? vOverview() :
+      S.tab==='users'    ? vUsers()    :
       S.tab==='bookings' ? vBookings() :
       S.tab==='requests' ? vRequests() :
       S.tab==='pros'     ? vPros()     :
       S.tab==='team'     ? vTeam()     : ''
     }</div>
   </div>`;
-}
-
-function vOverview(){
-  const s = S.stats;
-  if(!s) return `<div class="empty">Loading…</div>`;
-  const money = S.me.role !== 'manager';
-  return `<div class="grid">
-    ${money ? `<div class="stat"><div class="v">${inr(s.value)}</div><div class="l">Value of bookings</div></div>` : ''}
-    <div class="stat"><div class="v">${s.bookings}</div><div class="l">Bookings</div></div>
-    <div class="stat"><div class="v">${s.completed}</div><div class="l">Completed shoots</div></div>
-    <div class="stat"><div class="v">${s.requests}</div><div class="l">Requests</div></div>
-    <div class="stat"><div class="v">${s.fill}%</div><div class="l">Requests booked</div></div>
-    <div class="stat"><div class="v">${s.online}/${s.pros}</div><div class="l">Photographers available</div></div>
-  </div>
-  <div class="xs muted2 mt12">Customers pay photographers directly; SnapPro doesn't process payments.${money ? '' : ' Booking values are hidden for the Manager role.'}</div>`;
 }
 
 const when = d => d ? new Date(d).toLocaleString("en-IN",{day:"numeric",month:"short",hour:"numeric",minute:"2-digit"}) : "—";
@@ -675,7 +929,7 @@ function vTeam(){
     <div class="sec">Invite someone</div>
     <div class="row" style="flex-wrap:wrap;gap:10px">
       <input class="input grow" style="min-width:220px" type="email" placeholder="colleague@example.com"
-        value="${esc(S.inviteEmail)}" oninput="S.inviteEmail=this.value;S.err=''">
+        id="invEmail" value="${esc(S.inviteEmail)}" oninput="S.inviteEmail=this.value;S.err=''">
       <select class="input" style="width:auto" onchange="S.inviteRole=this.value">
         ${ROLES.map(r=>`<option value="${r.id}" ${S.inviteRole===r.id?'selected':''}>${r.label}</option>`).join('')}
       </select>
@@ -742,6 +996,7 @@ function render(){
     S.view==="denied"  ? vDenied()  :
     S.view==="console" ? vConsole() : vLogin();
 
+  try{ drawCharts(); }catch(e){ console.warn('charts', e); }
   if(fid){
     const n = el(fid);
     if(n){ n.focus(); if(caret!=null && n.setSelectionRange){ try{ n.setSelectionRange(caret,caret); }catch(e){} } }

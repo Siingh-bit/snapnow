@@ -28,6 +28,9 @@ shoot.
 - **Ratings** — only from reviews of completed bookings. New photographers show as "New".
 - **Portfolio photos** — uploaded to the Supabase Storage bucket `portfolio`, resized in the
   browser first.
+- **Admin dashboard** — live KPIs and charts (booking value, unique visitors, sign-ups, requests,
+  bookings) by day, week, month, year or a custom range, plus a list of every account. Visitors
+  are counted with a random ID kept in the browser; no names, emails or IP addresses are stored.
 - **Staff invites** — a super admin invites someone by email and picks their role; the database
   sends the invite through the Brevo API. The Brevo key is stored in Supabase Vault as
   `brevo_api_key` and never appears in this repository.
