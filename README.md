@@ -1,159 +1,39 @@
 # SnapPro
 
-**On-demand photographer booking — a photographer at your door in minutes.**
+Book a photographer near you. Live at **[snappro.in](https://snappro.in)**.
 
-**Live at [snappro.in](https://snappro.in)**
+Customers post a shoot (when, what, where, budget). Photographers in that city who shoot that
+kind of work see it and send their own quote. The customer compares quotes, portfolios and
+reviews, books one, and they chat in the app. Customers pay the photographer directly after the
+shoot.
 
-Blinkit and Swiggy Instamart made 10-minute grocery delivery normal. SnapPro applies the same
-model to photography: you post a shoot, every matching photographer nearby gets pinged, they
-accept with their own price and ETA, and you pick one. Instead of DMing five photographers on
-Instagram and waiting a day for replies, you get competing offers in under a minute.
+## What's in this repository
 
-> **Status:** working front-end prototype. Single self-contained HTML file, no build step,
-> no server, no dependencies. All state lives in `localStorage`.
+| Path | What it is |
+| --- | --- |
+| `index.html` | The app for customers and photographers (single file, no build step) |
+| `admin.html` | Staff console at snappro.in/admin.html (super admin, admin, manager) |
+| `supabase/snappro.sql` | Complete database set-up: tables, security rules, triggers, storage, invite emails. Safe to run again. |
+| `.github/workflows/deploy.yml` | Uploads the site to Hostinger on every push to `main` |
 
----
+## How it works
 
-## Try it
+- **Accounts** — email and password, confirmed with a 6-digit code (Supabase Auth, emails sent
+  through Brevo from noreply@snappro.in).
+- **Data** — everything lives in Supabase. Row-level security means people only see their own
+  requests, quotes, bookings and messages; open requests are visible to photographers until they
+  close. Prices, ratings and booking status are enforced in the database, not the browser.
+- **Location** — city (with suggestions as you type), pincode and state. The pincode is checked
+  against India Post and fills in the state automatically.
+- **Ratings** — only from reviews of completed bookings. New photographers show as "New".
+- **Portfolio photos** — uploaded to the Supabase Storage bucket `portfolio`, resized in the
+  browser first.
+- **Staff invites** — a super admin invites someone by email and picks their role; the database
+  sends the invite through the Brevo API. The Brevo key is stored in Supabase Vault as
+  `brevo_api_key` and never appears in this repository.
 
-Visit **[snappro.in](https://snappro.in)** or open `index.html` in any modern browser.
+## Deploying
 
-Or serve it locally:
-
-```bash
-python3 -m http.server 8000
-# then visit http://localhost:8000
-```
-
----
-
-## Hosting & Deployment
-
-The live site at **[snappro.in](https://snappro.in)** is hosted on **Hostinger shared hosting** (hPanel).
-
-Deployments are automated via GitHub Actions ([`.github/workflows/deploy.yml`](.github/workflows/deploy.yml)) using [SamKirkland/FTP-Deploy-Action](https://github.com/SamKirkland/FTP-Deploy-Action). Every push to `main` automatically syncs `index.html` to Hostinger's `public_html/` web root.
-
----
-
-## The core loop
-
-1. **Post a request** — pick urgency (right now / 1h / 3h / later today / tomorrow / custom date),
-   category, duration, area, budget and deliverables.
-2. **Broadcast** — the request goes out to every photographer whose specialities match, in that area.
-3. **Offers arrive live** — photographers accept over the next few seconds, each with their own
-   price, ETA and a short pitch. You watch them land on a radar view.
-4. **Compare and book** — sort by best match / cheapest / fastest / top rated, open portfolios and
-   reviews, then pay.
-5. **Track and chat** — the photographer moves through confirmed → on the way → arrived → shooting
-   → delivered, with a live map and in-app messaging.
-6. **Rate** — reviews feed back into the photographer's public rating.
-
-Pricing uses surge multipliers by urgency tier (1.6× for *right now*, 0.9× for a scheduled date),
-adjusted for the photographer's own rate, rating and distance.
-
----
-
-## Accounts
-
-The app opens on a welcome screen asking **how you'll use it**:
-
-| Account type | What you get |
-|---|---|
-| **Customer** | Post requests, browse portfolios, compare offers, pay, chat, track, rate |
-| **Photographer** | Online/offline toggle, job alerts with countdown, custom quoting, job pipeline, earnings, editable portfolio |
-| **Admin** | GMV, take rate, fill rate, offers per request, demand by category, supply coverage map |
-
-Both signup paths run through phone + OTP. Signing up as a photographer creates a **real record in
-the marketplace** — your new profile is discoverable in Explore, gets pinged by matching requests,
-quotes its own prices and can be booked by a customer account on the same device.
-
-Admin sits behind a separate console login at the bottom of the welcome screen.
-
----
-
-## Features
-
-**Customer**
-- Urgency-tiered request builder with live surge pricing
-- 12 shoot categories, deliverable selection, budget slider
-- Live matching radar + map of who's being pinged
-- Offer comparison with four sort modes
-- Portfolio, reviews with rating histogram, packages, gear
-- Escrow-style checkout — platform fee, GST, travel, four payment methods
-- Wallet with balance guard
-- 5-stage arrival tracker with live map
-- In-app chat with quick replies
-- Star ratings that move the photographer's real rating
-
-**Photographer**
-- Online/offline availability toggle
-- Incoming job alerts with a response countdown
-- Quote builder — set your own price and ETA, see your 85% payout
-- Pass on jobs you don't want
-- Job pipeline with status advancement
-- Earnings dashboard with a 7-day chart and payout history
-- Editable portfolio and profile
-
-**Admin**
-- GMV, platform revenue, fill rate, offers per request
-- Supply health and coverage map
-- Demand by category
-- All requests and bookings
-
----
-
-## How it's built
-
-One file. No framework, no bundler, no dependencies, no network calls.
-
-- **Rendering** — plain functions returning HTML strings, with a small router over
-  `role → tab` plus a navigation stack for pushed screens
-- **State** — a single `S` object serialised to `localStorage` under `snappro.v1`
-  (automatically migrates data from the legacy `snapnow.v2` key)
-- **Imagery** — portfolio "photos" and avatars are deterministic CSS gradients seeded from an FNV-1a
-  hash of the photographer's ID, so they're stable across renders and work fully offline
-- **Maps** — hand-drawn SVG street grids with positioned pins; no map SDK or API key
-- **Simulation** — rival photographers accept on staggered timers so the matching flow feels alive.
-  Photographers attached to a real account never auto-accept on your behalf.
-
----
-
-## Demo shortcuts
-
-Things that are deliberately faked, and would need a real backend:
-
-- **Auth is not real.** The OTP is generated client-side and everything lives in `localStorage`,
-  so anyone can "log in" as anyone. This is the first thing to replace.
-- **Competing photographers are simulated** on timers rather than being real users.
-- **Payments are mocked** — no gateway, no actual escrow.
-- **"Simulate next step"** on a booking fast-forwards the photographer through the arrival journey
-  so you can see the whole flow in seconds.
-- ID verification and portfolio review are auto-approved at signup.
-
----
-
-## What a production build would need
-
-- Real auth (phone OTP via an SMS provider, JWT sessions)
-- Backend + database — Postgres for accounts, requests, offers, bookings, chats
-- Real push notifications (FCM/APNs) for the broadcast — this is the heart of the product
-- WebSockets for live offers and chat
-- Payment gateway with genuine escrow and split payouts
-- Real maps and geospatial matching (PostGIS radius queries)
-- Photo storage and delivery (S3 + CDN), gallery links
-- KYC for photographer onboarding
-- Trust and safety — disputes, no-show handling, refunds
-
----
-
-## Testing
-
-The prototype was verified with JSDOM by driving the real DOM event handlers: full booking loop on
-both sides, both signup paths, login/logout and session persistence, every tab in every role,
-request expiry and rebroadcast, cancellation, wallet guards and input escaping.
-
----
-
-## Licence
-
-MIT — see [LICENSE](LICENSE).
+Push to `main`. The GitHub Action uploads `index.html` and `admin.html` to Hostinger. The
+`supabase/` folder is not uploaded; run `supabase/snappro.sql` in the Supabase SQL Editor when it
+changes.

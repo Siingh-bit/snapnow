@@ -74,6 +74,11 @@ td{padding:11px 8px;border-bottom:1px solid var(--border-soft);vertical-align:mi
 .otp i.on{border-color:var(--accent)}
 .err{color:var(--red);font-size:12.5px;margin-top:10px}
 .ok{color:var(--green);font-size:12.5px;margin-top:10px}
+.warn{background:rgba(255,200,87,.1);border:1px solid rgba(255,200,87,.35);color:#ffd88a;border-radius:12px;padding:12px 14px;font-size:13px;line-height:1.5}
+.chip.amber{background:rgba(255,200,87,.12);border-color:rgba(255,200,87,.35);color:#ffd88a}
+.tblwrap{overflow-x:auto}
+.sw{display:inline-flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:var(--muted);cursor:pointer}
+.sw input{accent-color:var(--green);width:16px;height:16px}
 .empty{text-align:center;padding:40px 20px;color:var(--muted-2)}
 .spin{width:44px;height:44px;margin:0 auto;border-radius:50%;border:3px solid var(--surface-3);
   border-top-color:var(--accent);animation:sp .8s linear infinite}
@@ -119,7 +124,8 @@ const S = {
   email: "", otp: "", busy: false, err: "", note: "",
   me: null,              // staff row
   tab: "overview",
-  stats: null, staff: [], invites: [], bookings: [], requests: [],
+  stats: null, staff: [], invites: [], bookings: [], requests: [], photographers: [],
+  emailReady: null, emailStatus: {},
   inviteEmail: "", inviteRole: "manager"
 };
 
@@ -228,8 +234,13 @@ function go(view, patch){ Object.assign(S, patch||{}, { view, err:"" }); render(
 async function boot(){
   if(!(window.supabase && window.supabase.createClient)){ setTimeout(boot,300); return; }
   sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  /* the invite email links to admin.html#setup=their@email */
+  let invited = "";
+  const m = /[#&]setup=([^&]+)/.exec(location.hash || "");
+  if(m){ try{ invited = decodeURIComponent(m[1]).trim().toLowerCase(); }catch(e){} try{ history.replaceState(null, "", location.pathname); }catch(e){} }
   const { data } = await sb.auth.getSession();
   if(data && data.session) await loadMe();
+  else if(EMAIL_RE.test(invited)){ pwReset(); S.email = invited; S.invited = true; S.view = "setup"; render(); }
   else { S.view="login"; render(); }
 }
 
@@ -337,33 +348,36 @@ async function signOut(){
 /* ============================ data ============================ */
 
 async function loadData(){
-  const r = S.me.role;
-  const q = [];
-  q.push(sb.from('bookings').select('id,customer_id,photographer_id,total_amount,payout_amount,status,created_at').order('created_at',{ascending:false}).limit(100));
-  q.push(sb.from('requests').select('id,category,area,status,budget,created_at').order('created_at',{ascending:false}).limit(100));
-  q.push(sb.from('photographers').select('id,display_name,area,rating,review_count,is_online,is_verified').limit(200));
-  q.push(sb.from('staff').select('id,email,name,role,status,created_at').order('created_at'));
-  if(r === 'super_admin') q.push(sb.from('staff_invites').select('id,email,role,created_at,accepted_at').order('created_at',{ascending:false}));
-
-  const res = await Promise.all(q);
-  const [bk, rq, pg, st, inv] = res;
-  if(bk.error) console.warn('bookings', bk.error.message);
+  const isSuper = S.me.role === 'super_admin';
+  const [bk, rq, pg, st, inv, ready, est] = await Promise.all([
+    sb.from('bookings').select('id,customer_name,photographer_name,category,start_at,city,pincode,price,status,created_at').order('created_at',{ascending:false}).limit(200),
+    sb.from('requests').select('id,customer_name,category,city,pincode,budget,status,start_at,created_at').order('created_at',{ascending:false}).limit(200),
+    sb.from('photographers').select('id,display_name,city,state,rating,review_count,jobs_done,is_online,is_verified,portfolio,created_at').order('created_at',{ascending:false}).limit(500),
+    sb.from('staff').select('id,email,name,role,status,created_at').order('created_at'),
+    isSuper ? sb.from('staff_invites').select('id,email,role,created_at,accepted_at,email_request,email_sent_at').order('created_at',{ascending:false}) : null,
+    isSuper ? sb.rpc('invite_email_ready') : null,
+    isSuper ? sb.rpc('invite_email_status') : null
+  ]);
+  [bk, rq, pg, st, inv].forEach(r => { if(r && r.error) console.warn('Admin load:', r.error.message); });
 
   S.bookings = bk.data || [];
   S.requests = rq.data || [];
   S.photographers = pg.data || [];
   S.staff = st.data || [];
   S.invites = (inv && inv.data) || [];
+  S.emailReady = ready && !ready.error ? ready.data : null;
+  S.emailStatus = {};
+  if(est && !est.error && Array.isArray(est.data)) est.data.forEach(x => S.emailStatus[x.invite_id] = x);
 
-  const paid = S.bookings.filter(b=>b.status!=='cancelled');
+  const live = S.bookings.filter(b => b.status !== 'cancelled');
   S.stats = {
-    gmv: paid.reduce((a,b)=>a+(b.total_amount||0),0),
-    take: paid.reduce((a,b)=>a+((b.total_amount||0)-(b.payout_amount||0)),0),
-    bookings: paid.length,
+    value: live.reduce((a,b) => a + (b.price||0), 0),
+    bookings: live.length,
+    completed: S.bookings.filter(b => b.status === 'completed').length,
     requests: S.requests.length,
     pros: S.photographers.length,
-    online: S.photographers.filter(p=>p.is_online).length,
-    fill: S.requests.length ? Math.round(S.requests.filter(r=>r.status==='matched').length / S.requests.length * 100) : 0
+    online: S.photographers.filter(p => p.is_online).length,
+    fill: S.requests.length ? Math.round(S.requests.filter(r => r.status === 'matched').length / S.requests.length * 100) : 0
   };
   render();
 }
@@ -372,30 +386,52 @@ async function loadData(){
 
 async function sendInvite(){
   const email = S.inviteEmail.trim().toLowerCase();
+  S.err = ""; S.note = "";
   if(!EMAIL_RE.test(email)){ S.err="Enter a valid email address."; render(); return; }
   if(S.staff.some(s=>s.email.toLowerCase()===email)){ S.err="That person is already on the team."; render(); return; }
-  S.busy=true; S.err=""; S.note=""; render();
+  S.busy=true; render();
   const { error } = await sb.from('staff_invites')
     .upsert({ email, role:S.inviteRole, invited_by:S.me.id, accepted_at:null }, { onConflict:'email' });
   S.busy=false;
   if(error){ S.err="Couldn't create the invite: "+error.message; render(); return; }
-  S.lastInvite = { email, role:S.inviteRole };
-  S.note = "Invite created for "+email+" as "+roleLabel(S.inviteRole)+". Send them the message below.";
   S.inviteEmail="";
   await loadData();
+  S.note = S.emailReady === false
+    ? "Invite saved for "+email+", but invite emails aren't switched on yet (see the note above). Use “Copy link” and send it yourself for now."
+    : "Invite email sent to "+email+" as "+roleLabel(S.inviteRole)+". Its delivery status shows under Pending invites.";
+  render();
 }
 
-function inviteMessage(i){
-  return "You've been added to the SnapPro operations team as " + roleLabel(i.role) + ".\n\n" +
-    "1. Go to https://snappro.in/admin.html\n" +
-    "2. Click \"Set up your account\" and use this email: " + i.email + "\n" +
-    "3. Create a password, then enter the 6-digit code we email you.\n\n" +
-    "Already have a SnapPro account with this email? Use \"Forgot password?\" instead.";
-}
-async function copyInvite(){
-  try{ await navigator.clipboard.writeText(inviteMessage(S.lastInvite)); S.note="Invite message copied."; }
-  catch(e){ S.note="Select the text and copy it manually."; }
+const setupLink = email => "https://snappro.in/admin.html#setup=" + encodeURIComponent(email);
+async function copyLink(email){
+  S.err = ""; S.note = "";
+  try{ await navigator.clipboard.writeText(setupLink(email)); S.note = "Set-up link for "+email+" copied."; }
+  catch(e){ S.note = "Copy this link: " + setupLink(email); }
   render();
+}
+async function resendInvite(id, email){
+  S.err = ""; S.note = "";
+  const { data, error } = await sb.rpc('resend_staff_invite', { p_id: id });
+  if(error){ S.err = "Couldn't resend: " + error.message; render(); return; }
+  S.note = data ? "Invite email sent again to "+email+"." : "Couldn't send — invite emails aren't switched on yet.";
+  await loadData();
+}
+function emailStatusHtml(i){
+  if(!i.email_request) return `<span class="chip amber" title="No Brevo key saved when this invite was created">Not sent</span>`;
+  const x = S.emailStatus[i.id];
+  if(!x || x.pending) return `<span class="chip">Sending…</span>`;
+  if(x.status_code >= 200 && x.status_code < 300) return `<span class="chip green">Sent ✓</span>`;
+  let why = x.detail || ("Error " + (x.status_code || ""));
+  try{ const j = JSON.parse(x.detail); if(j && j.message) why = j.message; }catch(e){}
+  return `<span class="chip red">Failed</span><div class="xs muted2 mt8" style="max-width:260px">${esc(why)}</div>`;
+}
+
+async function setVerified(id, on){
+  S.err = ""; S.note = "";
+  const { error } = await sb.from('photographers').update({ is_verified: on }).eq('id', id);
+  if(error){ S.err = "Couldn't update: " + error.message; render(); return; }
+  const p = S.photographers.find(x => x.id === id); if(p) p.is_verified = on;
+  S.note = on ? "Marked as verified." : "Verification removed."; render();
 }
 
 async function changeRole(id, role){
@@ -404,7 +440,7 @@ async function changeRole(id, role){
   }
   const { error } = await sb.from('staff').update({ role }).eq('id', id);
   if(error){ S.err = "Couldn't change role: "+error.message; render(); return; }
-  S.note = "Role updated."; await loadData();
+  S.err = ""; S.note = "Role updated."; await loadData();
 }
 
 async function setStatus(id, status){
@@ -462,7 +498,7 @@ function vSetup(){
   return `<div class="center-card">${brand}
     <div class="card">
       <div class="h1">Set up your account</div>
-      <div class="sm muted mt8">Use the email you were invited with.</div>
+      <div class="sm muted mt8">${S.invited ? "You've been invited to the SnapPro team. Create a password to continue." : "Use the email you were invited with."}</div>
       <div class="field"><label>Email</label>
         <input class="input" id="em2" type="email" inputmode="email" autocapitalize="off" autocomplete="email" placeholder="you@example.com" value="${esc(S.email)}"
           oninput="S.email=this.value;S.err='';"></div>
@@ -576,59 +612,65 @@ function vConsole(){
 function vOverview(){
   const s = S.stats;
   if(!s) return `<div class="empty">Loading…</div>`;
-  const canSeeMoney = S.me.role !== 'manager';
+  const money = S.me.role !== 'manager';
   return `<div class="grid">
-    ${canSeeMoney?`
-      <div class="stat"><div class="v">${inr(s.gmv)}</div><div class="l">GMV</div></div>
-      <div class="stat"><div class="v">${inr(s.take)}</div><div class="l">Platform revenue</div></div>`:''}
+    ${money ? `<div class="stat"><div class="v">${inr(s.value)}</div><div class="l">Value of bookings</div></div>` : ''}
     <div class="stat"><div class="v">${s.bookings}</div><div class="l">Bookings</div></div>
+    <div class="stat"><div class="v">${s.completed}</div><div class="l">Completed shoots</div></div>
     <div class="stat"><div class="v">${s.requests}</div><div class="l">Requests</div></div>
-    <div class="stat"><div class="v">${s.fill}%</div><div class="l">Fill rate</div></div>
-    <div class="stat"><div class="v">${s.online}/${s.pros}</div><div class="l">Pros online</div></div>
+    <div class="stat"><div class="v">${s.fill}%</div><div class="l">Requests booked</div></div>
+    <div class="stat"><div class="v">${s.online}/${s.pros}</div><div class="l">Photographers available</div></div>
   </div>
-  ${!canSeeMoney?`<div class="xs muted2 mt12">Revenue figures are hidden for the Manager role.</div>`:''}`;
+  <div class="xs muted2 mt12">Customers pay photographers directly; SnapPro doesn't process payments.${money ? '' : ' Booking values are hidden for the Manager role.'}</div>`;
 }
+
+const when = d => d ? new Date(d).toLocaleString("en-IN",{day:"numeric",month:"short",hour:"numeric",minute:"2-digit"}) : "—";
+const statusChip = st => `<span class="chip ${st==='completed'||st==='matched'?'green':st==='cancelled'?'red':''}">${esc(st||'—')}</span>`;
 
 function vBookings(){
   if(!S.bookings.length) return `<div class="card"><div class="empty">No bookings yet.</div></div>`;
   const money = S.me.role !== 'manager';
-  return `<div class="card"><table>
-    <thead><tr><th>Booking</th><th>Status</th><th>Created</th>${money?'<th>Total</th><th>Take</th>':''}</tr></thead>
+  return `<div class="card tblwrap"><table>
+    <thead><tr><th>Shoot time</th><th>Customer</th><th>Photographer</th><th>Type</th><th>City</th><th>Status</th>${money?'<th>Price</th>':''}</tr></thead>
     <tbody>${S.bookings.map(b=>`<tr>
-      <td style="font-family:monospace">${esc(String(b.id).slice(-8).toUpperCase())}</td>
-      <td><span class="chip">${esc(b.status||'—')}</span></td>
-      <td class="muted">${fmt(b.created_at)}</td>
-      ${money?`<td>${inr(b.total_amount)}</td><td class="chip green" style="display:inline-block;margin-top:6px">${inr((b.total_amount||0)-(b.payout_amount||0))}</td>`:''}
+      <td>${when(b.start_at)}</td><td>${esc(b.customer_name||'—')}</td><td>${esc(b.photographer_name||'—')}</td>
+      <td class="muted">${esc(b.category||'—')}</td><td class="muted">${esc(b.city||'—')} ${esc(b.pincode||'')}</td>
+      <td>${statusChip(b.status)}</td>${money?`<td>${inr(b.price)}</td>`:''}
     </tr>`).join('')}</tbody></table></div>`;
 }
 
 function vRequests(){
   if(!S.requests.length) return `<div class="card"><div class="empty">No requests yet.</div></div>`;
-  return `<div class="card"><table>
-    <thead><tr><th>Category</th><th>Area</th><th>Budget</th><th>Status</th><th>Created</th></tr></thead>
+  return `<div class="card tblwrap"><table>
+    <thead><tr><th>Posted</th><th>Customer</th><th>Type</th><th>City</th><th>Shoot time</th><th>Budget</th><th>Status</th></tr></thead>
     <tbody>${S.requests.map(r=>`<tr>
-      <td>${esc(r.category||'—')}</td><td class="muted">${esc(r.area||'—')}</td>
-      <td>${inr(r.budget)}</td><td><span class="chip">${esc(r.status||'—')}</span></td>
-      <td class="muted">${fmt(r.created_at)}</td>
+      <td class="muted">${when(r.created_at)}</td><td>${esc(r.customer_name||'—')}</td><td>${esc(r.category||'—')}</td>
+      <td class="muted">${esc(r.city||'—')} ${esc(r.pincode||'')}</td><td>${when(r.start_at)}</td>
+      <td>${inr(r.budget)}</td><td>${statusChip(r.status)}</td>
     </tr>`).join('')}</tbody></table></div>`;
 }
 
 function vPros(){
-  if(!S.photographers || !S.photographers.length) return `<div class="card"><div class="empty">No photographers yet.</div></div>`;
-  return `<div class="card"><table>
-    <thead><tr><th>Name</th><th>Area</th><th>Rating</th><th>Jobs</th><th>Status</th></tr></thead>
+  if(!S.photographers.length) return `<div class="card"><div class="empty">No photographers yet.</div></div>`;
+  const canVerify = S.me.role !== 'manager';
+  return `<div class="card tblwrap"><table>
+    <thead><tr><th>Name</th><th>City</th><th>Rating</th><th>Shoots</th><th>Photos</th><th>Status</th><th>Verified</th></tr></thead>
     <tbody>${S.photographers.map(p=>`<tr>
-      <td style="font-weight:600">${esc(p.display_name||'—')}</td>
-      <td class="muted">${esc(p.area||'—')}</td>
-      <td>${p.rating||'—'}★</td><td>${p.review_count||0}</td>
-      <td><span class="chip ${p.is_online?'green':''}">${p.is_online?'Online':'Offline'}</span>
-          ${p.is_verified?'<span class="chip admin">Verified</span>':''}</td>
-    </tr>`).join('')}</tbody></table></div>`;
+      <td style="font-weight:600">${esc(p.display_name||'—')}<div class="xs muted2">joined ${fmt(p.created_at)}</div></td>
+      <td class="muted">${esc(p.city||'—')}${p.state?', '+esc(p.state):''}</td>
+      <td>${p.review_count ? Number(p.rating).toFixed(1)+'★ <span class="muted2">('+p.review_count+')</span>' : '<span class="muted2">No reviews</span>'}</td>
+      <td>${p.jobs_done||0}</td><td>${(p.portfolio||[]).length}</td>
+      <td><span class="chip ${p.is_online?'green':''}">${p.is_online?'Available':'Away'}</span></td>
+      <td>${canVerify ? `<label class="sw"><input type="checkbox" ${p.is_verified?'checked':''} onchange="setVerified('${p.id}',this.checked)">${p.is_verified?'Verified':'No'}</label>`
+                      : (p.is_verified?'<span class="chip admin">Verified</span>':'<span class="muted2">No</span>')}</td>
+    </tr>`).join('')}</tbody></table></div>
+  ${canVerify ? `<div class="xs muted2 mt12">Only mark someone verified after you've checked their identity and work. Customers see a verified badge.</div>` : ''}`;
 }
 
 function vTeam(){
   const pending = S.invites.filter(i=>!i.accepted_at);
   return `
+  ${S.emailReady === false ? `<div class="warn mb16">Invite emails aren't switched on yet. In Supabase open <b>Vault</b> and add a secret named <b>brevo_api_key</b> with your Brevo API key. Until then, use “Copy link” below and send it yourself.</div><div style="height:16px"></div>` : ''}
   <div class="card">
     <div class="sec">Invite someone</div>
     <div class="row" style="flex-wrap:wrap;gap:10px">
@@ -640,9 +682,6 @@ function vTeam(){
       <button class="btn primary" ${S.busy?'disabled':''} onclick="sendInvite()">${S.busy?'Sending…':'Send invite'}</button>
     </div>
     <div class="xs muted2 mt12">${ROLES.map(r=>`<b>${r.label}</b> — ${r.desc}`).join(' &nbsp;·&nbsp; ')}</div>
-    ${S.lastInvite?`<div class="mt16"><div class="sec">Send this to ${esc(S.lastInvite.email)}</div>
-      <textarea class="input" rows="7" readonly style="font-size:12.5px;line-height:1.5;resize:none">${esc(inviteMessage(S.lastInvite))}</textarea>
-      <button class="btn sm mt8" onclick="copyInvite()">Copy message</button></div>`:''}
   </div>
 
   <div class="card mt16">
@@ -672,13 +711,17 @@ function vTeam(){
 
   ${pending.length?`<div class="card mt16">
     <div class="sec">Pending invites (${pending.length})</div>
-    <table><thead><tr><th>Email</th><th>Role</th><th>Sent</th><th></th></tr></thead>
+    <div class="tblwrap"><table><thead><tr><th>Email</th><th>Role</th><th>Invited</th><th>Email</th><th></th></tr></thead>
     <tbody>${pending.map(i=>`<tr>
       <td>${esc(i.email)}</td><td><span class="chip ${i.role==='super_admin'?'super':i.role}">${roleLabel(i.role)}</span></td>
       <td class="muted">${fmt(i.created_at)}</td>
-      <td style="text-align:right"><button class="btn sm danger" onclick="cancelInvite('${i.id}')">Cancel</button></td>
-    </tr>`).join('')}</tbody></table>
-    <div class="xs muted2 mt12">When they set up their account with this email, their role activates automatically.</div>
+      <td>${emailStatusHtml(i)}</td>
+      <td style="text-align:right;white-space:nowrap">
+        <button class="btn sm" onclick="resendInvite('${i.id}','${esc(i.email)}')">Resend</button>
+        <button class="btn sm" onclick="copyLink('${esc(i.email)}')">Copy link</button>
+        <button class="btn sm danger" onclick="cancelInvite('${i.id}')">Cancel</button></td>
+    </tr>`).join('')}</tbody></table></div>
+    <div class="xs muted2 mt12">The email links to a set-up page with their address filled in. When they create their account with this email, their role activates automatically. Not arrived? Ask them to check spam, then press Resend.</div>
   </div>`:''}`;
 }
 
