@@ -41,6 +41,7 @@ jobs:
             **/.github*/**
             supabase/**
             README.md
+            **/*.md
             LICENSE
             .gitignore
             Dockerfile

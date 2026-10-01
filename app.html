@@ -387,6 +387,11 @@ input[type=datetime-local].input{color-scheme:light}
 
 .tick{width:20px;height:20px;flex:0 0 20px;border-radius:50%;border:1.5px solid var(--border);display:grid;place-items:center}
 .tick.on{background:var(--green);border-color:var(--green)}
+.spinner{width:36px;height:36px;margin:12px auto 0;border-radius:50%;border:3px solid var(--surface-3);border-top-color:var(--text);animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.ok-mark,.bad-mark{width:56px;height:56px;border-radius:50%;display:grid;place-items:center;margin:8px auto 0}
+.ok-mark{background:var(--green)}.bad-mark{background:var(--red)}
+.pay-due{border-left:3px solid var(--accent)}
 
 </style>
 </head>
@@ -821,7 +826,8 @@ var S = {
     requests: [], offers: {}, bookings: [], openRequests: [], myOffers: [],
     pgs: {}, pgList: [], pgListAt: 0, reviews: {}, reviewed: {}, msgs: {}
   },
-  loading: {}
+  loading: {},
+  commission: 20      // % SnapPro keeps; read from the database at start-up
 };
 if(!S.prefs.passed) S.prefs.passed = [];
 
@@ -867,7 +873,7 @@ async function q(promise){
 
 const PG_COLS = "id,display_name,city,state,pincode,bio,categories,years_exp,price_multiplier,rating,review_count,jobs_done,is_online,is_verified,portfolio,created_at,approval_status,review_note";
 const REQ_COLS = "id,customer_id,customer_name,category,urgency,duration_hrs,city,state,pincode,budget,deliverables,notes,status,start_at,expires_at,created_at";
-const BK_COLS = "id,request_id,offer_id,customer_id,photographer_id,customer_name,photographer_name,category,start_at,duration_hrs,city,pincode,address,price,status,created_at,updated_at";
+const BK_COLS = "id,request_id,offer_id,customer_id,photographer_id,customer_name,photographer_name,category,start_at,duration_hrs,city,pincode,address,price,status,created_at,updated_at,commission_pct,commission_amount,photographer_amount,payment_status,paid_at,payout_status,payout_at";
 
 const api = {
   async uid(){ const { data } = await sb.auth.getSession(); return data && data.session ? data.session.user.id : null; },
@@ -956,6 +962,31 @@ const api = {
     return q(sb.from("bookings").select(BK_COLS).eq(col, S.me.id).order("start_at", {ascending:false}).limit(60));
   },
   async setBooking(id, patch){ return q(sb.from("bookings").update(patch).eq("id", id).select(BK_COLS).single()); },
+  async booking(id){ return q(sb.from("bookings").select(BK_COLS).eq("id", id).maybeSingle()); },
+
+  /* ---- payments: everything sensitive happens on the server (Supabase Edge
+     Function "payments"), which talks to Cashfree with the secret key ---- */
+  async pay(action, body){
+    if(!sb.functions) throw new Error("Payments aren't available right now.");
+    const { data, error } = await sb.functions.invoke("payments", { body: Object.assign({ action }, body || {}) });
+    if(error){
+      let msg = "We couldn't reach the payment server. Check your connection and try again.";
+      try{ const j = await error.context.json(); if(j && j.error) msg = j.error; }catch(e){}
+      throw new Error(msg);
+    }
+    return data;
+  },
+  async commission(){
+    try{
+      const row = await q(sb.from("platform_settings").select("value").eq("key", "commission_pct").maybeSingle());
+      const n = Number(row && row.value); if(n >= 0 && n <= 50) S.commission = n;
+    }catch(e){}
+    return S.commission;
+  },
+  async payoutDetails(){ return q(sb.from("photographer_payout").select("upi_id,account_name").eq("id", S.me.id).maybeSingle()); },
+  async savePayoutDetails(upi, name){
+    return q(sb.from("photographer_payout").upsert({ id: S.me.id, upi_id: upi, account_name: name }, { onConflict: "id" }).select("upi_id,account_name").single());
+  },
   async messages(bookingId){
     return q(sb.from("messages").select("id,sender_id,content,created_at").eq("booking_id", bookingId).order("created_at").limit(300));
   },
@@ -1035,7 +1066,7 @@ async function refresh(fromPoll){
     if(isCustomer()){
       const reqs = await api.myRequests();
       const prevOffers = S.d.offers;
-      const ids = reqs.filter(r => r.status === "broadcasting" || r.status === "awaiting").map(r => r.id);
+      const ids = reqs.filter(r => r.status === "broadcasting" || r.status === "awaiting" || r.status === "matched").map(r => r.id);
       const offers = await api.offersFor(ids);
       const grouped = {}; offers.forEach(o => (grouped[o.request_id] = grouped[o.request_id] || []).push(o));
       await api.ensurePgs(offers.map(o => o.photographer_id));
@@ -1105,8 +1136,8 @@ function softRender(){
 }
 
 const BK_FLOW = ["confirmed","enroute","arrived","shooting","completed"];
-const BK_LABEL = { confirmed:"Confirmed", enroute:"On the way", arrived:"Arrived", shooting:"Shoot in progress", completed:"Completed", cancelled:"Cancelled" };
-const BK_CHIP = { confirmed:"green", enroute:"accent", arrived:"blue", shooting:"purple", completed:"green", cancelled:"red" };
+const BK_LABEL = { pending_payment:"Awaiting payment", confirmed:"Confirmed", enroute:"On the way", arrived:"Arrived", shooting:"Shoot in progress", completed:"Completed", cancelled:"Cancelled" };
+const BK_CHIP = { pending_payment:"accent", confirmed:"green", enroute:"accent", arrived:"blue", shooting:"purple", completed:"green", cancelled:"red" };
 function reqState(r){
   if(r.status === "matched") return { label:"Booked", kind:"green" };
   if(r.status === "cancelled") return { label:"Cancelled", kind:"red" };
@@ -1588,7 +1619,10 @@ function enterApp(){
   render(); scrollTop();
   refresh(false).then(() => render());
   if(isCustomer()) api.photographers().then(() => softRender()).catch(() => {});
+  api.commission().then(() => softRender()).catch(() => {});
+  if(isPg() && S.payout === undefined) api.payoutDetails().then(r => { S.payout = r || {}; }).catch(() => {});
   startPolling();
+  if(S.returnOrder && isCustomer()){ const o = S.returnOrder; S.returnOrder = null; push("payResult", { order: o }); }
   if(typeof trackVisit === "function") trackVisit();   // links today's visit to the account
 }
 
@@ -1705,7 +1739,7 @@ async function logout(){
   stopPolling();
   S.me = null; S.pg = null;
   try{ if(sb) await sb.auth.signOut(); }catch(e){}
-  pwReset(); S.stack = []; S.tab = "home"; S.draft = null;
+  pwReset(); S.stack = []; S.tab = "home"; S.draft = null; S.payout = undefined; S.payState = null;
   S.d = { requests: [], offers: {}, bookings: [], openRequests: [], myOffers: [], pgs: {}, pgList: [], pgListAt: 0, reviews: {}, reviewed: {}, msgs: {} };
   S.auth = { step: "login", email: "" };
   render(); scrollTop();
@@ -1752,7 +1786,7 @@ function emptyState(kind, title, body, action){
   return `<div class="empty"><div class="e-ic">${icon(EMPTY_ICON[kind] || kind || "cam", 22, "currentColor", 1.6)}</div><div class="bold">${esc(title)}</div>${body ? `<div class="sm muted mt4">${body}</div>` : ""}${action||""}</div>`;
 }
 const reqIsOpen = r => (r.status === "broadcasting" || r.status === "awaiting") && (toMs(r.expires_at) > Date.now() || (S.d.offers[r.id]||[]).length > 0);
-const activeBk = b => ["confirmed","enroute","arrived","shooting"].includes(b.status);
+const activeBk = b => ["pending_payment","confirmed","enroute","arrived","shooting"].includes(b.status);
 
 /* ============================================================
    CUSTOMER — HOME
@@ -1791,7 +1825,7 @@ function vCustHome(){
           "Post your shoot anyway — photographers who join in your city will see it and can send you a quote.",
           `<button class="btn sm mt12" onclick="startRequest()">Post a shoot</button>`)}
 
-    <div class="note mt20">${icon("wallet",18,"var(--green)")}<div><b>Pay after the shoot.</b> You pay your photographer directly, by cash or UPI. SnapPro doesn't charge you anything.</div></div>
+    <div class="note mt20">${icon("shield",18,"var(--green)")}<div><b>Pay securely when you book.</b> UPI, Google Pay, cards or net banking. Cancel before your photographer sets off for a full refund.</div></div>
   </div>`;
 }
 function requestCard(r){
@@ -2008,9 +2042,9 @@ function vRequest(p){
   const bk = S.d.bookings.find(b => b.request_id === r.id && b.status !== "cancelled");
   return `${topbar(cat.name + " shoot", (r.city||"") + " · " + whenStr(r.start_at))}
   <div class="pad">
-    ${bk ? `<button class="card tap bk-card" onclick="replaceStack('booking',{id:'${bk.id}'})"><div class="between"><div><div class="bold">Booked with ${esc(bk.photographer_name||"")}</div><div class="xs muted2 mt2">${whenStr(bk.start_at)}</div></div>${statusChip(BK_LABEL[bk.status], BK_CHIP[bk.status])}</div></button>` : ""}
+    ${bk ? `<button class="card tap bk-card" onclick="replaceStack('booking',{id:'${bk.id}'})"><div class="between"><div><div class="bold">${bk.status === "pending_payment" ? "Waiting for your payment — " : "Booked with "}${esc(bk.photographer_name||"")}</div><div class="xs muted2 mt2">${whenStr(bk.start_at)}</div></div>${statusChip(BK_LABEL[bk.status], BK_CHIP[bk.status])}</div></button>` : ""}
     ${r.status === "cancelled" ? `<div class="card soft">You cancelled this request.</div>` : ""}
-    ${!bk && r.status !== "cancelled" ? (offers.length ? `
+    ${(!bk || bk.status === "pending_payment") && r.status !== "cancelled" ? (offers.length ? `
       <div class="between"><div><div class="h2">${offers.length} quote${offers.length===1?"":"s"}</div><div class="xs muted2">${open ? `Still open · <span data-until="${esc(r.expires_at)}">${leftStr(r.expires_at)}</span>` : "Pick one to book"}</div></div></div>
       <div class="chips mt12">${[["best","Best match"],["price","Lowest price"],["fast","Soonest"],["rating","Top rated"]].map(([k,l]) => `<button class="chip ${(S.prefs.offerSort||"best")===k?'accent':''}" onclick="S.prefs.offerSort='${k}';savePrefs();render()">${l}</button>`).join("")}</div>
       <div class="stack gap10 mt12">${offers.map((o,i) => offerCard(r, o, soon, i === 0 && (S.prefs.offerSort||"best") === "best")).join("")}</div>`
@@ -2080,7 +2114,12 @@ function vConfirm(p){
   if(!o) return `${topbar("Confirm booking")}${emptyState("😕","This quote isn't available","It may have been withdrawn.")}`;
   const r = S.d.requests.find(x => x.id === o.request_id) || {};
   const pg = S.d.pgs[o.photographer_id] || { id: o.photographer_id, display_name: o.photographer_name };
-  if(S.confirmFor !== o.id){ S.confirmFor = o.id; S.confirmAddr = ""; }
+  if(S.confirmFor !== o.id){
+    S.confirmFor = o.id;
+    const prev = S.d.bookings.find(b => b.request_id === o.request_id && b.status === "pending_payment");
+    S.confirmAddr = prev ? (prev.address || "") : "";
+    S.confirmPhone = (S.me && S.me.phone) || "";
+  }
   return `${topbar("Confirm booking", pg.display_name)}
   <div class="pad">
     <div class="card">
@@ -2096,22 +2135,36 @@ function vConfirm(p){
     <div class="field mt16"><label for="bkAddr">Exact address for the shoot</label>
       <textarea id="bkAddr" class="input" rows="2" maxlength="300" autocomplete="street-address" placeholder="Flat / house, building, street, landmark" oninput="S.confirmAddr=this.value;setHtml('formErr','')">${esc(S.confirmAddr)}</textarea>
       <div class="xs muted2 mt6">Only ${esc(firstName(pg.display_name))} will see this, and only after you book.</div></div>
-    <div class="note">${icon("wallet",18,"var(--green)")}<div><b>Pay ${esc(firstName(pg.display_name))} ${inr(o.price)} after the shoot</b> — directly, by cash or UPI. SnapPro doesn't take a payment or charge you a fee.</div></div>
-    <div class="note mt8">${icon("shield",18,"var(--muted)")}<div>You can cancel for free until ${esc(firstName(pg.display_name))} sets off.</div></div>
-    <button class="btn primary block mt16" ${S.loading.book?"disabled":""} onclick="confirmBooking('${o.id}')">${S.loading.book ? "Booking…" : icon("check",17,"#fff") + " Confirm booking"}</button>
+    <div class="field"><label for="bkPhone">Mobile number</label>
+      <input id="bkPhone" class="input" type="tel" inputmode="numeric" autocomplete="tel-national" maxlength="14" placeholder="10-digit mobile number" value="${esc(S.confirmPhone)}" oninput="S.confirmPhone=this.value;setHtml('formErr','')">
+      <div class="xs muted2 mt6">For payment receipts and for ${esc(firstName(pg.display_name))} to reach you on the day.</div></div>
+    ${payBox(o.price, firstName(pg.display_name))}
+    <button class="btn primary block mt16" ${S.loading.book||S.loading.pay?"disabled":""} onclick="confirmBooking('${o.id}')">${S.loading.book ? "Booking…" : S.loading.pay ? "Opening secure payment…" : "Pay " + inr(o.price)}</button>
     <div id="formErr">${errHtml(S.formErr)}</div>
   </div>`;
 }
 async function confirmBooking(offerId){
   const addr = (S.confirmAddr || "").trim();
+  const phone = normPhone(S.confirmPhone);
   if(addr.length < 8){ S.formErr = "Add the full address so your photographer can find you."; setHtml("formErr", errHtml(S.formErr)); return; }
+  if(!phone){ S.formErr = "Enter a valid 10-digit mobile number."; setHtml("formErr", errHtml(S.formErr)); return; }
+  const o = findOffer(offerId); if(!o) return;
   S.loading.book = true; S.formErr = null; render();
   try{
-    const b = await api.book(offerId, addr);
-    S.loading.book = false; S.d.bookings.unshift(b);
-    const r = S.d.requests.find(x => x.id === b.request_id); if(r) r.status = "matched";
-    toast("Booked!", b.photographer_name + " · " + whenStr(b.start_at), "check");
-    replaceStack("booking", { id: b.id });
+    if(phone !== (S.me.phone || "")) await api.saveProfile({ phone });
+    // one booking per request: re-use an unpaid one for this quote, or release it if they picked another
+    let b = S.d.bookings.find(x => x.request_id === o.request_id && x.status === "pending_payment");
+    if(b && b.offer_id !== offerId){
+      await api.setBooking(b.id, { status: "cancelled" }); b = null;
+    }
+    if(b){ if(b.address !== addr) Object.assign(b, await api.setBooking(b.id, { address: addr })); }
+    else {
+      b = await api.book(offerId, addr);
+      S.d.bookings.unshift(b);
+      const r = S.d.requests.find(x => x.id === b.request_id); if(r) r.status = "matched";
+    }
+    S.loading.book = false;
+    await startPayment(b.id);
   }catch(e){ S.loading.book = false; S.formErr = e.message; render(); }
 }
 
@@ -2128,7 +2181,8 @@ function vBooking(p){
   if(!b){ refresh(false); return `${topbar("Booking")}<div class="pad"><div class="skeleton"></div></div>`; }
   const pg = S.d.pgs[b.photographer_id] || { id: b.photographer_id, display_name: b.photographer_name };
   const rv = S.d.reviewed[b.id];
-  const canCancel = b.status === "confirmed" || b.status === "enroute";
+  const canCancel = b.status === "pending_payment" || b.status === "confirmed" || b.status === "enroute";
+  const unpaid = b.status === "pending_payment";
   return `${topbar("Your booking", whenStr(b.start_at))}
   <div class="pad">
     <div class="card">
@@ -2136,22 +2190,28 @@ function vBooking(p){
         <div class="grow"><div class="bold">${esc(pg.display_name)}</div><div class="xs mt2">${ratingHtml(pg)}</div></div>
         ${statusChip(BK_LABEL[b.status], BK_CHIP[b.status])}</div>
       <div class="row gap8 mt12">
-        ${b.status !== "cancelled" ? `<button class="btn sm grow" onclick="push('chat',{id:'${b.id}'})">${icon("chat",14)} Message</button>` : ""}
+        ${b.status !== "cancelled" && !unpaid ? `<button class="btn sm grow" onclick="push('chat',{id:'${b.id}'})">${icon("chat",14)} Message</button>` : ""}
         <button class="btn sm grow" onclick="push('pg',{id:'${pg.id}'})">View profile</button>
       </div>
     </div>
-    ${b.status === "cancelled" ? `<div class="card soft mt12 red-soft">This booking was cancelled.</div>` : `<div class="card mt12"><div class="sec-title">Status</div>${timelineHtml(b)}</div>`}
+    ${unpaid ? `<div class="card mt12 pay-due">
+        <div class="bold">Waiting for payment</div>
+        <div class="sm muted mt4">${esc(firstName(pg.display_name))} isn't booked until you pay. Your slot isn't held for long.</div>
+        <button class="btn primary block mt12" ${S.loading.pay?"disabled":""} onclick="startPayment('${b.id}')">${S.loading.pay ? "Opening secure payment…" : "Pay " + inr(b.price) + " now"}</button>
+        <div class="xs muted2 mt8">${PAY_METHODS_LINE}</div></div>`
+    : b.status === "cancelled" ? `<div class="card soft mt12 red-soft">This booking was cancelled.${refundLine(b)}</div>` : `<div class="card mt12"><div class="sec-title">Status</div>${timelineHtml(b)}</div>`}
     <div class="card mt12">
       <div class="sec-title">Details</div>
       <div class="kv"><span>Shoot</span><span>${esc(catById(b.category).name)}</span></div>
       <div class="kv"><span>When</span><span>${whenStr(b.start_at)}</span></div>
       <div class="kv"><span>Duration</span><span>${b.duration_hrs} hr${b.duration_hrs>1?'s':''}</span></div>
       <div class="kv"><span>Price</span><span class="bold">${inr(b.price)}</span></div>
-      <div class="kv"><span>Payment</span><span class="right">Pay ${esc(firstName(pg.display_name))} directly after the shoot</span></div>
+      <div class="kv"><span>Payment</span><span class="right">${paymentLine(b, pg)}</span></div>
+      <div class="kv"><span>Booking ref</span><span>${bookingRef(b)}</span></div>
       <div class="kv top"><span>Address</span><span class="right">${S.editAddr === b.id ? "" : esc(b.address||"—")}</span></div>
       ${S.editAddr === b.id ? `<textarea id="addrEdit" class="input mt8" rows="2" maxlength="300">${esc(b.address||"")}</textarea>
         <div class="row gap8 mt8"><button class="btn sm grow" onclick="S.editAddr=null;render()">Cancel</button><button class="btn sm primary grow" onclick="saveAddr('${b.id}')">Save address</button></div>`
-        : b.status === "confirmed" ? `<div class="right mt6"><button class="xs accent bold" onclick="S.editAddr='${b.id}';render()">Edit address</button></div>` : ""}
+        : (b.status === "confirmed" || unpaid) ? `<div class="right mt6"><button class="xs accent bold" onclick="S.editAddr='${b.id}';render()">Edit address</button></div>` : ""}
     </div>
     ${b.status === "completed" && rv === null ? `<button class="btn primary block mt16" onclick="push('rate',{id:'${b.id}'})">${icon("star",16,"#fff")} Rate your shoot</button>` : ""}
     ${rv ? `<div class="card mt12"><div class="sec-title">Your review</div><div class="rating">${"★".repeat(rv.stars)}</div>${rv.body ? `<div class="sm muted mt6">${esc(rv.body)}</div>` : ""}</div>` : ""}
@@ -2164,8 +2224,26 @@ async function saveAddr(id){
   try{ const b = await api.setBooking(id, { address: v }); Object.assign(S.d.bookings.find(x => x.id === id), b); S.editAddr = null; toast("Address updated", "", "check"); render(); }
   catch(e){ toast("Couldn't update address", e.message, "x"); }
 }
+function paymentLine(b, pg){
+  const ps = b.payment_status;
+  if(ps === "paid") return "Paid online" + (b.paid_at ? " · " + dayStr(b.paid_at) : "");
+  if(ps === "unpaid") return b.status === "cancelled" ? "Not paid" : "Waiting for payment";
+  if(ps === "refund_due" || ps === "refund_pending") return "Refund in progress";
+  if(ps === "refunded") return "Refunded";
+  if(ps === "partially_refunded") return "Partly refunded";
+  return "Pay " + esc(firstName(pg.display_name)) + " directly";          // bookings made before online payments
+}
+function refundLine(b){
+  if(b.payment_status === "refund_due" || b.payment_status === "refund_pending") return `<div class="sm mt6">Your refund of <b>${inr(b.price)}</b> is being processed. It goes back to the account you paid from.</div>`;
+  if(b.payment_status === "refunded") return `<div class="sm mt6">${inr(b.price)} has been refunded to the account you paid from.</div>`;
+  return "";
+}
 async function cancelBooking(id){
-  if(!confirm("Cancel this booking?")) return;
+  const bk = S.d.bookings.find(x => x.id === id);
+  const msg = bk && bk.payment_status === "paid"
+    ? "Cancel this booking? You'll get a full refund of " + inr(bk.price) + " to the account you paid from."
+    : "Cancel this booking?";
+  if(!confirm(msg)) return;
   try{ const b = await api.setBooking(id, { status: "cancelled" }); Object.assign(S.d.bookings.find(x => x.id === id), b); toast("Booking cancelled", "", "x"); refresh(false); render(); }
   catch(e){ toast("Couldn't cancel", e.message, "x"); }
 }
@@ -2319,7 +2397,8 @@ function earnings(){
   const done = S.d.bookings.filter(b => b.status === "completed");
   const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0,0,0,0);
   const month = done.filter(b => toMs(b.start_at) >= monthStart.getTime());
-  return { total: done.reduce((s,b) => s + (b.price||0), 0), month: month.reduce((s,b) => s + (b.price||0), 0), jobs: done.length, monthJobs: month.length };
+  const share = b => b.photographer_amount != null ? b.photographer_amount : (b.price || 0);
+  return { total: done.reduce((s,b) => s + share(b), 0), month: month.reduce((s,b) => s + share(b), 0), jobs: done.length, monthJobs: month.length };
 }
 
 function reqCardPg(r, compact){
@@ -2417,7 +2496,7 @@ function vQuote(p){
       <div class="chips">${[15,30,45,60,90].map(m => `<button class="chip lg ${S.quote.eta===m?'accent':''}" onclick="S.quote.eta=${m};render()">${m} min</button>`).join("")}</div></div>` : ""}
     <div class="field"><label for="qNote">Message to the customer <span class="muted2">(optional)</span></label>
       <textarea id="qNote" class="input" rows="3" maxlength="500" placeholder="e.g. I shoot on a full-frame camera and deliver 50+ edited photos within 48 hours." oninput="S.quote.note=this.value">${esc(S.quote.note)}</textarea></div>
-    <div class="note">${icon("wallet",18,"var(--green)")}<div>The customer pays you directly after the shoot. SnapPro doesn't take a commission.</div></div>
+    <div class="note">${icon("wallet",18,"var(--green)")}<div>The customer pays online when they book. SnapPro keeps ${S.commission}% and transfers the rest to you after the shoot.</div></div>
     <button class="btn primary block mt16" ${S.loading.quote?"disabled":""} onclick="sendQuote('${r.id}')">${S.loading.quote ? "Sending…" : icon("send",16,"#fff") + " Send quote"}</button>
     <div id="formErr">${errHtml(S.formErr)}</div>
   </div>`;
@@ -2426,8 +2505,9 @@ function quoteHint(budget){
   const p = S.quote ? S.quote.price : 0;
   if(!p || p < 100) return `<div class="field-err">Enter a price of at least ₹100.</div>`;
   if(p > 1000000) return `<div class="field-err">That's above the ₹10,00,000 limit.</div>`;
-  if(budget && p > budget) return `<div class="xs muted">${inr(p - budget)} above their budget — add a note explaining what's included.</div>`;
-  return `<div class="xs green">Within their budget.</div>`;
+  const yours = `<div class="xs mt4">You'll receive <b>${inr(p - Math.round(p * S.commission / 100))}</b> after SnapPro's ${S.commission}% commission.</div>`;
+  if(budget && p > budget) return `<div class="xs muted">${inr(p - budget)} above their budget — add a note explaining what's included.</div>` + yours;
+  return `<div class="xs green">Within their budget.</div>` + yours;
 }
 async function sendQuote(id){
   const qv = S.quote, pv = el("qPrice") ? Math.round(+el("qPrice").value || 0) : qv.price;
@@ -2488,12 +2568,20 @@ function vJob(p){
     <div class="card mt12">
       <div class="kv"><span>When</span><span>${whenStr(b.start_at)}</span></div>
       <div class="kv"><span>Duration</span><span>${b.duration_hrs} hr${b.duration_hrs>1?'s':''}</span></div>
-      <div class="kv"><span>You'll be paid</span><span class="bold">${inr(b.price)}</span></div>
+      ${b.photographer_amount != null && b.payment_status !== "not_required" ? `
+      <div class="kv"><span>Customer paid</span><span>${inr(b.price)}</span></div>
+      <div class="kv"><span>SnapPro commission (${Number(b.commission_pct)}%)</span><span>− ${inr(b.commission_amount)}</span></div>
+      <div class="kv"><span>You'll be paid</span><span class="bold">${inr(b.photographer_amount)}</span></div>
+      <div class="kv"><span>Payout</span><span class="right">${b.payout_status === "paid" ? "Sent " + (b.payout_at ? dayStr(b.payout_at) : "") : b.payout_status === "due" ? "Being processed" : "After the shoot"}</span></div>`
+      : `<div class="kv"><span>You'll be paid</span><span class="bold">${inr(b.price)}</span></div>`}
       <div class="kv top"><span>Address</span><span class="right">${esc(b.address||"—")}<br><span class="xs muted2">${esc(b.city||"")} ${esc(b.pincode||"")}</span></span></div>
       ${maps && b.status !== "cancelled" && b.status !== "completed" ? `<a class="btn sm block mt8" href="${maps}" target="_blank" rel="noopener">${icon("pin",14)} Open in Maps</a>` : ""}
     </div>
     ${nx ? `<button class="btn primary block mt16" ${S.loading.step?"disabled":""} onclick="jobStep('${b.id}','${nx.to}')">${icon(nx.ic,16,"#fff")} ${nx.label}</button>` : ""}
-    ${b.status === "completed" ? `<div class="note mt16">${icon("check",18,"var(--green)")}<div>Shoot complete. Collect ${inr(b.price)} from ${esc(firstName(b.customer_name))} if you haven't already.</div></div>` : ""}
+    ${b.status === "completed" ? `<div class="note mt16">${icon("check",18,"var(--green)")}<div>${b.payment_status === "not_required"
+        ? "Shoot complete. Collect " + inr(b.price) + " from " + esc(firstName(b.customer_name)) + " if you haven't already."
+        : b.payout_status === "paid" ? "Shoot complete. " + inr(b.photographer_amount) + " has been sent to you."
+        : "Shoot complete. SnapPro will send " + inr(b.photographer_amount) + " to your payout UPI ID."}</div></div>` : ""}
     ${canCancel ? `<button class="btn block danger mt12" onclick="jobStep('${b.id}','cancelled')">Cancel this booking</button>` : ""}
   </div>`;
 }
@@ -2505,7 +2593,7 @@ async function jobStep(id, to){
     const b = await api.setBooking(id, { status: to });
     Object.assign(S.d.bookings.find(x => x.id === id), b);
     S.loading.step = false;
-    toast(BK_LABEL[to], to === "completed" ? "Nice work! " + inr(b.price) + " added to your earnings" : "The customer can see this now", to === "cancelled" ? "x" : "check");
+    toast(BK_LABEL[to], to === "completed" ? "Nice work! " + inr(b.photographer_amount != null ? b.photographer_amount : b.price) + " added to your earnings" : "The customer can see this now", to === "cancelled" ? "x" : "check");
     if(to === "completed") api.loadMe().then(softRender).catch(() => {});
     render();
   }catch(e){ S.loading.step = false; toast("Couldn't update", e.message, "x"); render(); }
@@ -2517,6 +2605,7 @@ function pgProfileExtras(){
   return `<div class="card mt16 list">
     <button class="li" onclick="push('pg',{id:'${pg.id}'})">${icon("user",18,"var(--muted)")}<div class="grow"><div class="sm bold">See your public profile</div><div class="xs muted2">What customers see</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
     <button class="li" onclick="push('portfolio')">${icon("image",18,"var(--muted)")}<div class="grow"><div class="sm bold">Portfolio</div><div class="xs muted2">${(pg.portfolio||[]).length} photo${(pg.portfolio||[]).length===1?"":"s"}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
+    <button class="li" onclick="push('editPayout')">${icon("wallet",18,"var(--muted)")}<div class="grow"><div class="sm bold">Payout details</div><div class="xs muted2">${S.payout && S.payout.upi_id ? esc(S.payout.upi_id) : "Add the UPI ID we pay you on"}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
     <button class="li" onclick="push('editPg')">${icon("edit",18,"var(--muted)")}<div class="grow"><div class="sm bold">Bio, shoot types and rates</div><div class="xs muted2">${(pg.categories||[]).map(c => esc(catById(c).name)).join(", ") || "Not set"}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
   </div>`;
 }
@@ -2563,7 +2652,7 @@ async function saveEditPg(){
 }
 
 /* ---------- waiting for approval ---------- */
-const WAITING_OK = ["portfolio","editPg","editLoc","editName","pg","photo"];
+const WAITING_OK = ["portfolio","editPg","editLoc","editName","pg","photo","editPayout"];
 function vPgReview(){
   const pg = S.pg || {}, photos = (pg.portfolio || []).length, rejected = pg.approval_status === "rejected";
   const cats = (pg.categories || []).map(c => esc(catById(c).name)).join(", ");
@@ -2594,6 +2683,7 @@ function vPgReview(){
       <button class="li" onclick="push('portfolio')">${icon("image",18,"var(--muted)")}<div class="grow"><div class="sm bold">Portfolio</div><div class="xs muted2">${photos} photo${photos===1?"":"s"}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
       <button class="li" onclick="push('editPg')">${icon("edit",18,"var(--muted)")}<div class="grow"><div class="sm bold">Bio, shoot types and rates</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
       <button class="li" onclick="push('editLoc')">${icon("pin",18,"var(--muted)")}<div class="grow"><div class="sm bold">Location</div><div class="xs muted2">${esc([pg.city, pg.state, pg.pincode].filter(Boolean).join(", ") || "Not set")}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
+      <button class="li" onclick="push('editPayout')">${icon("wallet",18,"var(--muted)")}<div class="grow"><div class="sm bold">Payout details</div><div class="xs muted2">${S.payout && S.payout.upi_id ? esc(S.payout.upi_id) : "The UPI ID we pay you on"}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
       <button class="li" onclick="push('pg',{id:'${pg.id}'})">${icon("user",18,"var(--muted)")}<div class="grow"><div class="sm bold">Preview your public profile</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
     </div>
     <div class="legal">Questions about your review? Write to <a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a></div>
@@ -2607,6 +2697,157 @@ async function askForReview(){
   }catch(e){ toast("Couldn't send", e.message, "x"); }
 }
 
+/* ---------- where SnapPro sends the photographer's share ---------- */
+function vEditPayout(){
+  if(S.payout === undefined){ api.payoutDetails().then(r => { S.payout = r || {}; softRender(); }).catch(() => { S.payout = {}; softRender(); }); return `${topbar("Payout details")}<div class="pad"><div class="skeleton"></div></div>`; }
+  const d = S.payout || {};
+  return `${topbar("Payout details")}
+  <div class="pad">
+    <p class="sm muted">After each completed shoot, SnapPro sends your share (the booking amount minus our ${S.commission}% commission) to this UPI ID. Only you and the SnapPro team can see it.</p>
+    <div class="field mt16"><label for="poUpi">UPI ID</label>
+      <input id="poUpi" class="input" autocapitalize="off" spellcheck="false" placeholder="e.g. yourname@okhdfcbank" value="${esc(d.upi_id || "")}"></div>
+    <div class="field"><label for="poName">Name on the account</label>
+      <input id="poName" class="input" autocapitalize="words" placeholder="As it appears at your bank" value="${esc(d.account_name || "")}"></div>
+    <button class="btn primary block" onclick="savePayout()">Save</button>
+    <div id="formErr"></div>
+    <p class="xs muted2 mt12">Never share your UPI PIN with anyone, including SnapPro. We only need the ID to send you money.</p>
+  </div>`;
+}
+async function savePayout(){
+  const upi = (el("poUpi").value || "").trim(), name = (el("poName").value || "").trim();
+  if(!/^[A-Za-z0-9._-]{2,128}@[A-Za-z][A-Za-z0-9.-]{1,64}$/.test(upi)){ setHtml("formErr", errHtml("That doesn't look like a UPI ID (it should be like name@bank).")); return; }
+  if(name.length < 2){ setHtml("formErr", errHtml("Add the name on the account.")); return; }
+  try{ S.payout = await api.savePayoutDetails(upi, name); toast("Payout details saved", "", "check"); pop(); }
+  catch(e){ setHtml("formErr", errHtml(e.message)); }
+}
+
+/* ============================================================
+   PAYMENTS (Cashfree hosted checkout)
+   The browser never decides whether a booking is paid. It asks our
+   server ("payments" Edge Function) to create a Cashfree order, opens
+   Cashfree's checkout page, and when the customer comes back it asks the
+   server again, which checks with Cashfree before confirming anything.
+   ============================================================ */
+const CASHFREE_SDK = "https://sdk.cashfree.com/js/v3/cashfree.js";
+let cfLoading = null;
+function loadCashfree(){
+  if(window.Cashfree) return Promise.resolve(window.Cashfree);
+  if(cfLoading) return cfLoading;
+  cfLoading = new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = CASHFREE_SDK; s.async = true;
+    const t = setTimeout(() => { cfLoading = null; reject(new Error("The payment page didn't load. Check your connection and try again.")); }, 15000);
+    s.onload = () => { clearTimeout(t); window.Cashfree ? resolve(window.Cashfree) : (cfLoading = null, reject(new Error("The payment page didn't load."))); };
+    s.onerror = () => { clearTimeout(t); cfLoading = null; reject(new Error("The payment page didn't load. Check your connection and try again.")); };
+    document.head.appendChild(s);
+  });
+  return cfLoading;
+}
+const normPhone = v => { let d = String(v||"").replace(/\D/g, ""); if(d.length === 12 && d.startsWith("91")) d = d.slice(2); if(d.length === 11 && d.startsWith("0")) d = d.slice(1); return /^[6-9]\d{9}$/.test(d) ? d : null; };
+const bookingRef = b => "SP-" + String(b.id || b).slice(0, 8).toUpperCase();
+const PAY_METHODS_LINE = "UPI (Google Pay, PhonePe, Paytm), debit or credit card, or net banking";
+
+/* Hand over to Cashfree. Re-uses an open checkout if there is one. */
+async function startPayment(bookingId){
+  if(S.loading.pay) return;
+  S.loading.pay = true; S.formErr = null; render();
+  try{
+    const res = await api.pay("create", { booking_id: bookingId });
+    if(res.status === "paid"){                       // it was already paid (e.g. in another tab)
+      S.loading.pay = false; await refresh(false);
+      replaceStack("payResult", { order: res.order_id, booking: bookingId }); return;
+    }
+    S.prefs.pendingPay = { order: res.order_id, booking: bookingId, at: Date.now() }; savePrefs();
+    const Cashfree = await loadCashfree();
+    const cashfree = Cashfree({ mode: res.mode === "production" ? "production" : "sandbox" });
+    // full-page redirect works best with UPI apps on phones; Cashfree sends the
+    // customer back to app.html?payment=<order id> when they're done
+    cashfree.checkout({ paymentSessionId: res.payment_session_id, redirectTarget: "_self" });
+  }catch(e){
+    S.loading.pay = false; S.formErr = e.message; render();
+    toast("Payment didn't start", e.message, "x");
+  }
+}
+
+/* ---------- result screen after returning from Cashfree ---------- */
+let payPoll = null;
+function stopPayPoll(){ if(payPoll){ clearTimeout(payPoll); payPoll = null; } }
+async function checkPayment(order, tries){
+  stopPayPoll();
+  const st = S.payState || (S.payState = {});
+  if(st.order !== order){ S.payState = { order, state: "checking" }; }
+  try{
+    const r = await api.pay("status", { order_id: order });
+    S.payState = Object.assign({ order, state: r.status, booking: r.booking_id, amount: r.amount, bookingStatus: r.booking_status }, {});
+    if(r.status === "paid"){
+      if(S.prefs.pendingPay && S.prefs.pendingPay.order === order){ delete S.prefs.pendingPay; savePrefs(); }
+      await refresh(false);
+    } else if((r.status === "active" || r.status === "created") && (tries || 0) < 8){
+      payPoll = setTimeout(() => checkPayment(order, (tries || 0) + 1), 3000);   // Cashfree may still be finishing
+    }
+  }catch(e){
+    S.payState = { order, state: "error", message: e.message };
+  }
+  const top = S.stack[S.stack.length - 1];
+  if(top && top.v === "payResult") softRender();
+}
+function vPayResult(p){
+  const st = S.payState && S.payState.order === p.order ? S.payState : null;
+  if(!st){ checkPayment(p.order, 0); }
+  const s = st ? st.state : "checking";
+  const b = S.d.bookings.find(x => x.id === ((st && st.booking) || p.booking)) || null;
+  const pgName = b ? (b.photographer_name || "your photographer") : "your photographer";
+  const amount = st && st.amount ? inr(st.amount) : (b ? inr(b.price) : "");
+  const retry = b ? `<button class="btn primary block mt16" ${S.loading.pay?"disabled":""} onclick="startPayment('${b.id}')">${S.loading.pay ? "Opening payment…" : "Try again — pay " + amount}</button>` : "";
+  let body;
+  if(s === "checking" || ((s === "active" || s === "created") && payPoll)){
+    body = `<div class="center pad"><div class="spinner"></div><h1 class="display-sm mt16">Confirming your payment…</h1>
+      <p class="sm muted mt8">We're checking with the bank. This usually takes a few seconds — please don't pay again.</p></div>`;
+  } else if(s === "paid"){
+    body = `<div class="center"><div class="ok-mark">${icon("check",28,"#fff",3)}</div>
+      <h1 class="display-sm mt16">Payment received. You're booked!</h1>
+      <p class="sm muted mt8">${esc(firstName(pgName))} is confirmed for your shoot.</p></div>
+      ${b ? `<div class="card mt20">
+        <div class="kv"><span>Booking</span><span class="bold">${bookingRef(b)}</span></div>
+        <div class="kv"><span>Photographer</span><span>${esc(pgName)}</span></div>
+        <div class="kv"><span>Shoot</span><span>${esc(catById(b.category).name)}, ${whenStr(b.start_at)}</span></div>
+        <div class="kv"><span>Paid</span><span class="bold">${inr(b.price)}</span></div>
+        <div class="kv"><span>Payment ref</span><span class="xs">${esc(p.order)}</span></div></div>
+        <button class="btn primary block mt16" onclick="replaceStack('booking',{id:'${b.id}'})">View booking</button>` : ""}
+      <p class="xs muted2 mt12 center">A record of this payment is on your booking. Questions? ${SUPPORT_EMAIL}</p>`;
+  } else if(s === "failed" || s === "user_dropped" || s === "cancelled"){
+    body = `<div class="center"><div class="bad-mark">${icon("x",26,"#fff",3)}</div>
+      <h1 class="display-sm mt16">${s === "failed" ? "Payment didn't go through" : "Payment not completed"}</h1>
+      <p class="sm muted mt8">${s === "failed" ? "Your bank declined it or something went wrong. No money was taken" : "You left before finishing the payment. No money was taken"} — if anything was deducted, your bank returns it automatically.</p></div>
+      ${retry}
+      <p class="xs muted2 mt12 center">You can try ${PAY_METHODS_LINE}.</p>
+      ${b ? `<button class="btn block mt8" onclick="replaceStack('booking',{id:'${b.id}'})">Back to booking</button>` : ""}`;
+  } else if(s === "expired" || s === "terminated"){
+    body = `<div class="center"><h1 class="display-sm">That payment page has expired</h1>
+      <p class="sm muted mt8">Your booking is still waiting for payment. Start a new payment to confirm it.</p></div>${retry}`;
+  } else if(s === "error"){
+    body = `<div class="center"><h1 class="display-sm">We couldn't check your payment</h1>
+      <p class="sm muted mt8">${esc(st.message || "")}</p></div>
+      <button class="btn primary block mt16" onclick="checkPayment('${esc(p.order)}',0)">Check again</button>
+      <p class="xs muted2 mt12 center">If money left your account, it's safe — we'll match it to your booking. Don't pay again; write to ${SUPPORT_EMAIL} if it doesn't show in a few minutes.</p>`;
+  } else {                                           // still pending after waiting
+    body = `<div class="center"><h1 class="display-sm">Waiting for your payment</h1>
+      <p class="sm muted mt8">We haven't received a payment yet. If you paid, it can take a minute to arrive — check again before paying a second time.</p></div>
+      <button class="btn primary block mt16" onclick="checkPayment('${esc(p.order)}',0)">Check again</button>
+      ${b ? `<button class="btn block mt8" onclick="startPayment('${b.id}')">Pay now</button>` : ""}`;
+  }
+  return `${topbar("Payment")}<div class="pad">${body}<div id="formErr">${errHtml(S.formErr)}</div></div>`;
+}
+
+/* customers pay through the confirm screen; this is the summary block */
+function payBox(price, pgFirst){
+  return `<div class="card soft mt16">
+    <div class="between"><span class="bold">Total to pay now</span><span class="h2">${inr(price)}</span></div>
+    <div class="xs muted mt6">Pay securely with ${PAY_METHODS_LINE}. Payments are processed by Cashfree — SnapPro never sees your card details or UPI PIN.</div>
+  </div>
+  <div class="note mt12">${icon("shield",18,"var(--green)")}<div>Your booking is confirmed as soon as the payment goes through. Cancel before ${esc(pgFirst)} sets off and you get a full refund.</div></div>`;
+}
+
 /* ============================================================
    NAVIGATION
    ============================================================ */
@@ -2614,7 +2855,8 @@ const AUTH_VIEWS = { welcome: vWelcome, signup: vSignup, otp: vOtp, login: vLogi
                      setupRole: vSetupRole, setupCust: vSetupCust, setupPg: vSetupPg };
 const STACK_VIEWS = { pg: vPgProfile, photo: vPhoto, newRequest: vNewRequest, request: vRequest, confirm: vConfirm,
                       booking: vBooking, rate: vRate, chat: vChat, editName: vEditName, editLoc: vEditLoc,
-                      quote: vQuote, job: vJob, portfolio: vPortfolio, editPg: vEditPg };
+                      quote: vQuote, job: vJob, portfolio: vPortfolio, editPg: vEditPg,
+                      payResult: vPayResult, editPayout: vEditPayout };
 const CUST_TABS = [ ["home","Home","home",vCustHome], ["explore","Explore","search",vExplore], ["activity","Shoots","calendar",vActivity], ["profile","Profile","user",vProfile] ];
 const PG_TABS   = [ ["home","Home","home",vPgHome], ["requests","Requests","bolt",vPgRequests], ["jobs","Shoots","calendar",vJobs], ["profile","Profile","user",vProfile] ];
 const tabsFor = () => isPg() ? PG_TABS : CUST_TABS;
@@ -2740,7 +2982,10 @@ async function boot(){
   try{ const { data } = await sb.auth.getSession(); session = data && data.session; }catch(e){}
   /* links from snappro.in: app.html#signup, #join (photographers), #login */
   const want = (location.hash || "").replace("#", "");
-  if(want){ try{ history.replaceState(null, "", location.pathname); }catch(e){} }
+  /* back from Cashfree: app.html?payment=<order id> */
+  const back = new URLSearchParams(location.search).get("payment");
+  if(back && /^[A-Za-z0-9_-]{3,45}$/.test(back)) S.returnOrder = back;
+  if(want || back){ try{ history.replaceState(null, "", location.pathname); }catch(e){} }
   if(session){ await afterAuth(false); }
   else if(want === "signup"){ pwReset(); S.auth = { step: "signup", type: "customer", email: "" }; render(); }
   else if(want === "join"){ pwReset(); S.auth = { step: "signup", type: "photographer", email: "" }; render(); }

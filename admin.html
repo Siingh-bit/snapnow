@@ -253,6 +253,7 @@ function openTab(k){
   if(k === 'overview') loadInsights(!!S.insights);
   if(k === 'users') loadUsers(!!S.users);
   if(k === 'pros'){ loadData(); if(S.me.role !== 'manager') loadUsers(true); }
+  if(k === 'payments') loadPayments(!!S.pay);
 }
 function go(view, patch){ Object.assign(S, patch||{}, { view, err:"" }); render(); }
 
@@ -377,7 +378,7 @@ async function signOut(){
 async function loadData(){
   const isSuper = S.me.role === 'super_admin';
   const [bk, rq, pg, st, inv, ready, est] = await Promise.all([
-    sb.from('bookings').select('id,customer_name,photographer_name,category,start_at,city,pincode,price,status,created_at').order('created_at',{ascending:false}).limit(200),
+    sb.from('bookings').select('id,customer_name,photographer_name,category,start_at,city,pincode,price,status,payment_status,created_at').order('created_at',{ascending:false}).limit(200),
     sb.from('requests').select('id,customer_name,category,city,pincode,budget,status,start_at,created_at').order('created_at',{ascending:false}).limit(200),
     sb.from('photographers').select('id,display_name,city,state,pincode,bio,categories,years_exp,rating,review_count,jobs_done,is_online,is_verified,portfolio,created_at,approval_status,review_note,submitted_at,approved_at').order('created_at',{ascending:false}).limit(500),
     sb.from('staff').select('id,email,name,role,status,created_at').order('created_at'),
@@ -563,6 +564,7 @@ setInterval(() => {
   if(S.tab === "overview") loadInsights(true);
   if(S.tab === "users") loadUsers(true);
   if(S.tab === "pros") loadData();
+  if(S.tab === "payments") loadPayments(true);
 }, 60000);
 
 const pct = (a, b) => b ? Math.round(100 * a / b) + "%" : "—";
@@ -604,6 +606,8 @@ function vOverview(){
   <div class="grid">
     ${money ? kpi(inr(k.booked_value), "Booking value (GMV)", "Completed: " + inr(k.completed_value), "hl") : ""}
     ${money ? kpi(k.avg_booking_value ? inr(k.avg_booking_value) : "—", "Average booking") : ""}
+    ${money && k.collected != null ? kpi(inr(k.collected), "Collected online", "SnapPro commission: " + inr(k.commission_earned || 0)) : ""}
+    ${money && k.payouts_due != null ? kpi(inr(k.payouts_due), "Owed to photographers", k.refunds_due ? `${k.refunds_due} refund${k.refunds_due===1?"":"s"} to do · <button class="linkbtn" onclick="openTab('payments')">open</button>` : "No refunds waiting") : ""}
     ${kpi(num(k.visitors), "Unique visitors", num(k.returning_visitors) + " came back · " + num(k.page_views) + " page views" + (k.mobile_share != null ? " · " + k.mobile_share + "% mobile" : ""))}
     ${kpi(num(k.signups), "New sign-ups", num(k.signups_customers) + " customers · " + num(k.signups_photographers) + " photographers")}
     ${kpi(pct(k.signups, k.visitors), "Visitor → sign-up")}
@@ -616,7 +620,7 @@ function vOverview(){
   </div>
 
   ${money ? `<div class="card mt16"><div class="between"><div class="sec" style="margin:0">Revenue — booking value</div>
-      <div class="xs muted2">SnapPro takes no commission yet, so this is what customers pay photographers.</div></div>
+      <div class="xs muted2">Total value of bookings. Your commission is shown on the Payments tab.</div></div>
       <div class="chart-box"><canvas id="chRevenue"></canvas></div></div>` : ""}
   <div class="grid2 mt16">
     <div class="card"><div class="sec">Unique visitors &amp; sign-ups</div><div class="chart-box"><canvas id="chVisitors"></canvas></div></div>
@@ -739,6 +743,161 @@ function vUsers(){
       <tbody id="usersBody">${userRowsHtml()}</tbody></table></div>`;
 }
 
+/* ========================== payments ========================== */
+const PAY_FILTERS = [["all","All"],["paid","Paid"],["problem","Failed / not completed"],["refunds","Refunds"],["open","Waiting"]];
+async function loadPayments(quiet){
+  const [p, b, r, po, cs] = await Promise.all([
+    sb.from('payments').select('id,order_id,booking_id,customer_id,photographer_id,amount,currency,commission_amount,photographer_amount,status,environment,cf_payment_id,payment_group,bank_reference,payment_message,paid_at,refund_status,refunded_amount,is_duplicate,note,created_at').order('created_at',{ascending:false}).limit(1000),
+    sb.from('bookings').select('id,customer_name,photographer_name,photographer_id,start_at,status,price,commission_amount,photographer_amount,payment_status,payout_status,payout_ref,payout_at').order('start_at',{ascending:false}).limit(1000),
+    sb.from('refunds').select('id,refund_id,payment_id,order_id,amount,status,cf_refund_id,refund_arn,reason,created_at,processed_at').order('created_at',{ascending:false}).limit(1000),
+    sb.from('photographer_payout').select('id,upi_id,account_name'),
+    sb.from('platform_settings').select('value').eq('key','commission_pct').maybeSingle()
+  ]);
+  const err = [p,b,r,po].find(x => x && x.error);
+  if(err){
+    S.payErr = /payments|refunds|photographer_payout|does not exist|schema cache/i.test(err.error.message)
+      ? "Payments need the latest database update — run supabase/snappro.sql in the Supabase SQL Editor."
+      : "Couldn't load payments: " + err.error.message;
+    if(!quiet) render(); return;
+  }
+  const next = { payments: p.data || [], bookings: b.data || [], refunds: r.data || [], payouts: po.data || [], commission: cs && cs.data ? Number(cs.data.value) : 20 };
+  const changed = JSON.stringify(next) !== JSON.stringify(S.pay);
+  S.pay = next; S.payErr = "";
+  if(!quiet || changed) render();
+}
+const payRef = id => id ? "SP-" + String(id).slice(0,8).toUpperCase() : "—";
+const methodName = g => ({upi:"UPI", credit_card:"Credit card", debit_card:"Debit card", net_banking:"Net banking", wallet:"Wallet", credit_card_emi:"Card EMI", debit_card_emi:"Card EMI", pay_later:"Pay later", cardless_emi:"EMI"})[g] || (g ? g.replace(/_/g," ") : "—");
+function payChip(p){
+  const m = {paid:["green","Paid"], failed:["red","Failed"], user_dropped:["amber","Not completed"], cancelled:["red","Cancelled"],
+             active:["","Waiting"], created:["","Waiting"], expired:["","Expired"], terminated:["","Closed"]}[p.status] || ["",p.status];
+  return `<span class="chip ${m[0]}">${m[1]}</span>${p.environment === "sandbox" ? ` <span class="chip">Test</span>` : ""}`;
+}
+function refundChip(p){
+  const m = {none:null, refund_due:["amber","Refund due"], refund_pending:["","Refund processing"], refunded:["green","Refunded"],
+             partially_refunded:["green","Part refunded"], refund_failed:["red","Refund failed"]}[p.refund_status];
+  return m ? `<span class="chip ${m[0]}">${m[1]}</span>` : `<span class="muted2">—</span>`;
+}
+function payMatches(p){
+  const f = S.payFilter || "all";
+  if(f === "paid") return p.status === "paid";
+  if(f === "problem") return ["failed","user_dropped","cancelled"].includes(p.status);
+  if(f === "refunds") return p.refund_status !== "none";
+  if(f === "open") return ["created","active"].includes(p.status);
+  return true;
+}
+async function payFn(body){
+  const { data, error } = await sb.functions.invoke("payments", { body });
+  if(error){ let m = error.message; try{ const j = await error.context.json(); if(j && j.error) m = j.error; }catch(e){} throw new Error(m); }
+  return data;
+}
+async function refundPayment(id){
+  const p = S.pay.payments.find(x => x.id === id); if(!p) return;
+  const left = Number(p.amount) - Number(p.refunded_amount || 0);
+  const amt = prompt("Refund how much to the customer? (maximum " + inr(left) + ")", String(left));
+  if(amt === null) return;
+  const n = Math.round(Number(amt) * 100) / 100;
+  if(!(n > 0) || n > left){ S.err = "Enter an amount between ₹1 and " + inr(left) + "."; render(); return; }
+  const reason = prompt("Reason (the customer may see this on their bank statement)", p.is_duplicate ? "Duplicate payment" : "Booking cancelled");
+  if(reason === null) return;
+  if(!confirm("Refund " + inr(n) + " for booking " + payRef(p.booking_id) + "? This sends money back through Cashfree and can't be undone.")) return;
+  S.err = ""; S.note = ""; S.busyId = id; render();
+  try{ const r = await payFn({ action: "refund", payment_id: id, amount: n, reason }); S.note = "Refund of " + inr(n) + " started (" + (r.status || "pending") + "). Cashfree usually completes refunds in 5–7 working days."; }
+  catch(e){ S.err = "Refund failed: " + e.message; }
+  S.busyId = null; await loadPayments();
+}
+async function checkRefund(refundId, orderId){
+  S.err = ""; S.note = "";
+  try{ const r = await payFn({ action: "refund_check", refund_id: refundId, order_id: orderId }); S.note = "Refund status: " + r.status; }
+  catch(e){ S.err = "Couldn't check: " + e.message; }
+  await loadPayments();
+}
+async function markPaidOut(bookingId){
+  const b = S.pay.bookings.find(x => x.id === bookingId); if(!b) return;
+  const ref = prompt("You've sent " + inr(b.photographer_amount) + " to " + (b.photographer_name || "the photographer") + ".\nEnter the UPI / bank transfer reference (UTR):");
+  if(ref === null) return;
+  S.err = ""; S.note = "";
+  const { error } = await sb.rpc("admin_mark_payout", { p_booking: bookingId, p_ref: ref });
+  if(error){ S.err = error.message; render(); return; }
+  S.note = "Payout recorded for " + payRef(bookingId) + "."; await loadPayments();
+}
+async function setCommission(){
+  const cur = S.pay ? S.pay.commission : 20;
+  const v = prompt("SnapPro commission in % (applies to new bookings only):", String(cur));
+  if(v === null) return;
+  const { error } = await sb.rpc("admin_set_commission", { p_pct: Number(v) });
+  if(error){ S.err = error.message; render(); return; }
+  S.note = "Commission set to " + Number(v) + "% for new bookings."; await loadPayments();
+}
+function exportPayments(){
+  const bk = id => (S.pay.bookings.find(b => b.id === id) || {});
+  const cols = ["created_at","order_id","booking","customer","photographer","amount","commission","photographer_share","status","method","cashfree_payment_id","bank_reference","refund_status","refunded_amount","environment"];
+  const q = v => { v = v == null ? "" : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g,'""') + '"' : v; };
+  const rows = S.pay.payments.filter(payMatches).map(p => [p.created_at, p.order_id, payRef(p.booking_id), bk(p.booking_id).customer_name, bk(p.booking_id).photographer_name,
+    p.amount, p.commission_amount, p.photographer_amount, p.status, p.payment_group, p.cf_payment_id, p.bank_reference, p.refund_status, p.refunded_amount, p.environment].map(q).join(","));
+  const blob = new Blob([cols.join(",") + "\n" + rows.join("\n")], { type: "text/csv" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "snappro-payments-" + istToday() + ".csv";
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+}
+function vPayments(){
+  if(S.payErr) return `<div class="warn">${esc(S.payErr)}</div>`;
+  if(!S.pay) return `<div class="empty">Loading…</div>`;
+  const P = S.pay, bk = id => P.bookings.find(b => b.id === id) || {};
+  const live = P.payments.filter(p => p.status === "paid");
+  const real = live.filter(p => !p.is_duplicate);
+  const collected = live.reduce((s,p) => s + Number(p.amount), 0);
+  const refunded = P.payments.reduce((s,p) => s + Number(p.refunded_amount || 0), 0);
+  const commission = real.filter(p => !["refunded","partially_refunded","refund_due","refund_pending"].includes(p.refund_status)).reduce((s,p) => s + Number(p.commission_amount), 0);
+  const due = P.bookings.filter(b => b.payout_status === "due");
+  const refundsDue = P.payments.filter(p => ["refund_due","refund_failed"].includes(p.refund_status));
+  const upiOf = id => { const x = P.payouts.find(y => y.id === id); return x ? esc(x.upi_id || "") + (x.account_name ? ` <span class="muted2">(${esc(x.account_name)})</span>` : "") : `<span class="chip amber">No UPI ID yet</span>`; };
+  const list = P.payments.filter(payMatches);
+  const refundsFor = id => P.refunds.filter(r => r.payment_id === id);
+  return `
+  <div class="grid">
+    <div class="stat hl"><div class="v">${inr(collected)}</div><div class="l">Collected online</div></div>
+    <div class="stat"><div class="v">${inr(commission)}</div><div class="l">SnapPro commission (${P.commission}%)</div></div>
+    <div class="stat"><div class="v">${inr(due.reduce((s,b) => s + (b.photographer_amount||0), 0))}</div><div class="l">Owed to photographers (${due.length})</div></div>
+    <div class="stat"><div class="v">${refundsDue.length}</div><div class="l">Refunds to do</div></div>
+    <div class="stat"><div class="v">${inr(refunded)}</div><div class="l">Refunded</div></div>
+  </div>
+  ${S.me.role === "super_admin" ? `<div class="xs muted2 mt8">Commission is ${P.commission}% of each booking. <button class="linkbtn" onclick="setCommission()">Change</button></div>` : ""}
+
+  ${refundsDue.length ? `<div class="sec mt24">Refunds to do (${refundsDue.length})</div>
+  <div class="card tblwrap"><table><thead><tr><th>Booking</th><th>Customer</th><th>Paid</th><th>Why</th><th></th></tr></thead><tbody>
+  ${refundsDue.map(p => `<tr><td>${payRef(p.booking_id)}</td><td>${esc(bk(p.booking_id).customer_name || "—")}</td><td>${inr(p.amount)}</td>
+    <td class="sm">${esc(p.note || (bk(p.booking_id).status === "cancelled" ? "Booking cancelled" : "—"))}</td>
+    <td style="text-align:right"><button class="btn sm primary" ${S.busyId===p.id?'disabled':''} onclick="refundPayment('${p.id}')">${S.busyId===p.id?'Refunding…':'Refund'}</button></td></tr>`).join("")}
+  </tbody></table></div>` : ""}
+
+  ${due.length ? `<div class="sec mt24">Photographer payouts due (${due.length})</div>
+  <div class="card tblwrap"><table><thead><tr><th>Booking</th><th>Photographer</th><th>Shoot</th><th>Their share</th><th>Pay to</th><th></th></tr></thead><tbody>
+  ${due.map(b => `<tr><td>${payRef(b.id)}</td><td>${esc(b.photographer_name || "—")}</td><td class="muted">${when(b.start_at)}</td>
+    <td class="bold">${inr(b.photographer_amount)}</td><td class="sm">${upiOf(b.photographer_id)}</td>
+    <td style="text-align:right"><button class="btn sm" onclick="markPaidOut('${b.id}')">Mark paid out</button></td></tr>`).join("")}
+  </tbody></table></div>
+  <div class="xs muted2 mt8">Send the money from your bank or UPI app, then record the reference here. Automatic payouts can be added later.</div>` : ""}
+
+  <div class="between mt24" style="flex-wrap:wrap;gap:10px">
+    <div class="tabs" style="width:fit-content;flex-wrap:wrap">${PAY_FILTERS.map(([k,l]) => `<button class="tab ${(S.payFilter||'all')===k?'on':''}" onclick="S.payFilter='${k}';render()">${l}</button>`).join("")}</div>
+    <button class="btn sm" onclick="exportPayments()">Download CSV</button>
+  </div>
+  <div class="xs muted2 mt8">${list.length} transaction${list.length===1?"":"s"}</div>
+  ${list.length ? `<div class="card tblwrap mt8"><table>
+    <thead><tr><th>Date</th><th>Booking</th><th>Customer</th><th>Photographer</th><th>Amount</th><th>Status</th><th>Method</th><th>Cashfree reference</th><th>Refund</th><th></th></tr></thead>
+    <tbody>${list.map(p => `<tr>
+      <td class="muted">${when(p.paid_at || p.created_at)}</td>
+      <td>${payRef(p.booking_id)}<div class="xs muted2">${esc(p.order_id)}</div></td>
+      <td>${esc(bk(p.booking_id).customer_name || "—")}</td>
+      <td>${esc(bk(p.booking_id).photographer_name || "—")}</td>
+      <td class="bold">${inr(p.amount)}<div class="xs muted2">fee ${inr(p.commission_amount)}</div></td>
+      <td>${payChip(p)}${p.is_duplicate ? `<div class="xs mt8" style="color:#ffd88a">Duplicate payment</div>` : ""}${p.payment_message && p.status !== "paid" ? `<div class="xs muted2 mt8" style="max-width:200px">${esc(p.payment_message)}</div>` : ""}</td>
+      <td class="sm">${methodName(p.payment_group)}</td>
+      <td class="xs">${p.cf_payment_id ? esc(p.cf_payment_id) : "—"}${p.bank_reference ? `<div class="muted2">UTR ${esc(p.bank_reference)}</div>` : ""}</td>
+      <td>${refundChip(p)}${refundsFor(p.id).map(r => `<div class="xs muted2 mt8">${inr(r.amount)} · ${esc(r.status)}${r.refund_arn ? " · ARN " + esc(r.refund_arn) : ""}${["requested","pending","pending_approval","onhold"].includes(r.status) ? ` <button class="linkbtn" onclick="checkRefund('${r.refund_id}','${esc(r.order_id)}')">check</button>` : ""}</div>`).join("")}</td>
+      <td style="text-align:right">${p.status === "paid" && Number(p.refunded_amount) < Number(p.amount) && p.refund_status !== "refund_pending" && !["refund_due","refund_failed"].includes(p.refund_status) ? `<button class="btn sm" onclick="refundPayment('${p.id}')">Refund…</button>` : ""}</td>
+    </tr>`).join("")}</tbody></table></div>` : `<div class="card mt8"><div class="empty">No payments yet.</div></div>`}`;
+}
+
 /* ============================ views =========================== */
 
 function vLogin(){
@@ -856,7 +1015,10 @@ function vConsole(){
   const tabs = [["overview","Overview"]];
   if(canUsers) tabs.push(["users","Users"]);
   const waiting = (S.photographers || []).filter(p => p.approval_status === 'pending').length;
-  tabs.push(["bookings","Bookings"],["requests","Requests"],["pros", waiting ? `Photographers <span class="count">${waiting}</span>` : "Photographers"]);
+  tabs.push(["bookings","Bookings"]);
+  if(canUsers){ const rd = S.pay ? S.pay.payments.filter(p => ["refund_due","refund_failed"].includes(p.refund_status)).length : 0;
+                tabs.push(["payments", rd ? `Payments <span class="count">${rd}</span>` : "Payments"]); }
+  tabs.push(["requests","Requests"],["pros", waiting ? `Photographers <span class="count">${waiting}</span>` : "Photographers"]);
   if(isSuper) tabs.push(["team","Team"]);
 
   return `<div class="wrap">
@@ -883,6 +1045,7 @@ function vConsole(){
       S.tab==='overview' ? vOverview() :
       S.tab==='users'    ? vUsers()    :
       S.tab==='bookings' ? vBookings() :
+      S.tab==='payments' ? vPayments() :
       S.tab==='requests' ? vRequests() :
       S.tab==='pros'     ? vPros()     :
       S.tab==='team'     ? vTeam()     : ''
@@ -897,11 +1060,11 @@ function vBookings(){
   if(!S.bookings.length) return `<div class="card"><div class="empty">No bookings yet.</div></div>`;
   const money = S.me.role !== 'manager';
   return `<div class="card tblwrap"><table>
-    <thead><tr><th>Shoot time</th><th>Customer</th><th>Photographer</th><th>Type</th><th>City</th><th>Status</th>${money?'<th>Price</th>':''}</tr></thead>
+    <thead><tr><th>Shoot time</th><th>Booking</th><th>Customer</th><th>Photographer</th><th>Type</th><th>City</th><th>Status</th>${money?'<th>Price</th><th>Payment</th>':''}</tr></thead>
     <tbody>${S.bookings.map(b=>`<tr>
-      <td>${when(b.start_at)}</td><td>${esc(b.customer_name||'—')}</td><td>${esc(b.photographer_name||'—')}</td>
+      <td>${when(b.start_at)}</td><td class="xs">${payRef(b.id)}</td><td>${esc(b.customer_name||'—')}</td><td>${esc(b.photographer_name||'—')}</td>
       <td class="muted">${esc(b.category||'—')}</td><td class="muted">${esc(b.city||'—')} ${esc(b.pincode||'')}</td>
-      <td>${statusChip(b.status)}</td>${money?`<td>${inr(b.price)}</td>`:''}
+      <td>${statusChip(b.status === 'pending_payment' ? 'awaiting payment' : b.status)}</td>${money?`<td>${inr(b.price)}</td><td class="xs">${esc(({paid:'Paid online',unpaid:'Unpaid',refund_due:'Refund due',refund_pending:'Refund processing',refunded:'Refunded',partially_refunded:'Part refunded',not_required:'Paid directly'})[b.payment_status] || b.payment_status || '—')}</td>`:''}
     </tr>`).join('')}</tbody></table></div>`;
 }
 
