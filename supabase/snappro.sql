@@ -64,6 +64,25 @@ alter table public.photographers
   add column if not exists jobs_done    integer not null default 0;
 alter table public.photographers alter column rating drop default;
 alter table public.photographers alter column area drop default;
+
+-- New photographers wait for a staff member to approve them.
+alter table public.photographers
+  add column if not exists approval_status text,
+  add column if not exists approved_at     timestamptz,
+  add column if not exists approved_by     uuid,
+  add column if not exists review_note     text,
+  add column if not exists submitted_at    timestamptz default now();
+select set_config('snappro.system', 'on', false);
+update public.photographers set approval_status = 'approved', approved_at = coalesce(approved_at, now())
+ where approval_status is null;
+select set_config('snappro.system', '', false);
+alter table public.photographers alter column approval_status set default 'pending';
+alter table public.photographers alter column approval_status set not null;
+do $$ begin
+  alter table public.photographers add constraint photographers_approval_check
+    check (approval_status in ('pending','approved','rejected'));
+exception when duplicate_object then null; end $$;
+create index if not exists idx_photographers_approval on public.photographers(approval_status);
 alter table public.photographers alter column years_exp set default 0;
 
 create table if not exists public.requests (
@@ -267,10 +286,14 @@ begin
   if tg_op = 'INSERT' then
     new.rating := null; new.review_count := 0; new.jobs_done := 0; new.earnings := 0;
     if not can_verify then new.is_verified := false; end if;
+    new.approval_status := 'pending'; new.approved_at := null; new.approved_by := null;
+    new.review_note := null; new.submitted_at := now();
   else
     new.rating := old.rating; new.review_count := old.review_count;
     new.jobs_done := old.jobs_done; new.earnings := old.earnings;
     if not can_verify then new.is_verified := old.is_verified; end if;
+    new.approval_status := old.approval_status; new.approved_at := old.approved_at;
+    new.approved_by := old.approved_by; new.review_note := old.review_note; new.submitted_at := old.submitted_at;
   end if;
   new.display_name := left(coalesce(nullif(trim(new.display_name),''), 'Photographer'), 60);
   new.bio := left(coalesce(new.bio,''), 600);
@@ -315,6 +338,9 @@ declare r record; pname text;
 begin
   select display_name into pname from public.photographers where id = auth.uid();
   if pname is null then raise exception 'Only photographers can send quotes'; end if;
+  if not exists (select 1 from public.photographers where id = auth.uid() and approval_status = 'approved') then
+    raise exception 'Your profile is still being reviewed. You can send quotes once it is approved.';
+  end if;
   select * into r from public.requests where id = new.request_id;
   if not found or r.status <> 'broadcasting' or r.expires_at <= now() then
     raise exception 'This request is no longer open';
@@ -532,7 +558,8 @@ create policy profiles_staff_read on public.profiles for select to authenticated
 
 -- photographers: public listing
 drop policy if exists photographers_select_all   on public.photographers;
-create policy photographers_select_all on public.photographers for select using (true);
+create policy photographers_select_all on public.photographers for select
+  using (approval_status = 'approved' or id = auth.uid() or public.is_staff());
 drop policy if exists photographers_insert_own   on public.photographers;
 create policy photographers_insert_own on public.photographers for insert to authenticated with check (auth.uid() = id);
 drop policy if exists photographers_update_own   on public.photographers;
@@ -764,6 +791,106 @@ begin
      where i.accepted_at is null;
 end $$;
 
+
+-- =====================================================================
+-- 7b. PHOTOGRAPHER APPROVAL
+--     Admins and super admins approve or reject new photographers. The
+--     photographer gets an email either way (when a Brevo key is saved).
+-- =====================================================================
+
+create or replace function public._send_email(p_to text, p_subject text, p_html text)
+returns bigint language plpgsql security definer set search_path = public, extensions
+as $$
+declare api_key text; req bigint;
+begin
+  begin
+    select decrypted_secret into api_key from vault.decrypted_secrets where name = 'brevo_api_key' limit 1;
+  exception when others then api_key := null;
+  end;
+  if coalesce(api_key,'') = '' or coalesce(p_to,'') = '' then return null; end if;
+  select net.http_post(
+    url     := 'https://api.brevo.com/v3/smtp/email',
+    body    := jsonb_build_object('sender', jsonb_build_object('name','SnapPro','email','noreply@snappro.in'),
+                                  'to', jsonb_build_array(jsonb_build_object('email', p_to)),
+                                  'subject', p_subject, 'htmlContent', p_html),
+    headers := jsonb_build_object('api-key', api_key, 'content-type','application/json', 'accept','application/json'),
+    timeout_milliseconds := 8000) into req;
+  return req;
+end $$;
+
+create or replace function public._email_shell(p_title text, p_body text, p_button text, p_link text)
+returns text language sql immutable
+as $$
+  select '<div style="background:#f4f0e8;padding:32px 16px;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif">'
+      || '<div style="max-width:480px;margin:0 auto;background:#fffdf8;border:1px solid #ddd5c7;border-radius:10px;padding:32px">'
+      || '<div style="font-family:Georgia,serif;font-size:24px;color:#1d1a16;margin-bottom:20px">SnapPro</div>'
+      || '<h1 style="font-size:20px;color:#1d1a16;margin:0 0 12px">' || p_title || '</h1>'
+      || '<div style="font-size:15px;color:#4a443c;line-height:1.6">' || p_body || '</div>'
+      || case when p_button is not null then
+           '<a href="' || p_link || '" style="display:inline-block;margin-top:22px;background:#1d1a16;color:#fff;'
+        || 'text-decoration:none;font-weight:600;font-size:15px;padding:12px 20px;border-radius:8px">' || p_button || '</a>'
+         else '' end
+      || '<p style="font-size:12px;color:#9a9184;margin:26px 0 0">Questions? Reply to snappro.support@gmail.com</p>'
+      || '</div></div>'
+$$;
+
+create or replace function public._esc(t text) returns text language sql immutable
+as $$ select replace(replace(replace(replace(coalesce(t,''),'&','&amp;'),'<','&lt;'),'>','&gt;'),'"','&quot;') $$;
+
+create or replace function public.set_photographer_approval(p_id uuid, p_status text, p_note text default null)
+returns text language plpgsql security definer set search_path = public
+as $$
+declare em text; nm text;
+begin
+  if coalesce(public.staff_role() in ('super_admin','admin'), false) is not true then
+    raise exception 'Only admins can approve photographers';
+  end if;
+  if p_status not in ('approved','rejected','pending') then raise exception 'Unknown status'; end if;
+  if p_status = 'rejected' and coalesce(trim(p_note),'') = '' then
+    raise exception 'Add a short reason so the photographer knows what to fix';
+  end if;
+  perform set_config('snappro.system', 'on', true);
+  update public.photographers
+     set approval_status = p_status,
+         approved_at = case when p_status = 'approved' then now() end,
+         approved_by = case when p_status = 'approved' then auth.uid() end,
+         review_note = case when p_status = 'rejected' then left(trim(p_note), 500) end
+   where id = p_id
+  returning display_name into nm;
+  perform set_config('snappro.system', '', true);
+  if nm is null then raise exception 'Photographer not found'; end if;
+
+  select email into em from auth.users where id = p_id;
+  if p_status = 'approved' then
+    perform public._send_email(em, 'You''re approved on SnapPro',
+      public._email_shell('You''re approved, ' || public._esc(split_part(nm,' ',1)) || '.',
+        'Your SnapPro profile is live. Customers in your city can now see your work, and you''ll see their shoot requests and can send your own price.',
+        'Open SnapPro', 'https://snappro.in/app.html#login'));
+  elsif p_status = 'rejected' then
+    perform public._send_email(em, 'About your SnapPro profile',
+      public._email_shell('We couldn''t approve your profile yet',
+        'Thanks for signing up. Before we can approve you, please take a look at this:<br><br><i>'
+        || public._esc(p_note) || '</i><br><br>Make the changes in the app and ask for another review.',
+        'Open SnapPro', 'https://snappro.in/app.html#login'));
+  end if;
+  return p_status;
+end $$;
+
+-- A rejected photographer who has made changes asks to be looked at again.
+create or replace function public.request_photographer_review()
+returns text language plpgsql security definer set search_path = public
+as $$
+declare st text;
+begin
+  select approval_status into st from public.photographers where id = auth.uid();
+  if st is null then raise exception 'No photographer profile'; end if;
+  if st <> 'rejected' then return st; end if;
+  perform set_config('snappro.system', 'on', true);
+  update public.photographers set approval_status = 'pending', submitted_at = now() where id = auth.uid();
+  perform set_config('snappro.system', '', true);
+  return 'pending';
+end $$;
+
 -- =====================================================================
 -- 8. FUNCTION PERMISSIONS
 --    Supabase lets browsers call any public function by default. The
@@ -771,6 +898,11 @@ end $$;
 -- =====================================================================
 
 revoke all on function public._send_invite_email(text, text) from public, anon, authenticated;
+revoke all on function public._send_email(text, text, text)   from public, anon, authenticated;
+revoke all on function public.set_photographer_approval(uuid, text, text) from public, anon;
+revoke all on function public.request_photographer_review()   from public, anon;
+grant execute on function public.set_photographer_approval(uuid, text, text) to authenticated;
+grant execute on function public.request_photographer_review()   to authenticated;
 revoke all on function public.claim_staff_invite()          from public, anon;
 revoke all on function public.resend_staff_invite(uuid)     from public, anon;
 revoke all on function public.invite_email_ready()         from public, anon;
@@ -915,7 +1047,8 @@ begin
     'avg_rating',          (select round(avg(stars)::numeric, 1) from public.reviews where public._ist(created_at) between p_from and p_to),
     'messages',            (select count(*) from public.messages where public._ist(created_at) between p_from and p_to),
     'now_visitors_today',  (select count(*) from public.site_visits where day = today),
-    'now_photographers_available', (select count(*) from public.photographers where is_online),
+    'now_photographers_available', (select count(*) from public.photographers where is_online and approval_status = 'approved'),
+    'photographers_pending', (select count(*) from public.photographers where approval_status = 'pending'),
     'now_open_requests',   (select count(*) from public.requests where status = 'broadcasting' and expires_at > now()),
     'now_upcoming_shoots', (select count(*) from public.bookings where status in ('confirmed','enroute','arrived','shooting')),
     'photographers_with_photos', (select count(*) from public.photographers where coalesce(array_length(portfolio,1),0) > 0),
@@ -931,11 +1064,12 @@ begin
 end $$;
 
 -- Everyone who has an account. Admins and super admins only.
+drop function if exists public.admin_users();
 create or replace function public.admin_users()
 returns table(id uuid, name text, email text, phone text, role text, city text, state text, pincode text,
               joined timestamptz, last_sign_in timestamptz, confirmed boolean, is_staff boolean,
               requests int, bookings int, jobs_done int, rating numeric, review_count int,
-              is_verified boolean, is_online boolean, photos int)
+              is_verified boolean, is_online boolean, photos int, approval_status text)
 language plpgsql stable security definer set search_path = public
 as $$
 begin
@@ -948,7 +1082,7 @@ begin
          (select count(*)::int from public.requests q where q.customer_id = u.id),
          (select count(*)::int from public.bookings b where (b.customer_id = u.id or b.photographer_id = u.id) and b.status <> 'cancelled'),
          g.jobs_done, g.rating, g.review_count, g.is_verified, g.is_online,
-         coalesce(array_length(g.portfolio,1), 0)
+         coalesce(array_length(g.portfolio,1), 0), g.approval_status
     from auth.users u
     left join public.profiles p on p.id = u.id
     left join public.photographers g on g.id = u.id

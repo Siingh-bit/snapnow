@@ -385,6 +385,8 @@ input[type=datetime-local].input{color-scheme:light}
   @keyframes fxFlashSoft{0%{opacity:0}20%{opacity:.55}100%{opacity:0}}
 }
 
+.tick{width:20px;height:20px;flex:0 0 20px;border-radius:50%;border:1.5px solid var(--border);display:grid;place-items:center}
+.tick.on{background:var(--green);border-color:var(--green)}
 
 </style>
 </head>
@@ -825,6 +827,8 @@ if(!S.prefs.passed) S.prefs.passed = [];
 
 const isCustomer = () => S.me && S.me.role === "customer";
 const isPg = () => S.me && S.me.role === "photographer";
+/* photographers can't take work until staff approve their profile */
+const pgWaiting = () => isPg() && S.pg && S.pg.approval_status !== "approved";
 const meCity = () => (S.me && S.me.city) || "";
 
 /* ============================================================
@@ -861,7 +865,7 @@ async function q(promise){
   return res ? res.data : null;
 }
 
-const PG_COLS = "id,display_name,city,state,pincode,bio,categories,years_exp,price_multiplier,rating,review_count,jobs_done,is_online,is_verified,portfolio,created_at";
+const PG_COLS = "id,display_name,city,state,pincode,bio,categories,years_exp,price_multiplier,rating,review_count,jobs_done,is_online,is_verified,portfolio,created_at,approval_status,review_note";
 const REQ_COLS = "id,customer_id,customer_name,category,urgency,duration_hrs,city,state,pincode,budget,deliverables,notes,status,start_at,expires_at,created_at";
 const BK_COLS = "id,request_id,offer_id,customer_id,photographer_id,customer_name,photographer_name,category,start_at,duration_hrs,city,pincode,address,price,status,created_at,updated_at";
 
@@ -1040,6 +1044,16 @@ async function refresh(fromPoll){
         if(!had) toast((o.photographer_name || "A photographer") + " sent a quote", inr(o.price) + " — tap your request to compare", "check");
       });
       S.d.requests = reqs; S.d.offers = grouped;
+    } else if(pgWaiting()){
+      const was = S.pg.approval_status;
+      const row = await q(sb.from("photographers").select(PG_COLS).eq("id", S.me.id).maybeSingle());
+      if(row){ S.pg = row; S.d.pgs[row.id] = row; }
+      if(S.pg.approval_status !== was){
+        if(S.pg.approval_status === "approved"){ toast("You're approved!", "Customers can now see your profile", "check"); S.tab = "home"; S.stack = []; }
+        else if(S.pg.approval_status === "rejected") toast("Your profile needs a change", "See the note from our team", "x");
+        refreshing = false; render(); return;
+      }
+      refreshing = false; return;
     } else if(isPg()){
       const prevOpen = new Set(S.d.openRequests.map(r => r.id));
       const [open, mine] = await Promise.all([api.openRequests(), api.myOffers()]);
@@ -1681,7 +1695,7 @@ async function saveSetupPg(){
     await api.savePg({ display_name: name, bio: (d.bio||"").trim(), categories: d.cats, years_exp: d.years,
                        price_multiplier: d.priceMult, city: loc.city, state: loc.state, pincode: loc.pincode, is_online: true }, !S.pg);
     S.auth.busy = false;
-    toast("Your profile is live", "Add photos of your work so customers can choose you", "cam");
+    toast("Profile sent for review", "Add photos of your work while you wait", "cam");
     enterApp();
   }catch(e){ S.auth.busy = false; S.auth.err = e.message; render(); }
 }
@@ -2548,6 +2562,51 @@ async function saveEditPg(){
   catch(e){ setHtml("formErr", errHtml(e.message)); }
 }
 
+/* ---------- waiting for approval ---------- */
+const WAITING_OK = ["portfolio","editPg","editLoc","editName","pg","photo"];
+function vPgReview(){
+  const pg = S.pg || {}, photos = (pg.portfolio || []).length, rejected = pg.approval_status === "rejected";
+  const cats = (pg.categories || []).map(c => esc(catById(c).name)).join(", ");
+  const done = [
+    [true, "Account created"],
+    [!!(pg.city && pg.pincode), "Location added" + (pg.city ? " — " + esc(pg.city) : "")],
+    [!!cats, "Shoot types chosen" + (cats ? " — " + cats : "")],
+    [!!(pg.bio && pg.bio.trim().length >= 20), "Short bio written"],
+    [photos >= 6, photos >= 6 ? photos + " portfolio photos" : "Portfolio photos (" + photos + " of at least 6)"]
+  ];
+  return `<div class="pad review">
+    <div class="between"><div class="wordmark">SnapPro</div><button class="linkish" onclick="logout()">Log out</button></div>
+    ${rejected ? `
+      <h1 class="display mt24" style="font-size:34px">Your profile needs a change.</h1>
+      <p class="lead">Our team looked at your profile and couldn't approve it yet. Here's what they said:</p>
+      <div class="quote mt16" style="font-size:15px">${esc(pg.review_note || "Please get in touch with us.")}</div>
+      <p class="sm muted mt16">Make the changes below, then ask us to take another look.</p>
+      <button class="btn primary block mt12" onclick="askForReview()">I've made the changes — review again</button>`
+    : `
+      <h1 class="display mt24" style="font-size:34px">Thanks, ${esc(firstName(pg.display_name || S.me.name))}. We're reviewing your profile.</h1>
+      <p class="lead">Every photographer on SnapPro is checked by our team before customers can see them. We'll email you at <b>${esc(S.email)}</b> as soon as you're approved.</p>`}
+
+    <div class="sec-title mt24">${rejected ? "Your profile" : "While you wait"}</div>
+    <div class="card list">${done.map(([ok, t]) => `<div class="li"><span class="tick ${ok?'on':''}">${ok ? icon("check",12,"#fff",3) : ""}</span><div class="grow sm ${ok?'':'muted'}">${t}</div></div>`).join("")}</div>
+    ${!rejected && photos < 6 ? `<p class="sm muted mt12">Profiles with good photos get approved fastest. Add your best 6–12 shots.</p>` : ""}
+
+    <div class="card list mt16">
+      <button class="li" onclick="push('portfolio')">${icon("image",18,"var(--muted)")}<div class="grow"><div class="sm bold">Portfolio</div><div class="xs muted2">${photos} photo${photos===1?"":"s"}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
+      <button class="li" onclick="push('editPg')">${icon("edit",18,"var(--muted)")}<div class="grow"><div class="sm bold">Bio, shoot types and rates</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
+      <button class="li" onclick="push('editLoc')">${icon("pin",18,"var(--muted)")}<div class="grow"><div class="sm bold">Location</div><div class="xs muted2">${esc([pg.city, pg.state, pg.pincode].filter(Boolean).join(", ") || "Not set")}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
+      <button class="li" onclick="push('pg',{id:'${pg.id}'})">${icon("user",18,"var(--muted)")}<div class="grow"><div class="sm bold">Preview your public profile</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
+    </div>
+    <div class="legal">Questions about your review? Write to <a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a></div>
+  </div>`;
+}
+async function askForReview(){
+  try{
+    await q(sb.rpc("request_photographer_review"));
+    S.pg.approval_status = "pending";
+    toast("Sent for review", "We'll email you when we've had a look", "check"); render(); scrollTop();
+  }catch(e){ toast("Couldn't send", e.message, "x"); }
+}
+
 /* ============================================================
    NAVIGATION
    ============================================================ */
@@ -2606,6 +2665,8 @@ function render(){
     html = `<div class="splash"><div class="center"><div class="logo-lg">${icon("cam",32,"#fff",2)}</div><div class="h2 mt16">SnapPro</div></div></div>`;
   } else if(!S.me || /^setup/.test(S.auth.step || "")){
     html = (AUTH_VIEWS[S.auth.step] || vWelcome)();
+  } else if(pgWaiting() && !(S.stack.length && WAITING_OK.includes(S.stack[S.stack.length - 1].v))){
+    S.stack = []; html = vPgReview();
   } else if(S.stack.length){
     const top = S.stack[S.stack.length - 1];
     html = (STACK_VIEWS[top.v] || (() => ""))(top.p || {});

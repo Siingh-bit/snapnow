@@ -89,6 +89,13 @@ td{padding:11px 8px;border-bottom:1px solid var(--border-soft);vertical-align:mi
 .live-dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 0 0 rgba(40,199,111,.6);animation:live 2s infinite}
 @keyframes live{0%{box-shadow:0 0 0 0 rgba(40,199,111,.6)}70%{box-shadow:0 0 0 8px rgba(40,199,111,0)}100%{box-shadow:0 0 0 0 rgba(40,199,111,0)}}
 .tab{white-space:nowrap}
+.tab .count{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 5px;margin-left:6px;border-radius:9px;background:var(--accent);color:#fff;font-size:11px}
+.stackc{display:flex;flex-direction:column;gap:12px}
+.pcard{border-color:rgba(255,200,87,.3)}
+.thumbs{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:6px}
+.thumbs img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;display:block;background:var(--surface-2)}
+.linkbtn{color:var(--accent);font-weight:700;font-size:12.5px}
+details>summary{list-style:none}details>summary::-webkit-details-marker{display:none}
 .spin{width:44px;height:44px;margin:0 auto;border-radius:50%;border:3px solid var(--surface-3);
   border-top-color:var(--accent);animation:sp .8s linear infinite}
 @keyframes sp{to{transform:rotate(360deg)}}
@@ -245,6 +252,7 @@ function openTab(k){
   render();
   if(k === 'overview') loadInsights(!!S.insights);
   if(k === 'users') loadUsers(!!S.users);
+  if(k === 'pros'){ loadData(); if(S.me.role !== 'manager') loadUsers(true); }
 }
 function go(view, patch){ Object.assign(S, patch||{}, { view, err:"" }); render(); }
 
@@ -280,6 +288,7 @@ async function loadMe(){
   S.me = row; S.view = "console"; render();
   loadData();
   loadInsights();
+  if(row.role !== 'manager') loadUsers(true);
 }
 
 async function signIn(){
@@ -370,7 +379,7 @@ async function loadData(){
   const [bk, rq, pg, st, inv, ready, est] = await Promise.all([
     sb.from('bookings').select('id,customer_name,photographer_name,category,start_at,city,pincode,price,status,created_at').order('created_at',{ascending:false}).limit(200),
     sb.from('requests').select('id,customer_name,category,city,pincode,budget,status,start_at,created_at').order('created_at',{ascending:false}).limit(200),
-    sb.from('photographers').select('id,display_name,city,state,rating,review_count,jobs_done,is_online,is_verified,portfolio,created_at').order('created_at',{ascending:false}).limit(500),
+    sb.from('photographers').select('id,display_name,city,state,pincode,bio,categories,years_exp,rating,review_count,jobs_done,is_online,is_verified,portfolio,created_at,approval_status,review_note,submitted_at,approved_at').order('created_at',{ascending:false}).limit(500),
     sb.from('staff').select('id,email,name,role,status,created_at').order('created_at'),
     isSuper ? sb.from('staff_invites').select('id,email,role,created_at,accepted_at,email_request,email_sent_at').order('created_at',{ascending:false}) : null,
     isSuper ? sb.rpc('invite_email_ready') : null,
@@ -553,6 +562,7 @@ setInterval(() => {
   if(a && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName)) return;   // never interrupt typing
   if(S.tab === "overview") loadInsights(true);
   if(S.tab === "users") loadUsers(true);
+  if(S.tab === "pros") loadData();
 }, 60000);
 
 const pct = (a, b) => b ? Math.round(100 * a / b) + "%" : "—";
@@ -618,6 +628,7 @@ function vOverview(){
   <div class="grid">
     ${kpi(num(k.total_customers), "Customers")}
     ${kpi(num(k.total_photographers), "Photographers", num(k.photographers_with_photos) + " with portfolio · " + num(k.photographers_verified) + " verified")}
+    ${kpi(num(k.photographers_pending), "Waiting for approval", k.photographers_pending ? `<button class="linkbtn" onclick="openTab('pros')">Review now →</button>` : "Nobody waiting", k.photographers_pending ? "hl" : "")}
     ${kpi(num(k.repeat_customers), "Repeat customers", "2+ bookings")}
     ${kpi(num(k.setup_incomplete), "Sign-ups not finished", "No city or pincode yet")}
   </div>
@@ -687,7 +698,7 @@ function userRowsHtml(){
   if(!list.length) return `<tr><td colspan="7"><div class="empty">No one matches.</div></td></tr>`;
   return list.map(u => `<tr>
     <td><div style="font-weight:600">${esc(u.name || "—")}</div><div class="xs muted2">${esc(u.email || "")}</div>${u.phone ? `<div class="xs muted2">${esc(u.phone)}</div>` : ""}</td>
-    <td>${u.is_staff ? `<span class="chip super">Staff</span>` : u.role === "photographer" ? `<span class="chip manager">Photographer</span>` : `<span class="chip admin">Customer</span>`}</td>
+    <td>${u.is_staff ? `<span class="chip super">Staff</span>` : u.role === "photographer" ? `<span class="chip manager">Photographer</span>${u.approval_status === "pending" ? `<div class="mt8"><span class="chip amber">In review</span></div>` : u.approval_status === "rejected" ? `<div class="mt8"><span class="chip red">Not approved</span></div>` : ""}` : `<span class="chip admin">Customer</span>`}</td>
     <td>${u.city ? esc(u.city) + `<div class="xs muted2">${esc([u.state, u.pincode].filter(Boolean).join(" · "))}</div>` : `<span class="chip amber">Not finished</span>`}</td>
     <td class="muted">${fmt(u.joined)}</td>
     <td class="muted">${ago(u.last_sign_in)}</td>
@@ -844,7 +855,8 @@ function vConsole(){
   const canUsers = me.role !== 'manager';
   const tabs = [["overview","Overview"]];
   if(canUsers) tabs.push(["users","Users"]);
-  tabs.push(["bookings","Bookings"],["requests","Requests"],["pros","Photographers"]);
+  const waiting = (S.photographers || []).filter(p => p.approval_status === 'pending').length;
+  tabs.push(["bookings","Bookings"],["requests","Requests"],["pros", waiting ? `Photographers <span class="count">${waiting}</span>` : "Photographers"]);
   if(isSuper) tabs.push(["team","Team"]);
 
   return `<div class="wrap">
@@ -904,21 +916,81 @@ function vRequests(){
     </tr>`).join('')}</tbody></table></div>`;
 }
 
+const CAT_NAMES = {portrait:"Portrait",event:"Party / Event",wedding:"Wedding",birthday:"Birthday",product:"Product",food:"Food",maternity:"Maternity",corporate:"Corporate",realestate:"Real estate",fashion:"Fashion",pet:"Pet",street:"Candid / Street"};
+const emailOf = id => { const u = (S.users || []).find(x => x.id === id); return u ? u.email : ""; };
+async function decide(id, status){
+  const p = S.photographers.find(x => x.id === id); if(!p) return;
+  S.err = ""; S.note = "";
+  let note = null;
+  if(status === "rejected"){
+    const box = el("rejWhy-" + id); note = box ? box.value.trim() : "";
+    if(note.length < 5){ S.err = "Write a short reason so " + (p.display_name || "they") + " knows what to fix."; render(); return; }
+  } else if(!confirm("Approve " + (p.display_name || "this photographer") + "? Customers will be able to see and book them straight away.")) return;
+  S.busyId = id; render();
+  const { error } = await sb.rpc("set_photographer_approval", { p_id: id, p_status: status, p_note: note });
+  S.busyId = null;
+  if(error){ S.err = "Couldn't update: " + error.message; render(); return; }
+  S.rejecting = null;
+  S.note = status === "approved" ? (p.display_name + " is approved and has been emailed.") : (p.display_name + " wasn't approved. They've been emailed your reason.");
+  await loadData();
+  if(S.me.role !== "manager") loadUsers(true);
+}
+function pendingCard(p, canDecide){
+  const photos = p.portfolio || [], cats = (p.categories || []).map(c => CAT_NAMES[c] || c).join(", ");
+  const flags = [];
+  if(photos.length < 6) flags.push(photos.length ? "Only " + photos.length + " portfolio photo" + (photos.length === 1 ? "" : "s") : "No portfolio photos yet");
+  if(!p.bio || p.bio.trim().length < 20) flags.push("Bio is empty or very short");
+  if(!p.city) flags.push("No city");
+  const em = emailOf(p.id);
+  return `<div class="card pcard">
+    <div class="between" style="align-items:flex-start;flex-wrap:wrap;gap:10px">
+      <div>
+        <div class="h2">${esc(p.display_name || "—")}</div>
+        <div class="xs muted2 mt8">${em ? esc(em) + " · " : ""}${esc([p.city, p.state, p.pincode].filter(Boolean).join(", ") || "No location")}</div>
+        <div class="xs muted2">${cats ? esc(cats) + " · " : ""}${p.years_exp || 0} yrs experience · ${p.approval_status === "pending" ? "sent for review " + ago(p.submitted_at || p.created_at) : "joined " + fmt(p.created_at)}</div>
+      </div>
+      ${p.approval_status === "rejected" ? `<span class="chip red">Not approved</span>` : `<span class="chip amber">Waiting</span>`}
+    </div>
+    ${p.approval_status === "rejected" && p.review_note ? `<div class="xs mt12" style="color:#ff8f9b">Reason sent: ${esc(p.review_note)}</div>` : ""}
+    ${p.bio ? `<p class="sm muted mt12" style="white-space:pre-wrap;margin-bottom:0">${esc(p.bio)}</p>` : ""}
+    ${photos.length ? `<div class="thumbs mt12">${photos.slice(0, 12).map(u => `<a href="${esc(u)}" target="_blank" rel="noopener"><img src="${esc(u)}" alt="" loading="lazy"></a>`).join("")}</div>` : ""}
+    ${flags.length ? `<div class="xs mt12" style="color:#ffd88a">Worth checking: ${flags.map(esc).join(" · ")}</div>` : ""}
+    ${canDecide ? (S.rejecting === p.id ? `
+      <div class="mt12"><textarea id="rejWhy-${p.id}" class="input" rows="2" maxlength="500" placeholder="What should they fix? e.g. Please add at least 6 photos of your own work."></textarea>
+        <div class="row mt8"><button class="btn sm danger" ${S.busyId===p.id?'disabled':''} onclick="decide('${p.id}','rejected')">Send and don't approve</button>
+        <button class="btn sm" onclick="S.rejecting=null;render()">Cancel</button></div></div>`
+      : `<div class="row mt16">
+        <button class="btn sm primary" ${S.busyId===p.id?'disabled':''} onclick="decide('${p.id}','approved')">${S.busyId===p.id?'Saving…':'Approve'}</button>
+        ${p.approval_status === "pending" ? `<button class="btn sm danger" onclick="S.rejecting='${p.id}';S.err='';render();setTimeout(()=>{const t=el('rejWhy-${p.id}');if(t)t.focus()},0)">Don't approve…</button>` : ""}
+      </div>`) : ""}
+  </div>`;
+}
 function vPros(){
-  if(!S.photographers.length) return `<div class="card"><div class="empty">No photographers yet.</div></div>`;
-  const canVerify = S.me.role !== 'manager';
-  return `<div class="card tblwrap"><table>
+  const canDecide = S.me.role !== "manager";
+  const all = S.photographers || [];
+  const pending = all.filter(p => p.approval_status === "pending").sort((a,b) => Date.parse(a.submitted_at||a.created_at) - Date.parse(b.submitted_at||b.created_at));
+  const rejected = all.filter(p => p.approval_status === "rejected");
+  const live = all.filter(p => p.approval_status === "approved");
+  return `
+  <div class="sec">Waiting for approval (${pending.length})</div>
+  ${pending.length ? `<div class="stackc">${pending.map(p => pendingCard(p, canDecide)).join("")}</div>`
+    : `<div class="card"><div class="xs muted2">Nobody is waiting. New photographers appear here as soon as they finish signing up, and they can't see requests or send quotes until someone approves them.</div></div>`}
+  ${!canDecide && pending.length ? `<div class="xs muted2 mt8">An admin or super admin needs to approve photographers.</div>` : ""}
+  ${rejected.length ? `<details class="mt16"><summary class="sec" style="cursor:pointer">Not approved (${rejected.length})</summary><div class="stackc mt8">${rejected.map(p => pendingCard(p, canDecide)).join("")}</div></details>` : ""}
+
+  <div class="sec mt24">Approved (${live.length})</div>
+  ${!live.length ? `<div class="card"><div class="empty">No approved photographers yet.</div></div>` : `<div class="card tblwrap"><table>
     <thead><tr><th>Name</th><th>City</th><th>Rating</th><th>Shoots</th><th>Photos</th><th>Status</th><th>Verified</th></tr></thead>
-    <tbody>${S.photographers.map(p=>`<tr>
-      <td style="font-weight:600">${esc(p.display_name||'—')}<div class="xs muted2">joined ${fmt(p.created_at)}</div></td>
+    <tbody>${live.map(p=>`<tr>
+      <td style="font-weight:600">${esc(p.display_name||'—')}<div class="xs muted2">${emailOf(p.id) ? esc(emailOf(p.id)) + " · " : ""}approved ${fmt(p.approved_at || p.created_at)}</div></td>
       <td class="muted">${esc(p.city||'—')}${p.state?', '+esc(p.state):''}</td>
       <td>${p.review_count ? Number(p.rating).toFixed(1)+'★ <span class="muted2">('+p.review_count+')</span>' : '<span class="muted2">No reviews</span>'}</td>
       <td>${p.jobs_done||0}</td><td>${(p.portfolio||[]).length}</td>
       <td><span class="chip ${p.is_online?'green':''}">${p.is_online?'Available':'Away'}</span></td>
-      <td>${canVerify ? `<label class="sw"><input type="checkbox" ${p.is_verified?'checked':''} onchange="setVerified('${p.id}',this.checked)">${p.is_verified?'Verified':'No'}</label>`
+      <td>${canDecide ? `<label class="sw"><input type="checkbox" ${p.is_verified?'checked':''} onchange="setVerified('${p.id}',this.checked)">${p.is_verified?'Verified':'No'}</label>`
                       : (p.is_verified?'<span class="chip admin">Verified</span>':'<span class="muted2">No</span>')}</td>
     </tr>`).join('')}</tbody></table></div>
-  ${canVerify ? `<div class="xs muted2 mt12">Only mark someone verified after you've checked their identity and work. Customers see a verified badge.</div>` : ''}`;
+  ${canDecide ? `<div class="xs muted2 mt12">Approved means they can work on SnapPro. "Verified" is an extra badge for photographers whose identity and work you've checked in person.</div>` : ''}`}`;
 }
 
 function vTeam(){
