@@ -4,7 +4,7 @@ Book a photographer near you. Live at **[snappro.in](https://snappro.in)**.
 
 Customers post a shoot (when, what, where, budget). Photographers in that city who shoot that
 kind of work see it and send their own quote. The customer compares quotes, portfolios and
-reviews, books one and pays online through Cashfree, and they chat in the app. SnapPro keeps a
+reviews, books one and pays online through Razorpay, and they chat in the app. SnapPro keeps a
 commission and pays the photographer their share after the shoot. See [PAYMENTS.md](PAYMENTS.md).
 
 ## What's in this repository
@@ -15,7 +15,8 @@ commission and pays the photographer their share after the shoot. See [PAYMENTS.
 | `app.html` | The app for customers and photographers (opens at `#signup`, `#join` or `#login`) |
 | `admin.html` | Staff console at snappro.in/admin.html (super admin, admin, manager) |
 | `supabase/snappro.sql` | Complete database set-up: tables, security rules, triggers, storage, invite emails, payments. Safe to run again. |
-| `supabase/functions/` | Server functions (Supabase Edge Functions) for Cashfree payments and webhooks |
+| `supabase/functions/` | Server functions (Supabase Edge Functions) for Razorpay payments and webhooks |
+| `terms.html`, `privacy.html`, `refunds.html`, `delivery.html`, `contact.html` | Policy pages |
 | `.github/workflows/deploy.yml` | Uploads the site to Hostinger on every push to `main` |
 
 ## How it works
@@ -27,7 +28,7 @@ commission and pays the photographer their share after the shoot. See [PAYMENTS.
   close. Prices, ratings and booking status are enforced in the database, not the browser.
 - **Location** — city (with suggestions as you type), pincode and state. The pincode is checked
   against India Post and fills in the state automatically.
-- **Payments** — Cashfree hosted checkout; bookings are confirmed only after the server verifies
+- **Payments** — Razorpay Checkout; bookings are confirmed only after the server verifies
   the payment. Secrets live in Supabase Edge Function secrets. Details in PAYMENTS.md.
 - **Photographer approval** — new photographers stay "in review" until an admin approves them.
 - **Ratings** — only from reviews of completed bookings. New photographers show as "New".
@@ -42,6 +43,6 @@ commission and pays the photographer their share after the shoot. See [PAYMENTS.
 
 ## Deploying
 
-Push to `main`. The GitHub Action uploads `index.html`, `app.html` and `admin.html` to Hostinger. The
+Push to `main`. The GitHub Action uploads the HTML pages to Hostinger. The
 `supabase/` folder is not uploaded; run `supabase/snappro.sql` in the Supabase SQL Editor when it
 changes.

@@ -747,9 +747,9 @@ function vUsers(){
 const PAY_FILTERS = [["all","All"],["paid","Paid"],["problem","Failed / not completed"],["refunds","Refunds"],["open","Waiting"]];
 async function loadPayments(quiet){
   const [p, b, r, po, cs] = await Promise.all([
-    sb.from('payments').select('id,order_id,booking_id,customer_id,photographer_id,amount,currency,commission_amount,photographer_amount,status,environment,cf_payment_id,payment_group,bank_reference,payment_message,paid_at,refund_status,refunded_amount,is_duplicate,note,created_at').order('created_at',{ascending:false}).limit(1000),
-    sb.from('bookings').select('id,customer_name,photographer_name,photographer_id,start_at,status,price,commission_amount,photographer_amount,payment_status,payout_status,payout_ref,payout_at').order('start_at',{ascending:false}).limit(1000),
-    sb.from('refunds').select('id,refund_id,payment_id,order_id,amount,status,cf_refund_id,refund_arn,reason,created_at,processed_at').order('created_at',{ascending:false}).limit(1000),
+    sb.from('payments').select('id,order_id,booking_id,customer_id,photographer_id,amount,currency,commission_amount,photographer_amount,status,environment,provider,gateway_order_id,gateway_payment_id,payment_group,bank_reference,payment_message,paid_at,refund_status,refunded_amount,is_duplicate,note,created_at').order('created_at',{ascending:false}).limit(1000),
+    sb.from('bookings').select('id,customer_name,photographer_name,photographer_id,start_at,status,price,commission_amount,photographer_amount,payment_status,payout_status,payout_ref,payout_at,cancelled_from,cancelled_by').order('start_at',{ascending:false}).limit(1000),
+    sb.from('refunds').select('id,refund_id,payment_id,order_id,amount,status,gateway_refund_id,refund_arn,reason,created_at,processed_at').order('created_at',{ascending:false}).limit(1000),
     sb.from('photographer_payout').select('id,upi_id,account_name'),
     sb.from('platform_settings').select('value').eq('key','commission_pct').maybeSingle()
   ]);
@@ -766,11 +766,11 @@ async function loadPayments(quiet){
   if(!quiet || changed) render();
 }
 const payRef = id => id ? "SP-" + String(id).slice(0,8).toUpperCase() : "—";
-const methodName = g => ({upi:"UPI", credit_card:"Credit card", debit_card:"Debit card", net_banking:"Net banking", wallet:"Wallet", credit_card_emi:"Card EMI", debit_card_emi:"Card EMI", pay_later:"Pay later", cardless_emi:"EMI"})[g] || (g ? g.replace(/_/g," ") : "—");
+const methodName = g => ({upi:"UPI", card:"Card", netbanking:"Net banking", emi:"EMI", paylater:"Pay later", credit_card:"Credit card", debit_card:"Debit card", net_banking:"Net banking", wallet:"Wallet", credit_card_emi:"Card EMI", debit_card_emi:"Card EMI", pay_later:"Pay later", cardless_emi:"EMI"})[g] || (g ? g.replace(/_/g," ") : "—");
 function payChip(p){
   const m = {paid:["green","Paid"], failed:["red","Failed"], user_dropped:["amber","Not completed"], cancelled:["red","Cancelled"],
              active:["","Waiting"], created:["","Waiting"], expired:["","Expired"], terminated:["","Closed"]}[p.status] || ["",p.status];
-  return `<span class="chip ${m[0]}">${m[1]}</span>${p.environment === "sandbox" ? ` <span class="chip">Test</span>` : ""}`;
+  return `<span class="chip ${m[0]}">${m[1]}</span>${p.environment === "test" || p.environment === "sandbox" ? ` <span class="chip">Test</span>` : ""}`;
 }
 function refundChip(p){
   const m = {none:null, refund_due:["amber","Refund due"], refund_pending:["","Refund processing"], refunded:["green","Refunded"],
@@ -790,24 +790,35 @@ async function payFn(body){
   if(error){ let m = error.message; try{ const j = await error.context.json(); if(j && j.error) m = j.error; }catch(e){} throw new Error(m); }
   return data;
 }
+/* refund policy: 100%, except customer cancelling after the photographer set off → 50% */
+function policyRefund(p){
+  const b = S.pay.bookings.find(x => x.id === p.booking_id) || {};
+  const left = Number(p.amount) - Number(p.refunded_amount || 0);
+  if(p.is_duplicate || p.note) return { amount: left, why: p.note || "Duplicate payment" };
+  if(b.status === "cancelled" && b.cancelled_by === "customer" && b.cancelled_from === "enroute")
+    return { amount: Math.min(left, Math.round(Number(p.amount) / 2)), why: "Customer cancelled after the photographer set off — 50% per policy" };
+  if(b.status === "cancelled") return { amount: left, why: (b.cancelled_by === "photographer" ? "Photographer cancelled" : "Customer cancelled before the photographer set off") + " — full refund" };
+  return { amount: left, why: "" };
+}
 async function refundPayment(id){
   const p = S.pay.payments.find(x => x.id === id); if(!p) return;
   const left = Number(p.amount) - Number(p.refunded_amount || 0);
-  const amt = prompt("Refund how much to the customer? (maximum " + inr(left) + ")", String(left));
+  const pol = policyRefund(p);
+  const amt = prompt("Refund how much to the customer? (maximum " + inr(left) + ")" + (pol.why ? "\nPolicy: " + pol.why : ""), String(pol.amount));
   if(amt === null) return;
   const n = Math.round(Number(amt) * 100) / 100;
   if(!(n > 0) || n > left){ S.err = "Enter an amount between ₹1 and " + inr(left) + "."; render(); return; }
   const reason = prompt("Reason (the customer may see this on their bank statement)", p.is_duplicate ? "Duplicate payment" : "Booking cancelled");
   if(reason === null) return;
-  if(!confirm("Refund " + inr(n) + " for booking " + payRef(p.booking_id) + "? This sends money back through Cashfree and can't be undone.")) return;
+  if(!confirm("Refund " + inr(n) + " for booking " + payRef(p.booking_id) + "? This sends money back through Razorpay and can't be undone.")) return;
   S.err = ""; S.note = ""; S.busyId = id; render();
-  try{ const r = await payFn({ action: "refund", payment_id: id, amount: n, reason }); S.note = "Refund of " + inr(n) + " started (" + (r.status || "pending") + "). Cashfree usually completes refunds in 5–7 working days."; }
+  try{ const r = await payFn({ action: "refund", payment_id: id, amount: n, reason }); S.note = "Refund of " + inr(n) + " started (" + (r.status || "pending") + "). Razorpay usually completes normal refunds in 5–7 working days."; }
   catch(e){ S.err = "Refund failed: " + e.message; }
   S.busyId = null; await loadPayments();
 }
-async function checkRefund(refundId, orderId){
+async function checkRefund(refundId, gatewayRefundId){
   S.err = ""; S.note = "";
-  try{ const r = await payFn({ action: "refund_check", refund_id: refundId, order_id: orderId }); S.note = "Refund status: " + r.status; }
+  try{ const r = await payFn({ action: "refund_check", refund_id: refundId, gateway_refund_id: gatewayRefundId }); S.note = "Refund status: " + r.status; }
   catch(e){ S.err = "Couldn't check: " + e.message; }
   await loadPayments();
 }
@@ -830,10 +841,10 @@ async function setCommission(){
 }
 function exportPayments(){
   const bk = id => (S.pay.bookings.find(b => b.id === id) || {});
-  const cols = ["created_at","order_id","booking","customer","photographer","amount","commission","photographer_share","status","method","cashfree_payment_id","bank_reference","refund_status","refunded_amount","environment"];
+  const cols = ["created_at","order_id","booking","customer","photographer","amount","commission","photographer_share","status","method","razorpay_payment_id","bank_reference","refund_status","refunded_amount","environment"];
   const q = v => { v = v == null ? "" : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g,'""') + '"' : v; };
   const rows = S.pay.payments.filter(payMatches).map(p => [p.created_at, p.order_id, payRef(p.booking_id), bk(p.booking_id).customer_name, bk(p.booking_id).photographer_name,
-    p.amount, p.commission_amount, p.photographer_amount, p.status, p.payment_group, p.cf_payment_id, p.bank_reference, p.refund_status, p.refunded_amount, p.environment].map(q).join(","));
+    p.amount, p.commission_amount, p.photographer_amount, p.status, p.payment_group, p.gateway_payment_id, p.bank_reference, p.refund_status, p.refunded_amount, p.environment].map(q).join(","));
   const blob = new Blob([cols.join(",") + "\n" + rows.join("\n")], { type: "text/csv" });
   const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "snappro-payments-" + istToday() + ".csv";
   document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
@@ -865,7 +876,7 @@ function vPayments(){
   ${refundsDue.length ? `<div class="sec mt24">Refunds to do (${refundsDue.length})</div>
   <div class="card tblwrap"><table><thead><tr><th>Booking</th><th>Customer</th><th>Paid</th><th>Why</th><th></th></tr></thead><tbody>
   ${refundsDue.map(p => `<tr><td>${payRef(p.booking_id)}</td><td>${esc(bk(p.booking_id).customer_name || "—")}</td><td>${inr(p.amount)}</td>
-    <td class="sm">${esc(p.note || (bk(p.booking_id).status === "cancelled" ? "Booking cancelled" : "—"))}</td>
+    <td class="sm">${esc(policyRefund(p).why || "—")}<div class="xs muted2">Suggested refund: ${inr(policyRefund(p).amount)}</div></td>
     <td style="text-align:right"><button class="btn sm primary" ${S.busyId===p.id?'disabled':''} onclick="refundPayment('${p.id}')">${S.busyId===p.id?'Refunding…':'Refund'}</button></td></tr>`).join("")}
   </tbody></table></div>` : ""}
 
@@ -883,7 +894,7 @@ function vPayments(){
   </div>
   <div class="xs muted2 mt8">${list.length} transaction${list.length===1?"":"s"}</div>
   ${list.length ? `<div class="card tblwrap mt8"><table>
-    <thead><tr><th>Date</th><th>Booking</th><th>Customer</th><th>Photographer</th><th>Amount</th><th>Status</th><th>Method</th><th>Cashfree reference</th><th>Refund</th><th></th></tr></thead>
+    <thead><tr><th>Date</th><th>Booking</th><th>Customer</th><th>Photographer</th><th>Amount</th><th>Status</th><th>Method</th><th>Razorpay reference</th><th>Refund</th><th></th></tr></thead>
     <tbody>${list.map(p => `<tr>
       <td class="muted">${when(p.paid_at || p.created_at)}</td>
       <td>${payRef(p.booking_id)}<div class="xs muted2">${esc(p.order_id)}</div></td>
@@ -892,8 +903,8 @@ function vPayments(){
       <td class="bold">${inr(p.amount)}<div class="xs muted2">fee ${inr(p.commission_amount)}</div></td>
       <td>${payChip(p)}${p.is_duplicate ? `<div class="xs mt8" style="color:#ffd88a">Duplicate payment</div>` : ""}${p.payment_message && p.status !== "paid" ? `<div class="xs muted2 mt8" style="max-width:200px">${esc(p.payment_message)}</div>` : ""}</td>
       <td class="sm">${methodName(p.payment_group)}</td>
-      <td class="xs">${p.cf_payment_id ? esc(p.cf_payment_id) : "—"}${p.bank_reference ? `<div class="muted2">UTR ${esc(p.bank_reference)}</div>` : ""}</td>
-      <td>${refundChip(p)}${refundsFor(p.id).map(r => `<div class="xs muted2 mt8">${inr(r.amount)} · ${esc(r.status)}${r.refund_arn ? " · ARN " + esc(r.refund_arn) : ""}${["requested","pending","pending_approval","onhold"].includes(r.status) ? ` <button class="linkbtn" onclick="checkRefund('${r.refund_id}','${esc(r.order_id)}')">check</button>` : ""}</div>`).join("")}</td>
+      <td class="xs">${p.gateway_payment_id ? esc(p.gateway_payment_id) : "—"}${p.gateway_order_id ? `<div class="muted2">${esc(p.gateway_order_id)}</div>` : ""}${p.bank_reference ? `<div class="muted2">RRN ${esc(p.bank_reference)}</div>` : ""}</td>
+      <td>${refundChip(p)}${refundsFor(p.id).map(r => `<div class="xs muted2 mt8">${inr(r.amount)} · ${esc(r.status)}${r.refund_arn ? " · ARN " + esc(r.refund_arn) : ""}${["requested","pending","pending_approval","onhold"].includes(r.status) && r.gateway_refund_id ? ` <button class="linkbtn" onclick="checkRefund('${r.refund_id}','${esc(r.gateway_refund_id)}')">check</button>` : ""}</div>`).join("")}</td>
       <td style="text-align:right">${p.status === "paid" && Number(p.refunded_amount) < Number(p.amount) && p.refund_status !== "refund_pending" && !["refund_due","refund_failed"].includes(p.refund_status) ? `<button class="btn sm" onclick="refundPayment('${p.id}')">Refund…</button>` : ""}</td>
     </tr>`).join("")}</tbody></table></div>` : `<div class="card mt8"><div class="empty">No payments yet.</div></div>`}`;
 }

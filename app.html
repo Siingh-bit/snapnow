@@ -873,7 +873,7 @@ async function q(promise){
 
 const PG_COLS = "id,display_name,city,state,pincode,bio,categories,years_exp,price_multiplier,rating,review_count,jobs_done,is_online,is_verified,portfolio,created_at,approval_status,review_note";
 const REQ_COLS = "id,customer_id,customer_name,category,urgency,duration_hrs,city,state,pincode,budget,deliverables,notes,status,start_at,expires_at,created_at";
-const BK_COLS = "id,request_id,offer_id,customer_id,photographer_id,customer_name,photographer_name,category,start_at,duration_hrs,city,pincode,address,price,status,created_at,updated_at,commission_pct,commission_amount,photographer_amount,payment_status,paid_at,payout_status,payout_at";
+const BK_COLS = "id,request_id,offer_id,customer_id,photographer_id,customer_name,photographer_name,category,start_at,duration_hrs,city,pincode,address,price,status,created_at,updated_at,commission_pct,commission_amount,photographer_amount,payment_status,paid_at,payout_status,payout_at,cancelled_from,cancelled_by";
 
 const api = {
   async uid(){ const { data } = await sb.auth.getSession(); return data && data.session ? data.session.user.id : null; },
@@ -965,7 +965,7 @@ const api = {
   async booking(id){ return q(sb.from("bookings").select(BK_COLS).eq("id", id).maybeSingle()); },
 
   /* ---- payments: everything sensitive happens on the server (Supabase Edge
-     Function "payments"), which talks to Cashfree with the secret key ---- */
+     Function "payments"), which talks to Razorpay with the secret key ---- */
   async pay(action, body){
     if(!sb.functions) throw new Error("Payments aren't available right now.");
     const { data, error } = await sb.functions.invoke("payments", { body: Object.assign({ action }, body || {}) });
@@ -1409,7 +1409,8 @@ function vWelcome(){
       ${icon("chevron",18,"var(--muted-2)")}
     </button>
     <p class="sm muted mt24">Already have an account? <button class="linkish accent" onclick="pwReset();authGo('login')"><b>Log in</b></button></p>
-    <div class="legal">Stuck? Write to <a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a></div>
+    <div class="legal">Stuck? Write to <a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a><br>
+      <a href="/terms.html">Terms</a> · <a href="/privacy.html">Privacy</a> · <a href="/refunds.html">Refunds</a> · <a href="/contact.html">Contact</a></div>
   </div>`;
 }
 
@@ -2233,16 +2234,21 @@ function paymentLine(b, pg){
   if(ps === "partially_refunded") return "Partly refunded";
   return "Pay " + esc(firstName(pg.display_name)) + " directly";          // bookings made before online payments
 }
+/* Refund policy (snappro.in/refunds.html): full refund unless the customer
+   cancels after the photographer has set off, which is refunded 50%. */
+const refundPct = b => (b.cancelled_by === "customer" && b.cancelled_from === "enroute") ? 50 : 100;
 function refundLine(b){
-  if(b.payment_status === "refund_due" || b.payment_status === "refund_pending") return `<div class="sm mt6">Your refund of <b>${inr(b.price)}</b> is being processed. It goes back to the account you paid from.</div>`;
-  if(b.payment_status === "refunded") return `<div class="sm mt6">${inr(b.price)} has been refunded to the account you paid from.</div>`;
+  const amt = inr(Math.round((b.price || 0) * refundPct(b) / 100));
+  if(b.payment_status === "refund_due" || b.payment_status === "refund_pending") return `<div class="sm mt6">Your refund of <b>${amt}</b> is being processed. It goes back to the account you paid from, usually within 5–7 working days.</div>`;
+  if(b.payment_status === "refunded" || b.payment_status === "partially_refunded") return `<div class="sm mt6">Your refund has been sent to the account you paid from.</div>`;
   return "";
 }
 async function cancelBooking(id){
   const bk = S.d.bookings.find(x => x.id === id);
-  const msg = bk && bk.payment_status === "paid"
-    ? "Cancel this booking? You'll get a full refund of " + inr(bk.price) + " to the account you paid from."
-    : "Cancel this booking?";
+  const msg = !bk || bk.payment_status !== "paid" ? "Cancel this booking?"
+    : bk.status === "enroute"
+      ? "Your photographer has already set off. If you cancel now you'll get a 50% refund (" + inr(Math.round(bk.price / 2)) + "), as per our refund policy. Cancel anyway?"
+      : "Cancel this booking? You'll get a full refund of " + inr(bk.price) + " to the account you paid from.";
   if(!confirm(msg)) return;
   try{ const b = await api.setBooking(id, { status: "cancelled" }); Object.assign(S.d.bookings.find(x => x.id === id), b); toast("Booking cancelled", "", "x"); refresh(false); render(); }
   catch(e){ toast("Couldn't cancel", e.message, "x"); }
@@ -2722,35 +2728,36 @@ async function savePayout(){
 }
 
 /* ============================================================
-   PAYMENTS (Cashfree hosted checkout)
+   PAYMENTS (Razorpay Checkout)
    The browser never decides whether a booking is paid. It asks our
-   server ("payments" Edge Function) to create a Cashfree order, opens
-   Cashfree's checkout page, and when the customer comes back it asks the
-   server again, which checks with Cashfree before confirming anything.
+   server ("payments" Edge Function) to create a Razorpay order, opens
+   Razorpay Checkout, and hands Razorpay's response back to the server,
+   which checks the signature and asks Razorpay before confirming anything.
    ============================================================ */
-const CASHFREE_SDK = "https://sdk.cashfree.com/js/v3/cashfree.js";
-let cfLoading = null;
-function loadCashfree(){
-  if(window.Cashfree) return Promise.resolve(window.Cashfree);
-  if(cfLoading) return cfLoading;
-  cfLoading = new Promise((resolve, reject) => {
+const RAZORPAY_SDK = "https://checkout.razorpay.com/v1/checkout.js";
+let rzpLoading = null;
+function loadRazorpay(){
+  if(window.Razorpay) return Promise.resolve(window.Razorpay);
+  if(rzpLoading) return rzpLoading;
+  rzpLoading = new Promise((resolve, reject) => {
     const s = document.createElement("script");
-    s.src = CASHFREE_SDK; s.async = true;
-    const t = setTimeout(() => { cfLoading = null; reject(new Error("The payment page didn't load. Check your connection and try again.")); }, 15000);
-    s.onload = () => { clearTimeout(t); window.Cashfree ? resolve(window.Cashfree) : (cfLoading = null, reject(new Error("The payment page didn't load."))); };
-    s.onerror = () => { clearTimeout(t); cfLoading = null; reject(new Error("The payment page didn't load. Check your connection and try again.")); };
+    s.src = RAZORPAY_SDK; s.async = true;
+    const fail = () => { rzpLoading = null; reject(new Error("The payment window didn't load. Check your connection and try again.")); };
+    const t = setTimeout(fail, 15000);
+    s.onload = () => { clearTimeout(t); window.Razorpay ? resolve(window.Razorpay) : fail(); };
+    s.onerror = () => { clearTimeout(t); fail(); };
     document.head.appendChild(s);
   });
-  return cfLoading;
+  return rzpLoading;
 }
 const normPhone = v => { let d = String(v||"").replace(/\D/g, ""); if(d.length === 12 && d.startsWith("91")) d = d.slice(2); if(d.length === 11 && d.startsWith("0")) d = d.slice(1); return /^[6-9]\d{9}$/.test(d) ? d : null; };
 const bookingRef = b => "SP-" + String(b.id || b).slice(0, 8).toUpperCase();
 const PAY_METHODS_LINE = "UPI (Google Pay, PhonePe, Paytm), debit or credit card, or net banking";
 
-/* Hand over to Cashfree. Re-uses an open checkout if there is one. */
+/* Open Razorpay Checkout for a booking. Re-uses the booking's Razorpay order. */
 async function startPayment(bookingId){
   if(S.loading.pay) return;
-  S.loading.pay = true; S.formErr = null; render();
+  S.loading.pay = true; S.formErr = null; S.payState = null; stopPayPoll(); render();
   try{
     const res = await api.pay("create", { booking_id: bookingId });
     if(res.status === "paid"){                       // it was already paid (e.g. in another tab)
@@ -2758,18 +2765,46 @@ async function startPayment(bookingId){
       replaceStack("payResult", { order: res.order_id, booking: bookingId }); return;
     }
     S.prefs.pendingPay = { order: res.order_id, booking: bookingId, at: Date.now() }; savePrefs();
-    const Cashfree = await loadCashfree();
-    const cashfree = Cashfree({ mode: res.mode === "production" ? "production" : "sandbox" });
-    // full-page redirect works best with UPI apps on phones; Cashfree sends the
-    // customer back to app.html?payment=<order id> when they're done
-    cashfree.checkout({ paymentSessionId: res.payment_session_id, redirectTarget: "_self" });
+    const Razorpay = await loadRazorpay();
+    let handled = false;
+    const rzp = new Razorpay({
+      key: res.key_id,                               // public key id — the secret never leaves the server
+      order_id: res.gateway_order_id,
+      amount: res.amount, currency: res.currency || "INR",
+      name: res.name || "SnapPro", description: res.description || "Photography booking",
+      prefill: res.prefill || {}, notes: res.notes || {},
+      theme: { color: "#1d1a16" },
+      modal: {
+        confirm_close: true,
+        ondismiss: () => {
+          if(handled) return;
+          S.loading.pay = false; S.payState = null;
+          // they may have paid in their UPI app and closed the window: ask the server once
+          replaceStack("payResult", { order: res.order_id, booking: bookingId, dismissed: true });
+        }
+      },
+      handler: async (resp) => {
+        handled = true; S.loading.pay = false;
+        S.payState = { order: res.order_id, state: "checking", booking: bookingId };
+        replaceStack("payResult", { order: res.order_id, booking: bookingId });
+        try{
+          const r = await api.pay("verify", Object.assign({ order_id: res.order_id }, resp));
+          S.payState = { order: res.order_id, state: r.status, booking: r.booking_id, amount: r.amount, bookingStatus: r.booking_status };
+          if(r.status === "paid"){ if(S.prefs.pendingPay){ delete S.prefs.pendingPay; savePrefs(); } await refresh(false); }
+          else if(r.status === "active" || r.status === "created"){ S.payState = null; checkPayment(res.order_id, 0); }
+        }catch(e){ S.payState = { order: res.order_id, state: "error", message: e.message, booking: bookingId }; }
+        softRender();
+      }
+    });
+    rzp.on("payment.failed", () => { /* Checkout shows the error and lets them retry; the server records it */ });
+    rzp.open();
   }catch(e){
     S.loading.pay = false; S.formErr = e.message; render();
     toast("Payment didn't start", e.message, "x");
   }
 }
 
-/* ---------- result screen after returning from Cashfree ---------- */
+/* ---------- result screen after checkout ---------- */
 let payPoll = null;
 function stopPayPoll(){ if(payPoll){ clearTimeout(payPoll); payPoll = null; } }
 async function checkPayment(order, tries){
@@ -2783,7 +2818,7 @@ async function checkPayment(order, tries){
       if(S.prefs.pendingPay && S.prefs.pendingPay.order === order){ delete S.prefs.pendingPay; savePrefs(); }
       await refresh(false);
     } else if((r.status === "active" || r.status === "created") && (tries || 0) < 8){
-      payPoll = setTimeout(() => checkPayment(order, (tries || 0) + 1), 3000);   // Cashfree may still be finishing
+      payPoll = setTimeout(() => checkPayment(order, (tries || 0) + 1), 3000);   // Razorpay may still be finishing
     }
   }catch(e){
     S.payState = { order, state: "error", message: e.message };
@@ -2793,7 +2828,7 @@ async function checkPayment(order, tries){
 }
 function vPayResult(p){
   const st = S.payState && S.payState.order === p.order ? S.payState : null;
-  if(!st){ checkPayment(p.order, 0); }
+  if(!st){ checkPayment(p.order, p.dismissed ? 8 : 0); }      // closed the window: one check, no waiting
   const s = st ? st.state : "checking";
   const b = S.d.bookings.find(x => x.id === ((st && st.booking) || p.booking)) || null;
   const pgName = b ? (b.photographer_name || "your photographer") : "your photographer";
@@ -2823,13 +2858,19 @@ function vPayResult(p){
       <p class="xs muted2 mt12 center">You can try ${PAY_METHODS_LINE}.</p>
       ${b ? `<button class="btn block mt8" onclick="replaceStack('booking',{id:'${b.id}'})">Back to booking</button>` : ""}`;
   } else if(s === "expired" || s === "terminated"){
-    body = `<div class="center"><h1 class="display-sm">That payment page has expired</h1>
+    body = `<div class="center"><h1 class="display-sm">That payment was closed</h1>
       <p class="sm muted mt8">Your booking is still waiting for payment. Start a new payment to confirm it.</p></div>${retry}`;
   } else if(s === "error"){
     body = `<div class="center"><h1 class="display-sm">We couldn't check your payment</h1>
       <p class="sm muted mt8">${esc(st.message || "")}</p></div>
       <button class="btn primary block mt16" onclick="checkPayment('${esc(p.order)}',0)">Check again</button>
       <p class="xs muted2 mt12 center">If money left your account, it's safe — we'll match it to your booking. Don't pay again; write to ${SUPPORT_EMAIL} if it doesn't show in a few minutes.</p>`;
+  } else if(p.dismissed){                            // closed Razorpay without paying
+    body = `<div class="center"><h1 class="display-sm">Payment not completed</h1>
+      <p class="sm muted mt8">You closed the payment window, so your booking isn't confirmed yet. Nothing was charged.</p></div>
+      ${b ? `<button class="btn primary block mt16" ${S.loading.pay?"disabled":""} onclick="startPayment('${b.id}')">${S.loading.pay ? "Opening payment…" : "Pay " + amount + " now"}</button>` : ""}
+      <button class="btn block mt8" onclick="S.payState=null;checkPayment('${esc(p.order)}',0);softRender()">I've paid — check again</button>
+      ${b ? `<button class="btn block mt8" onclick="replaceStack('booking',{id:'${b.id}'})">Back to booking</button>` : ""}`;
   } else {                                           // still pending after waiting
     body = `<div class="center"><h1 class="display-sm">Waiting for your payment</h1>
       <p class="sm muted mt8">We haven't received a payment yet. If you paid, it can take a minute to arrive — check again before paying a second time.</p></div>
@@ -2843,9 +2884,10 @@ function vPayResult(p){
 function payBox(price, pgFirst){
   return `<div class="card soft mt16">
     <div class="between"><span class="bold">Total to pay now</span><span class="h2">${inr(price)}</span></div>
-    <div class="xs muted mt6">Pay securely with ${PAY_METHODS_LINE}. Payments are processed by Cashfree — SnapPro never sees your card details or UPI PIN.</div>
+    <div class="xs muted mt6">Pay securely with ${PAY_METHODS_LINE}. Payments are processed by Razorpay — SnapPro never sees your card details or UPI PIN.</div>
   </div>
-  <div class="note mt12">${icon("shield",18,"var(--green)")}<div>Your booking is confirmed as soon as the payment goes through. Cancel before ${esc(pgFirst)} sets off and you get a full refund.</div></div>`;
+  <div class="note mt12">${icon("shield",18,"var(--green)")}<div>Your booking is confirmed as soon as the payment goes through. Cancel before ${esc(pgFirst)} sets off and you get a full refund.</div></div>
+  <p class="xs muted2 mt8">By paying you agree to our <a href="/terms.html" target="_blank" rel="noopener">terms</a> and <a href="/refunds.html" target="_blank" rel="noopener">cancellation &amp; refund policy</a>.</p>`;
 }
 
 /* ============================================================
@@ -2982,7 +3024,7 @@ async function boot(){
   try{ const { data } = await sb.auth.getSession(); session = data && data.session; }catch(e){}
   /* links from snappro.in: app.html#signup, #join (photographers), #login */
   const want = (location.hash || "").replace("#", "");
-  /* back from Cashfree: app.html?payment=<order id> */
+  /* app.html?payment=<order id> opens the payment result for that order */
   const back = new URLSearchParams(location.search).get("payment");
   if(back && /^[A-Za-z0-9_-]{3,45}$/.test(back)) S.returnOrder = back;
   if(want || back){ try{ history.replaceState(null, "", location.pathname); }catch(e){} }
