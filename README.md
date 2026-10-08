@@ -4,7 +4,8 @@ Book a photographer near you. Live at **[snappro.in](https://snappro.in)**.
 
 Customers post a shoot (when, what, where, budget). Photographers in that city who shoot that
 kind of work see it and send their own quote. The customer compares quotes, portfolios and
-reviews, books one and pays online through Razorpay, and they chat in the app. SnapPro keeps a
+reviews, books one with a 25% advance through Razorpay, pays the balance in the app once the
+shoot starts, and they chat in the app. SnapPro keeps a
 commission and pays the photographer their share after the shoot. See [PAYMENTS.md](PAYMENTS.md).
 
 ## What's in this repository
@@ -28,8 +29,8 @@ commission and pays the photographer their share after the shoot. See [PAYMENTS.
   close. Prices, ratings and booking status are enforced in the database, not the browser.
 - **Location** — city (with suggestions as you type), pincode and state. The pincode is checked
   against India Post and fills in the state automatically.
-- **Payments** — Razorpay Checkout; bookings are confirmed only after the server verifies
-  the payment. Secrets live in Supabase Edge Function secrets. Details in PAYMENTS.md.
+- **Payments** — Razorpay Checkout: 25% advance to book, balance after the shoot starts;
+  bookings are confirmed only after the server verifies the advance. Secrets live in Supabase Edge Function secrets. Details in PAYMENTS.md.
 - **Photographer approval** — new photographers stay "in review" until an admin approves them.
 - **Ratings** — only from reviews of completed bookings. New photographers show as "New".
 - **Portfolio photos** — uploaded to the Supabase Storage bucket `portfolio`, resized in the

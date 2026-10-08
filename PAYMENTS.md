@@ -1,9 +1,16 @@
 # Payments (Razorpay)
 
-Customers pay the full booking amount online through Razorpay Checkout (UPI / Google Pay,
-debit and credit cards, net banking). The money settles to the SnapPro Razorpay account.
-SnapPro keeps its commission (20% by default, stored in `platform_settings`) and pays the
-photographer's share manually after the shoot.
+Customers pay online through Razorpay Checkout (UPI / Google Pay, debit and credit cards,
+net banking) in two parts:
+
+1. **Advance** — 25% of the price (`platform_settings.advance_pct`) when they book. This
+   confirms the booking.
+2. **Balance** — the remaining 75%, payable in the app once the photographer starts the shoot
+   (`balance_status` goes `pending` → `due` → `paid`).
+
+The money settles to the SnapPro Razorpay account. SnapPro keeps its commission (20% by
+default, `platform_settings.commission_pct`, taken from the advance) and pays the
+photographer's share manually once the shoot is complete **and** the balance is paid.
 
 ## How it fits together
 
@@ -25,9 +32,10 @@ Razorpay ──signed webhook──▶ Edge Function "razorpay-webhook" ──�
      (it captures `authorized` payments itself if auto-capture is off),
   — or after a webhook whose `X-Razorpay-Signature` matches and whose payment Razorpay
   confirms.
-- One Razorpay order per booking. Retries re-use it, and Razorpay refuses payments on a
-  paid order, so a booking can't be paid twice. If it ever happens anyway (e.g. switching
-  keys), the extra payment is flagged "refund due".
+- One Razorpay order per part (advance / balance). Retries re-use it, and Razorpay refuses
+  payments on a paid order, so nothing can be paid twice. If it ever happens anyway (e.g.
+  switching keys), the extra payment is flagged "refund due". `payments.stage` records which
+  part each payment was.
 - `pay_record` / `pay_refund_update` are idempotent: each event has a unique key in
   `payment_events` (Razorpay's `x-razorpay-event-id`), rows are locked, and a success is
   never undone.
@@ -65,8 +73,9 @@ verification **off**. Events: `payment.captured`, `payment.failed`, `order.paid`
 
 ## Refund policy (as implemented)
 
-Full refund, except a customer cancelling after the photographer has set off (50%). Refunds
-are started by an admin from the Payments tab; the suggested amount follows the policy.
+Bookings can only be cancelled before the shoot starts, so cancellation refunds apply to the
+advance: full, except a customer cancelling after the photographer has set off (50%).
+Refunds are started by an admin from the Payments tab; the suggested amount follows the policy.
 
 ## Later: automatic split payments
 

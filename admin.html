@@ -378,7 +378,7 @@ async function signOut(){
 async function loadData(){
   const isSuper = S.me.role === 'super_admin';
   const [bk, rq, pg, st, inv, ready, est] = await Promise.all([
-    sb.from('bookings').select('id,customer_name,photographer_name,category,start_at,city,pincode,price,status,payment_status,created_at').order('created_at',{ascending:false}).limit(200),
+    sb.from('bookings').select('id,customer_name,photographer_name,category,start_at,city,pincode,price,status,payment_status,balance_status,created_at').order('created_at',{ascending:false}).limit(200),
     sb.from('requests').select('id,customer_name,category,city,pincode,budget,status,start_at,created_at').order('created_at',{ascending:false}).limit(200),
     sb.from('photographers').select('id,display_name,city,state,pincode,bio,categories,years_exp,rating,review_count,jobs_done,is_online,is_verified,portfolio,created_at,approval_status,review_note,submitted_at,approved_at').order('created_at',{ascending:false}).limit(500),
     sb.from('staff').select('id,email,name,role,status,created_at').order('created_at'),
@@ -747,8 +747,8 @@ function vUsers(){
 const PAY_FILTERS = [["all","All"],["paid","Paid"],["problem","Failed / not completed"],["refunds","Refunds"],["open","Waiting"]];
 async function loadPayments(quiet){
   const [p, b, r, po, cs] = await Promise.all([
-    sb.from('payments').select('id,order_id,booking_id,customer_id,photographer_id,amount,currency,commission_amount,photographer_amount,status,environment,provider,gateway_order_id,gateway_payment_id,payment_group,bank_reference,payment_message,paid_at,refund_status,refunded_amount,is_duplicate,note,created_at').order('created_at',{ascending:false}).limit(1000),
-    sb.from('bookings').select('id,customer_name,photographer_name,photographer_id,start_at,status,price,commission_amount,photographer_amount,payment_status,payout_status,payout_ref,payout_at,cancelled_from,cancelled_by').order('start_at',{ascending:false}).limit(1000),
+    sb.from('payments').select('id,order_id,booking_id,customer_id,photographer_id,amount,currency,commission_amount,photographer_amount,status,environment,provider,gateway_order_id,gateway_payment_id,payment_group,bank_reference,payment_message,paid_at,refund_status,refunded_amount,is_duplicate,note,stage,created_at').order('created_at',{ascending:false}).limit(1000),
+    sb.from('bookings').select('id,customer_name,photographer_name,photographer_id,start_at,status,price,commission_amount,photographer_amount,payment_status,payout_status,payout_ref,payout_at,cancelled_from,cancelled_by,advance_amount,balance_amount,balance_status,customer_id').order('start_at',{ascending:false}).limit(1000),
     sb.from('refunds').select('id,refund_id,payment_id,order_id,amount,status,gateway_refund_id,refund_arn,reason,created_at,processed_at').order('created_at',{ascending:false}).limit(1000),
     sb.from('photographer_payout').select('id,upi_id,account_name'),
     sb.from('platform_settings').select('value').eq('key','commission_pct').maybeSingle()
@@ -841,10 +841,10 @@ async function setCommission(){
 }
 function exportPayments(){
   const bk = id => (S.pay.bookings.find(b => b.id === id) || {});
-  const cols = ["created_at","order_id","booking","customer","photographer","amount","commission","photographer_share","status","method","razorpay_payment_id","bank_reference","refund_status","refunded_amount","environment"];
+  const cols = ["created_at","order_id","booking","customer","photographer","part","amount","commission","photographer_share","status","method","razorpay_payment_id","bank_reference","refund_status","refunded_amount","environment"];
   const q = v => { v = v == null ? "" : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g,'""') + '"' : v; };
   const rows = S.pay.payments.filter(payMatches).map(p => [p.created_at, p.order_id, payRef(p.booking_id), bk(p.booking_id).customer_name, bk(p.booking_id).photographer_name,
-    p.amount, p.commission_amount, p.photographer_amount, p.status, p.payment_group, p.gateway_payment_id, p.bank_reference, p.refund_status, p.refunded_amount, p.environment].map(q).join(","));
+    p.stage || "advance", p.amount, p.commission_amount, p.photographer_amount, p.status, p.payment_group, p.gateway_payment_id, p.bank_reference, p.refund_status, p.refunded_amount, p.environment].map(q).join(","));
   const blob = new Blob([cols.join(",") + "\n" + rows.join("\n")], { type: "text/csv" });
   const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "snappro-payments-" + istToday() + ".csv";
   document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
@@ -860,6 +860,7 @@ function vPayments(){
   const commission = real.filter(p => !["refunded","partially_refunded","refund_due","refund_pending"].includes(p.refund_status)).reduce((s,p) => s + Number(p.commission_amount), 0);
   const due = P.bookings.filter(b => b.payout_status === "due");
   const refundsDue = P.payments.filter(p => ["refund_due","refund_failed"].includes(p.refund_status));
+  const balances = P.bookings.filter(b => b.balance_status === "due");
   const upiOf = id => { const x = P.payouts.find(y => y.id === id); return x ? esc(x.upi_id || "") + (x.account_name ? ` <span class="muted2">(${esc(x.account_name)})</span>` : "") : `<span class="chip amber">No UPI ID yet</span>`; };
   const list = P.payments.filter(payMatches);
   const refundsFor = id => P.refunds.filter(r => r.payment_id === id);
@@ -871,7 +872,7 @@ function vPayments(){
     <div class="stat"><div class="v">${refundsDue.length}</div><div class="l">Refunds to do</div></div>
     <div class="stat"><div class="v">${inr(refunded)}</div><div class="l">Refunded</div></div>
   </div>
-  ${S.me.role === "super_admin" ? `<div class="xs muted2 mt8">Commission is ${P.commission}% of each booking. <button class="linkbtn" onclick="setCommission()">Change</button></div>` : ""}
+  ${S.me.role === "super_admin" ? `<div class="xs muted2 mt8">Commission is ${P.commission}% of each booking. Customers pay an advance when they book and the balance online once the shoot starts; payouts become due when both are paid. <button class="linkbtn" onclick="setCommission()">Change</button></div>` : ""}
 
   ${refundsDue.length ? `<div class="sec mt24">Refunds to do (${refundsDue.length})</div>
   <div class="card tblwrap"><table><thead><tr><th>Booking</th><th>Customer</th><th>Paid</th><th>Why</th><th></th></tr></thead><tbody>
@@ -879,6 +880,13 @@ function vPayments(){
     <td class="sm">${esc(policyRefund(p).why || "—")}<div class="xs muted2">Suggested refund: ${inr(policyRefund(p).amount)}</div></td>
     <td style="text-align:right"><button class="btn sm primary" ${S.busyId===p.id?'disabled':''} onclick="refundPayment('${p.id}')">${S.busyId===p.id?'Refunding…':'Refund'}</button></td></tr>`).join("")}
   </tbody></table></div>` : ""}
+
+  ${balances.length ? `<div class="sec mt24">Balances waiting from customers (${balances.length})</div>
+  <div class="card tblwrap"><table><thead><tr><th>Booking</th><th>Customer</th><th>Photographer</th><th>Shoot</th><th>Status</th><th>Balance</th></tr></thead><tbody>
+  ${balances.map(b => `<tr><td>${payRef(b.id)}</td><td>${esc(b.customer_name || "—")}</td><td>${esc(b.photographer_name || "—")}</td><td class="muted">${when(b.start_at)}</td>
+    <td>${statusChip(b.status)}</td><td class="bold">${inr(b.balance_amount)}</td></tr>`).join("")}
+  </tbody></table></div>
+  <div class="xs muted2 mt8">The customer pays this in the app. The photographer's payout becomes due once it's paid and the shoot is complete.</div>` : ""}
 
   ${due.length ? `<div class="sec mt24">Photographer payouts due (${due.length})</div>
   <div class="card tblwrap"><table><thead><tr><th>Booking</th><th>Photographer</th><th>Shoot</th><th>Their share</th><th>Pay to</th><th></th></tr></thead><tbody>
@@ -900,7 +908,7 @@ function vPayments(){
       <td>${payRef(p.booking_id)}<div class="xs muted2">${esc(p.order_id)}</div></td>
       <td>${esc(bk(p.booking_id).customer_name || "—")}</td>
       <td>${esc(bk(p.booking_id).photographer_name || "—")}</td>
-      <td class="bold">${inr(p.amount)}<div class="xs muted2">fee ${inr(p.commission_amount)}</div></td>
+      <td class="bold">${inr(p.amount)}<div class="xs muted2">${p.stage === "balance" ? "Balance" : "Advance"} · fee ${inr(p.commission_amount)}</div></td>
       <td>${payChip(p)}${p.is_duplicate ? `<div class="xs mt8" style="color:#ffd88a">Duplicate payment</div>` : ""}${p.payment_message && p.status !== "paid" ? `<div class="xs muted2 mt8" style="max-width:200px">${esc(p.payment_message)}</div>` : ""}</td>
       <td class="sm">${methodName(p.payment_group)}</td>
       <td class="xs">${p.gateway_payment_id ? esc(p.gateway_payment_id) : "—"}${p.gateway_order_id ? `<div class="muted2">${esc(p.gateway_order_id)}</div>` : ""}${p.bank_reference ? `<div class="muted2">RRN ${esc(p.bank_reference)}</div>` : ""}</td>
@@ -1075,7 +1083,7 @@ function vBookings(){
     <tbody>${S.bookings.map(b=>`<tr>
       <td>${when(b.start_at)}</td><td class="xs">${payRef(b.id)}</td><td>${esc(b.customer_name||'—')}</td><td>${esc(b.photographer_name||'—')}</td>
       <td class="muted">${esc(b.category||'—')}</td><td class="muted">${esc(b.city||'—')} ${esc(b.pincode||'')}</td>
-      <td>${statusChip(b.status === 'pending_payment' ? 'awaiting payment' : b.status)}</td>${money?`<td>${inr(b.price)}</td><td class="xs">${esc(({paid:'Paid online',unpaid:'Unpaid',refund_due:'Refund due',refund_pending:'Refund processing',refunded:'Refunded',partially_refunded:'Part refunded',not_required:'Paid directly'})[b.payment_status] || b.payment_status || '—')}</td>`:''}
+      <td>${statusChip(b.status === 'pending_payment' ? 'awaiting payment' : b.status)}</td>${money?`<td>${inr(b.price)}</td><td class="xs">${esc(({paid:'Paid online',unpaid:'Unpaid',refund_due:'Refund due',refund_pending:'Refund processing',refunded:'Refunded',partially_refunded:'Part refunded',not_required:'Paid directly'})[b.payment_status] || b.payment_status || '—')}${b.payment_status === 'paid' && b.balance_status && b.balance_status !== 'not_required' ? `<div class="muted2">${b.balance_status === 'paid' ? 'Paid in full' : b.balance_status === 'due' ? 'Balance due' : 'Advance paid'}</div>` : ''}</td>`:''}
     </tr>`).join('')}</tbody></table></div>`;
 }
 

@@ -827,7 +827,8 @@ var S = {
     pgs: {}, pgList: [], pgListAt: 0, reviews: {}, reviewed: {}, msgs: {}
   },
   loading: {},
-  commission: 20      // % SnapPro keeps; read from the database at start-up
+  commission: 20,     // % SnapPro keeps; read from the database at start-up
+  advance: 25         // % paid online at booking; the rest is paid online after the shoot
 };
 if(!S.prefs.passed) S.prefs.passed = [];
 
@@ -873,7 +874,7 @@ async function q(promise){
 
 const PG_COLS = "id,display_name,city,state,pincode,bio,categories,years_exp,price_multiplier,rating,review_count,jobs_done,is_online,is_verified,portfolio,created_at,approval_status,review_note";
 const REQ_COLS = "id,customer_id,customer_name,category,urgency,duration_hrs,city,state,pincode,budget,deliverables,notes,status,start_at,expires_at,created_at";
-const BK_COLS = "id,request_id,offer_id,customer_id,photographer_id,customer_name,photographer_name,category,start_at,duration_hrs,city,pincode,address,price,status,created_at,updated_at,commission_pct,commission_amount,photographer_amount,payment_status,paid_at,payout_status,payout_at,cancelled_from,cancelled_by";
+const BK_COLS = "id,request_id,offer_id,customer_id,photographer_id,customer_name,photographer_name,category,start_at,duration_hrs,city,pincode,address,price,status,created_at,updated_at,commission_pct,commission_amount,photographer_amount,payment_status,paid_at,payout_status,payout_at,cancelled_from,cancelled_by,advance_amount,balance_amount,balance_status,balance_paid_at";
 
 const api = {
   async uid(){ const { data } = await sb.auth.getSession(); return data && data.session ? data.session.user.id : null; },
@@ -949,6 +950,8 @@ const api = {
       .neq("customer_id", S.me.id).order("created_at", {ascending:false}).limit(60));
   },
   async myOffers(){
+    /* with what happened to each quote (open / chosen / booked / closed) */
+    try{ const { data, error } = await sb.rpc("my_offers"); if(!error && Array.isArray(data)) return data; }catch(e){}
     return q(sb.from("offers").select("id,request_id,price,eta_min,note,created_at").eq("photographer_id", S.me.id).order("created_at", {ascending:false}).limit(60));
   },
   async sendOffer(reqId, price, eta, note){
@@ -978,8 +981,12 @@ const api = {
   },
   async commission(){
     try{
-      const row = await q(sb.from("platform_settings").select("value").eq("key", "commission_pct").maybeSingle());
-      const n = Number(row && row.value); if(n >= 0 && n <= 50) S.commission = n;
+      const rows = await q(sb.from("platform_settings").select("key,value").in("key", ["commission_pct","advance_pct"]));
+      (rows || []).forEach(r => {
+        const n = Number(r.value);
+        if(r.key === "commission_pct" && n >= 0 && n <= 50) S.commission = n;
+        if(r.key === "advance_pct" && n > 0 && n <= 100) S.advance = n;
+      });
     }catch(e){}
     return S.commission;
   },
@@ -1826,7 +1833,7 @@ function vCustHome(){
           "Post your shoot anyway — photographers who join in your city will see it and can send you a quote.",
           `<button class="btn sm mt12" onclick="startRequest()">Post a shoot</button>`)}
 
-    <div class="note mt20">${icon("shield",18,"var(--green)")}<div><b>Pay securely when you book.</b> UPI, Google Pay, cards or net banking. Cancel before your photographer sets off for a full refund.</div></div>
+    <div class="note mt20">${icon("shield",18,"var(--green)")}<div><b>Pay ${S.advance}% to book, the rest after the shoot.</b> UPI, Google Pay, cards or net banking. Cancel before your photographer sets off and get your advance back.</div></div>
   </div>`;
 }
 function requestCard(r){
@@ -2140,7 +2147,7 @@ function vConfirm(p){
       <input id="bkPhone" class="input" type="tel" inputmode="numeric" autocomplete="tel-national" maxlength="14" placeholder="10-digit mobile number" value="${esc(S.confirmPhone)}" oninput="S.confirmPhone=this.value;setHtml('formErr','')">
       <div class="xs muted2 mt6">For payment receipts and for ${esc(firstName(pg.display_name))} to reach you on the day.</div></div>
     ${payBox(o.price, firstName(pg.display_name))}
-    <button class="btn primary block mt16" ${S.loading.book||S.loading.pay?"disabled":""} onclick="confirmBooking('${o.id}')">${S.loading.book ? "Booking…" : S.loading.pay ? "Opening secure payment…" : "Pay " + inr(o.price)}</button>
+    <button class="btn primary block mt16" ${S.loading.book||S.loading.pay?"disabled":""} onclick="confirmBooking('${o.id}')">${S.loading.book ? "Booking…" : S.loading.pay ? "Opening secure payment…" : "Pay advance " + inr(advFor(o.price))}</button>
     <div id="formErr">${errHtml(S.formErr)}</div>
   </div>`;
 }
@@ -2196,17 +2203,24 @@ function vBooking(p){
       </div>
     </div>
     ${unpaid ? `<div class="card mt12 pay-due">
-        <div class="bold">Waiting for payment</div>
-        <div class="sm muted mt4">${esc(firstName(pg.display_name))} isn't booked until you pay. Your slot isn't held for long.</div>
-        <button class="btn primary block mt12" ${S.loading.pay?"disabled":""} onclick="startPayment('${b.id}')">${S.loading.pay ? "Opening secure payment…" : "Pay " + inr(b.price) + " now"}</button>
+        <div class="bold">Waiting for the advance</div>
+        <div class="sm muted mt4">${esc(firstName(pg.display_name))} isn't booked until you pay the ${S.advance}% advance. Your slot isn't held for long.${balOf(b) > 0 ? " The balance of " + inr(balOf(b)) + " is paid in the app after the shoot." : ""}</div>
+        <button class="btn primary block mt12" ${S.loading.pay?"disabled":""} onclick="startPayment('${b.id}')">${S.loading.pay ? "Opening secure payment…" : "Pay advance " + inr(advOf(b))}</button>
         <div class="xs muted2 mt8">${PAY_METHODS_LINE}</div></div>`
     : b.status === "cancelled" ? `<div class="card soft mt12 red-soft">This booking was cancelled.${refundLine(b)}</div>` : `<div class="card mt12"><div class="sec-title">Status</div>${timelineHtml(b)}</div>`}
+    ${balanceDue(b) ? `<div class="card mt12 pay-due">
+        <div class="bold">Balance due: ${inr(balOf(b))}</div>
+        <div class="sm muted mt4">${b.status === "completed" ? "Your shoot is done." : "Your shoot has started."} Pay the rest of the booking here — ${esc(firstName(pg.display_name))} gets paid through SnapPro, so there's no cash to hand over.</div>
+        <button class="btn primary block mt12" ${S.loading.pay?"disabled":""} onclick="startPayment('${b.id}')">${S.loading.pay ? "Opening secure payment…" : "Pay balance " + inr(balOf(b))}</button>
+        <div class="xs muted2 mt8">${PAY_METHODS_LINE}</div></div>` : ""}
     <div class="card mt12">
       <div class="sec-title">Details</div>
       <div class="kv"><span>Shoot</span><span>${esc(catById(b.category).name)}</span></div>
       <div class="kv"><span>When</span><span>${whenStr(b.start_at)}</span></div>
       <div class="kv"><span>Duration</span><span>${b.duration_hrs} hr${b.duration_hrs>1?'s':''}</span></div>
       <div class="kv"><span>Price</span><span class="bold">${inr(b.price)}</span></div>
+      ${b.balance_status && b.balance_status !== "not_required" ? `<div class="kv"><span>Advance (${S.advance}%)</span><span>${inr(advOf(b))}</span></div>
+      <div class="kv"><span>Balance</span><span>${inr(balOf(b))}</span></div>` : ""}
       <div class="kv"><span>Payment</span><span class="right">${paymentLine(b, pg)}</span></div>
       <div class="kv"><span>Booking ref</span><span>${bookingRef(b)}</span></div>
       <div class="kv top"><span>Address</span><span class="right">${S.editAddr === b.id ? "" : esc(b.address||"—")}</span></div>
@@ -2227,7 +2241,10 @@ async function saveAddr(id){
 }
 function paymentLine(b, pg){
   const ps = b.payment_status;
-  if(ps === "paid") return "Paid online" + (b.paid_at ? " · " + dayStr(b.paid_at) : "");
+  if(ps === "paid"){
+    if(fullyPaid(b)) return "Paid in full online";
+    return b.balance_status === "due" ? "Advance paid · balance due now" : "Advance paid · balance after the shoot";
+  }
   if(ps === "unpaid") return b.status === "cancelled" ? "Not paid" : "Waiting for payment";
   if(ps === "refund_due" || ps === "refund_pending") return "Refund in progress";
   if(ps === "refunded") return "Refunded";
@@ -2238,7 +2255,7 @@ function paymentLine(b, pg){
    cancels after the photographer has set off, which is refunded 50%. */
 const refundPct = b => (b.cancelled_by === "customer" && b.cancelled_from === "enroute") ? 50 : 100;
 function refundLine(b){
-  const amt = inr(Math.round((b.price || 0) * refundPct(b) / 100));
+  const amt = inr(Math.round(paidOnline(b) * refundPct(b) / 100));
   if(b.payment_status === "refund_due" || b.payment_status === "refund_pending") return `<div class="sm mt6">Your refund of <b>${amt}</b> is being processed. It goes back to the account you paid from, usually within 5–7 working days.</div>`;
   if(b.payment_status === "refunded" || b.payment_status === "partially_refunded") return `<div class="sm mt6">Your refund has been sent to the account you paid from.</div>`;
   return "";
@@ -2247,8 +2264,8 @@ async function cancelBooking(id){
   const bk = S.d.bookings.find(x => x.id === id);
   const msg = !bk || bk.payment_status !== "paid" ? "Cancel this booking?"
     : bk.status === "enroute"
-      ? "Your photographer has already set off. If you cancel now you'll get a 50% refund (" + inr(Math.round(bk.price / 2)) + "), as per our refund policy. Cancel anyway?"
-      : "Cancel this booking? You'll get a full refund of " + inr(bk.price) + " to the account you paid from.";
+      ? "Your photographer has already set off. If you cancel now you'll get half of what you paid back (" + inr(Math.round(paidOnline(bk) / 2)) + "), as per our refund policy. Cancel anyway?"
+      : "Cancel this booking? You'll get the " + inr(paidOnline(bk)) + " you paid back in full, to the account you paid from.";
   if(!confirm(msg)) return;
   try{ const b = await api.setBooking(id, { status: "cancelled" }); Object.assign(S.d.bookings.find(x => x.id === id), b); toast("Booking cancelled", "", "x"); refresh(false); render(); }
   catch(e){ toast("Couldn't cancel", e.message, "x"); }
@@ -2466,12 +2483,23 @@ function vPgRequests(){
       <button class="chip ${mode==='quoted'?'accent':''}" onclick="S.prefs.reqMode='quoted';savePrefs();render()">Your quotes${S.d.myOffers.length ? " (" + S.d.myOffers.length + ")" : ""}</button>
     </div>
     ${mode === "quoted"
-      ? (quoted.length ? quoted.map(({o, r}) => r ? reqCardPg(r) : `<div class="card mt12"><div class="between"><div class="sm">Quote of <b>${inr(o.price)}</b></div><span class="chip">Closed</span></div><div class="xs muted2 mt4">Sent ${timeAgo(o.created_at)}. The customer booked someone else or the request closed.</div></div>`).join("")
+      ? (quoted.length ? quoted.map(({o, r}) => r ? reqCardPg(r) : quoteStateCard(o)).join("")
         : emptyState("💬", "No quotes yet", "Quotes you send appear here until the customer decides."))
       : (list.length ? list.map(r => reqCardPg(r)).join("")
         : emptyState("📭", "Nothing open right now", mode === "match" ? "Try “Everything in " + esc(meCity()||"your city") + "” to see other types of shoot." : "New requests appear here automatically."))}
     ${mode === "match" && S.prefs.passed.length ? `<div class="center mt16"><button class="linkish xs" onclick="S.prefs.passed=[];savePrefs();render()">Show requests you passed on</button></div>` : ""}
   </div>`;
+}
+
+function quoteStateCard(o){
+  const bk = S.d.bookings.find(b => b.offer_id === o.id && b.status !== "cancelled");
+  if(o.state === "booked" || bk) return `<button class="card tap mt12" style="text-align:left;width:100%" ${bk ? `onclick="push('job',{id:'${bk.id}'})"` : ""}>
+      <div class="between"><div class="sm">Quote of <b>${inr(o.price)}</b></div><span class="chip green">Booked</span></div>
+      <div class="xs muted2 mt4">The customer booked you and paid the advance.${bk ? " Tap to see the shoot." : ""}</div></button>`;
+  if(o.state === "chosen") return `<div class="card mt12"><div class="between"><div class="sm">Quote of <b>${inr(o.price)}</b></div><span class="chip accent">Chosen</span></div>
+      <div class="xs muted2 mt4">The customer picked your quote and is paying the advance. It moves to your shoots as soon as they pay.</div></div>`;
+  return `<div class="card mt12"><div class="between"><div class="sm">Quote of <b>${inr(o.price)}</b></div><span class="chip">Closed</span></div>
+      <div class="xs muted2 mt4">Sent ${timeAgo(o.created_at)}. The customer booked someone else or the request closed.</div></div>`;
 }
 
 /* ---------- send a quote ---------- */
@@ -2502,7 +2530,7 @@ function vQuote(p){
       <div class="chips">${[15,30,45,60,90].map(m => `<button class="chip lg ${S.quote.eta===m?'accent':''}" onclick="S.quote.eta=${m};render()">${m} min</button>`).join("")}</div></div>` : ""}
     <div class="field"><label for="qNote">Message to the customer <span class="muted2">(optional)</span></label>
       <textarea id="qNote" class="input" rows="3" maxlength="500" placeholder="e.g. I shoot on a full-frame camera and deliver 50+ edited photos within 48 hours." oninput="S.quote.note=this.value">${esc(S.quote.note)}</textarea></div>
-    <div class="note">${icon("wallet",18,"var(--green)")}<div>The customer pays online when they book. SnapPro keeps ${S.commission}% and transfers the rest to you after the shoot.</div></div>
+    <div class="note">${icon("wallet",18,"var(--green)")}<div>The customer pays ${S.advance}% online when they book and the rest online after the shoot. SnapPro keeps ${S.commission}% and transfers the rest to you once the shoot is done and fully paid.</div></div>
     <button class="btn primary block mt16" ${S.loading.quote?"disabled":""} onclick="sendQuote('${r.id}')">${S.loading.quote ? "Sending…" : icon("send",16,"#fff") + " Send quote"}</button>
     <div id="formErr">${errHtml(S.formErr)}</div>
   </div>`;
@@ -2575,10 +2603,11 @@ function vJob(p){
       <div class="kv"><span>When</span><span>${whenStr(b.start_at)}</span></div>
       <div class="kv"><span>Duration</span><span>${b.duration_hrs} hr${b.duration_hrs>1?'s':''}</span></div>
       ${b.photographer_amount != null && b.payment_status !== "not_required" ? `
-      <div class="kv"><span>Customer paid</span><span>${inr(b.price)}</span></div>
+      <div class="kv"><span>Booking amount</span><span>${inr(b.price)}</span></div>
+      ${b.balance_status && b.balance_status !== "not_required" ? `<div class="kv"><span>Customer's payments</span><span class="right">Advance ${inr(advOf(b))} paid<br>Balance ${inr(balOf(b))} ${b.balance_status === "paid" ? "paid" : b.balance_status === "due" ? "due now" : "after the shoot"}</span></div>` : ""}
       <div class="kv"><span>SnapPro commission (${Number(b.commission_pct)}%)</span><span>− ${inr(b.commission_amount)}</span></div>
       <div class="kv"><span>You'll be paid</span><span class="bold">${inr(b.photographer_amount)}</span></div>
-      <div class="kv"><span>Payout</span><span class="right">${b.payout_status === "paid" ? "Sent " + (b.payout_at ? dayStr(b.payout_at) : "") : b.payout_status === "due" ? "Being processed" : "After the shoot"}</span></div>`
+      <div class="kv"><span>Payout</span><span class="right">${b.payout_status === "paid" ? "Sent " + (b.payout_at ? dayStr(b.payout_at) : "") : b.payout_status === "due" ? "Being processed" : b.balance_status === "due" ? "After the customer pays the balance" : "After the shoot"}</span></div>`
       : `<div class="kv"><span>You'll be paid</span><span class="bold">${inr(b.price)}</span></div>`}
       <div class="kv top"><span>Address</span><span class="right">${esc(b.address||"—")}<br><span class="xs muted2">${esc(b.city||"")} ${esc(b.pincode||"")}</span></span></div>
       ${maps && b.status !== "cancelled" && b.status !== "completed" ? `<a class="btn sm block mt8" href="${maps}" target="_blank" rel="noopener">${icon("pin",14)} Open in Maps</a>` : ""}
@@ -2587,7 +2616,9 @@ function vJob(p){
     ${b.status === "completed" ? `<div class="note mt16">${icon("check",18,"var(--green)")}<div>${b.payment_status === "not_required"
         ? "Shoot complete. Collect " + inr(b.price) + " from " + esc(firstName(b.customer_name)) + " if you haven't already."
         : b.payout_status === "paid" ? "Shoot complete. " + inr(b.photographer_amount) + " has been sent to you."
+        : b.balance_status === "due" ? "Shoot complete. " + esc(firstName(b.customer_name)) + " can now pay the balance of " + inr(balOf(b)) + " in the SnapPro app. Once they do, we'll send your " + inr(b.photographer_amount) + "."
         : "Shoot complete. SnapPro will send " + inr(b.photographer_amount) + " to your payout UPI ID."}</div></div>` : ""}
+    ${b.status === "shooting" && b.balance_status === "due" ? `<div class="note mt12">${icon("wallet",18,"var(--accent)")}<div>${esc(firstName(b.customer_name))} can pay the balance of ${inr(balOf(b))} in the SnapPro app now. Please don't take cash — paying in the app is what lets us pay you.</div></div>` : ""}
     ${canCancel ? `<button class="btn block danger mt12" onclick="jobStep('${b.id}','cancelled')">Cancel this booking</button>` : ""}
   </div>`;
 }
@@ -2753,6 +2784,17 @@ function loadRazorpay(){
 const normPhone = v => { let d = String(v||"").replace(/\D/g, ""); if(d.length === 12 && d.startsWith("91")) d = d.slice(2); if(d.length === 11 && d.startsWith("0")) d = d.slice(1); return /^[6-9]\d{9}$/.test(d) ? d : null; };
 const bookingRef = b => "SP-" + String(b.id || b).slice(0, 8).toUpperCase();
 const PAY_METHODS_LINE = "UPI (Google Pay, PhonePe, Paytm), debit or credit card, or net banking";
+/* Two online payments per booking: an advance (S.advance %, default 25) that
+   confirms it, and the balance once the shoot has started. The database
+   decides the real amounts; these only label them. */
+const advFor = price => Math.min(price || 0, Math.max(1, Math.round((price || 0) * S.advance / 100)));
+const advOf  = b => b.advance_amount != null ? b.advance_amount : advFor(b.price);
+const balOf  = b => b.balance_amount != null ? b.balance_amount : (b.price || 0) - advOf(b);
+const balanceDue = b => b.balance_status === "due" && (b.status === "shooting" || b.status === "completed") && balOf(b) > 0;
+const fullyPaid  = b => b.payment_status === "paid" && (b.balance_status === "paid" || b.balance_status === "not_required");
+/* what the customer has paid online (for refunds) */
+const paidOnline = b => b.balance_status === "not_required" ? (b.price || 0) : advOf(b) + (b.balance_status === "paid" ? balOf(b) : 0);
+const dueNowOf   = b => b.status === "pending_payment" ? advOf(b) : balanceDue(b) ? balOf(b) : 0;
 
 /* Open Razorpay Checkout for a booking. Re-uses the booking's Razorpay order. */
 async function startPayment(bookingId){
@@ -2789,7 +2831,7 @@ async function startPayment(bookingId){
         replaceStack("payResult", { order: res.order_id, booking: bookingId });
         try{
           const r = await api.pay("verify", Object.assign({ order_id: res.order_id }, resp));
-          S.payState = { order: res.order_id, state: r.status, booking: r.booking_id, amount: r.amount, bookingStatus: r.booking_status };
+          S.payState = { order: res.order_id, state: r.status, booking: r.booking_id, amount: r.amount, bookingStatus: r.booking_status, stage: r.stage || res.stage };
           if(r.status === "paid"){ if(S.prefs.pendingPay){ delete S.prefs.pendingPay; savePrefs(); } await refresh(false); }
           else if(r.status === "active" || r.status === "created"){ S.payState = null; checkPayment(res.order_id, 0); }
         }catch(e){ S.payState = { order: res.order_id, state: "error", message: e.message, booking: bookingId }; }
@@ -2813,7 +2855,7 @@ async function checkPayment(order, tries){
   if(st.order !== order){ S.payState = { order, state: "checking" }; }
   try{
     const r = await api.pay("status", { order_id: order });
-    S.payState = Object.assign({ order, state: r.status, booking: r.booking_id, amount: r.amount, bookingStatus: r.booking_status }, {});
+    S.payState = Object.assign({ order, state: r.status, booking: r.booking_id, amount: r.amount, bookingStatus: r.booking_status, stage: r.stage }, {});
     if(r.status === "paid"){
       if(S.prefs.pendingPay && S.prefs.pendingPay.order === order){ delete S.prefs.pendingPay; savePrefs(); }
       await refresh(false);
@@ -2832,7 +2874,10 @@ function vPayResult(p){
   const s = st ? st.state : "checking";
   const b = S.d.bookings.find(x => x.id === ((st && st.booking) || p.booking)) || null;
   const pgName = b ? (b.photographer_name || "your photographer") : "your photographer";
-  const amount = st && st.amount ? inr(st.amount) : (b ? inr(b.price) : "");
+  const stage = (st && st.stage) || p.stage || (b && b.status !== "pending_payment" ? "balance" : "advance");
+  const isBal = stage === "balance";
+  const amount = st && st.amount ? inr(st.amount) : (b ? inr(dueNowOf(b) || advOf(b)) : "");
+  const what = isBal ? "the balance" : "the advance";
   const retry = b ? `<button class="btn primary block mt16" ${S.loading.pay?"disabled":""} onclick="startPayment('${b.id}')">${S.loading.pay ? "Opening payment…" : "Try again — pay " + amount}</button>` : "";
   let body;
   if(s === "checking" || ((s === "active" || s === "created") && payPoll)){
@@ -2840,13 +2885,14 @@ function vPayResult(p){
       <p class="sm muted mt8">We're checking with the bank. This usually takes a few seconds — please don't pay again.</p></div>`;
   } else if(s === "paid"){
     body = `<div class="center"><div class="ok-mark">${icon("check",28,"#fff",3)}</div>
-      <h1 class="display-sm mt16">Payment received. You're booked!</h1>
-      <p class="sm muted mt8">${esc(firstName(pgName))} is confirmed for your shoot.</p></div>
+      <h1 class="display-sm mt16">${isBal ? "Balance paid. Thank you!" : "Advance received. You're booked!"}</h1>
+      <p class="sm muted mt8">${isBal ? "Your booking is fully paid." : esc(firstName(pgName)) + " is confirmed for your shoot."}</p></div>
       ${b ? `<div class="card mt20">
         <div class="kv"><span>Booking</span><span class="bold">${bookingRef(b)}</span></div>
         <div class="kv"><span>Photographer</span><span>${esc(pgName)}</span></div>
         <div class="kv"><span>Shoot</span><span>${esc(catById(b.category).name)}, ${whenStr(b.start_at)}</span></div>
-        <div class="kv"><span>Paid</span><span class="bold">${inr(b.price)}</span></div>
+        <div class="kv"><span>${isBal ? "Balance paid" : "Advance paid"}</span><span class="bold">${amount}</span></div>
+        ${!isBal && balOf(b) > 0 ? `<div class="kv"><span>Balance, after the shoot</span><span>${inr(balOf(b))}</span></div>` : ""}
         <div class="kv"><span>Payment ref</span><span class="xs">${esc(p.order)}</span></div></div>
         <button class="btn primary block mt16" onclick="replaceStack('booking',{id:'${b.id}'})">View booking</button>` : ""}
       <p class="xs muted2 mt12 center">A record of this payment is on your booking. Questions? ${SUPPORT_EMAIL}</p>`;
@@ -2859,7 +2905,7 @@ function vPayResult(p){
       ${b ? `<button class="btn block mt8" onclick="replaceStack('booking',{id:'${b.id}'})">Back to booking</button>` : ""}`;
   } else if(s === "expired" || s === "terminated"){
     body = `<div class="center"><h1 class="display-sm">That payment was closed</h1>
-      <p class="sm muted mt8">Your booking is still waiting for payment. Start a new payment to confirm it.</p></div>${retry}`;
+      <p class="sm muted mt8">${isBal ? "The balance is still due." : "Your booking is still waiting for the advance."} Start a new payment to finish.</p></div>${retry}`;
   } else if(s === "error"){
     body = `<div class="center"><h1 class="display-sm">We couldn't check your payment</h1>
       <p class="sm muted mt8">${esc(st.message || "")}</p></div>
@@ -2867,7 +2913,7 @@ function vPayResult(p){
       <p class="xs muted2 mt12 center">If money left your account, it's safe — we'll match it to your booking. Don't pay again; write to ${SUPPORT_EMAIL} if it doesn't show in a few minutes.</p>`;
   } else if(p.dismissed){                            // closed Razorpay without paying
     body = `<div class="center"><h1 class="display-sm">Payment not completed</h1>
-      <p class="sm muted mt8">You closed the payment window, so your booking isn't confirmed yet. Nothing was charged.</p></div>
+      <p class="sm muted mt8">You closed the payment window, so ${isBal ? "the balance is still due" : "your booking isn't confirmed yet"}. Nothing was charged.</p></div>
       ${b ? `<button class="btn primary block mt16" ${S.loading.pay?"disabled":""} onclick="startPayment('${b.id}')">${S.loading.pay ? "Opening payment…" : "Pay " + amount + " now"}</button>` : ""}
       <button class="btn block mt8" onclick="S.payState=null;checkPayment('${esc(p.order)}',0);softRender()">I've paid — check again</button>
       ${b ? `<button class="btn block mt8" onclick="replaceStack('booking',{id:'${b.id}'})">Back to booking</button>` : ""}`;
@@ -2882,11 +2928,14 @@ function vPayResult(p){
 
 /* customers pay through the confirm screen; this is the summary block */
 function payBox(price, pgFirst){
+  const adv = advFor(price), bal = price - adv;
   return `<div class="card soft mt16">
-    <div class="between"><span class="bold">Total to pay now</span><span class="h2">${inr(price)}</span></div>
+    <div class="between"><span class="bold">Advance to pay now (${S.advance}%)</span><span class="h2">${inr(adv)}</span></div>
+    ${bal > 0 ? `<div class="kv mt8"><span>Balance, paid in the app after the shoot</span><span>${inr(bal)}</span></div>` : ""}
+    <div class="kv"><span>Total</span><span class="bold">${inr(price)}</span></div>
     <div class="xs muted mt6">Pay securely with ${PAY_METHODS_LINE}. Payments are processed by Razorpay — SnapPro never sees your card details or UPI PIN.</div>
   </div>
-  <div class="note mt12">${icon("shield",18,"var(--green)")}<div>Your booking is confirmed as soon as the payment goes through. Cancel before ${esc(pgFirst)} sets off and you get a full refund.</div></div>
+  <div class="note mt12">${icon("shield",18,"var(--green)")}<div>Your booking is confirmed as soon as the advance goes through. Cancel before ${esc(pgFirst)} sets off and you get the advance back in full.</div></div>
   <p class="xs muted2 mt8">By paying you agree to our <a href="/terms.html" target="_blank" rel="noopener">terms</a> and <a href="/refunds.html" target="_blank" rel="noopener">cancellation &amp; refund policy</a>.</p>`;
 }
 

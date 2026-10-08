@@ -155,7 +155,13 @@ alter table public.bookings
   add column if not exists payout_at           timestamptz,
   add column if not exists payout_by           uuid,
   add column if not exists cancelled_from      text,      -- status the booking was in when cancelled
-  add column if not exists cancelled_by        text;      -- customer / photographer
+  add column if not exists cancelled_by        text,      -- customer / photographer
+  -- 25% advance online at booking, the rest online after the shoot
+  add column if not exists advance_pct         numeric(5,2),
+  add column if not exists advance_amount      integer,
+  add column if not exists balance_amount      integer,
+  add column if not exists balance_status      text,      -- not_required / pending / due / paid
+  add column if not exists balance_paid_at     timestamptz;
 -- bookings made before online payments existed were paid directly
 select set_config('snappro.system', 'on', false);
 update public.bookings set payment_status = 'not_required' where payment_status is null;
@@ -180,6 +186,8 @@ create table if not exists public.platform_settings (
   updated_at timestamptz not null default now()
 );
 insert into public.platform_settings (key, value) values ('commission_pct', '20')
+on conflict (key) do nothing;
+insert into public.platform_settings (key, value) values ('advance_pct', '25')
 on conflict (key) do nothing;
 
 create table if not exists public.messages (
@@ -257,6 +265,10 @@ as $$ select coalesce(public.staff_role() = 'super_admin', false) $$;
 create or replace function public.commission_pct()
 returns numeric language sql stable security definer set search_path = public
 as $$ select coalesce((select (value #>> '{}')::numeric from public.platform_settings where key = 'commission_pct'), 20) $$;
+
+create or replace function public.advance_pct()
+returns numeric language sql stable security definer set search_path = public
+as $$ select coalesce((select (value #>> '{}')::numeric from public.platform_settings where key = 'advance_pct'), 25) $$;
 
 create or replace function public.snappro_system()
 returns boolean language sql stable
@@ -435,6 +447,12 @@ begin
   new.photographer_amount := o.price - new.commission_amount;
   new.payout_amount     := new.photographer_amount;
   new.payout_status     := 'not_due';
+  -- the advance confirms the booking; the balance is paid after the shoot
+  new.advance_pct       := public.advance_pct();
+  new.advance_amount    := least(o.price, greatest(1, round(o.price * new.advance_pct / 100.0)::int));
+  new.balance_amount    := o.price - new.advance_amount;
+  new.balance_status    := case when new.balance_amount > 0 then 'pending' else 'not_required' end;
+  new.balance_paid_at   := null;
   new.paid_at := null; new.payout_ref := null; new.payout_at := null; new.payout_by := null;
   new.cancelled_from := null; new.cancelled_by := null;
   new.created_at        := now();
@@ -498,7 +516,13 @@ begin
     new.cancelled_by := case when me = old.customer_id then 'customer' when me = old.photographer_id then 'photographer' else 'system' end;
     if old.payment_status = 'paid' then new.payment_status := 'refund_due'; end if;
   end if;
-  if new.status = 'completed' and old.status <> 'completed' and old.payment_status = 'paid' then
+  -- the balance can be paid once the shoot has started
+  if new.status = 'shooting' and old.status <> 'shooting' and old.balance_status = 'pending' then
+    new.balance_status := 'due';
+  end if;
+  -- the photographer is owed their share once the shoot is done AND fully paid
+  if new.status = 'completed' and old.status <> 'completed' and old.payment_status = 'paid'
+     and coalesce(new.balance_status, 'not_required') in ('paid','not_required') then
     new.payout_status := 'due';
   end if;
   new.updated_at := now();
@@ -959,9 +983,11 @@ end $$;
 
 -- =====================================================================
 -- 7c. PAYMENTS (Razorpay)
---     Customers pay the full booking amount online. Money settles to the
---     SnapPro merchant account; SnapPro keeps its commission and pays the
---     photographer separately (payout_status on bookings tracks that).
+--     Customers pay online in two parts: an advance (25% by default,
+--     platform_settings.advance_pct) that confirms the booking, and the
+--     balance once the shoot has started. Money settles to the SnapPro
+--     merchant account; SnapPro keeps its commission and pays the
+--     photographer separately once both parts are paid (payout_status).
 --
 --     The browser never changes payment state. Only the server functions
 --     (Supabase Edge Functions using the service key) call the pay_*
@@ -969,8 +995,8 @@ end $$;
 --     signed webhook, or Razorpay's own API). No card, CVV, UPI PIN or UPI
 --     ID is stored.
 --
---     Each booking keeps ONE Razorpay order. Razorpay refuses further
---     payments once an order is paid, so a booking can't be paid twice.
+--     Each part (advance / balance) keeps ONE Razorpay order. Razorpay refuses
+--     further payments once an order is paid, so nothing can be paid twice.
 --
 --     Later, automatic splits: Razorpay Route — create a linked account per
 --     photographer, store it in photographers.payout_account_id and add
@@ -1020,6 +1046,10 @@ alter table public.payments
   add column if not exists provider text not null default 'razorpay',
   add column if not exists gateway_order_id text,
   add column if not exists gateway_payment_id text;
+alter table public.payments
+  add column if not exists stage text not null default 'advance';
+alter table public.payments drop constraint if exists payments_stage_check;
+alter table public.payments add constraint payments_stage_check check (stage in ('advance','balance'));
 alter table public.payments drop column if exists payment_session_id;
 alter table public.payments drop column if exists session_expires_at;
 alter table public.payments alter column environment set default 'test';
@@ -1032,6 +1062,32 @@ alter table public.payments drop constraint if exists payments_refund_status_che
 alter table public.payments add constraint payments_refund_status_check
   check (refund_status in ('none','refund_due','refund_pending','refunded','partially_refunded','refund_failed'));
 create index if not exists idx_payments_booking  on public.payments(booking_id);
+
+-- Bookings from before the advance/balance split: anything already paid (or
+-- paid directly) was paid in full; unpaid ones switch to the advance.
+do $$ begin
+  perform set_config('snappro.system', 'on', true);
+  update public.bookings
+     set advance_pct = public.advance_pct(),
+         advance_amount = least(price, greatest(1, round(price * public.advance_pct() / 100.0)::int)),
+         balance_amount = price - least(price, greatest(1, round(price * public.advance_pct() / 100.0)::int)),
+         balance_status = case when price - least(price, greatest(1, round(price * public.advance_pct() / 100.0)::int)) > 0
+                               then 'pending' else 'not_required' end
+   where balance_status is null and status = 'pending_payment' and payment_status = 'unpaid' and coalesce(price,0) >= 1;
+  update public.bookings
+     set advance_amount = coalesce(price,0), balance_amount = 0, balance_status = 'not_required'
+   where balance_status is null;
+  -- full-amount orders opened for those unpaid bookings are replaced by advance orders
+  update public.payments p set status = 'terminated', updated_at = now()
+    from public.bookings b
+   where b.id = p.booking_id and p.status in ('created','active') and p.stage = 'advance'
+     and b.status = 'pending_payment' and p.amount <> b.advance_amount;
+  perform set_config('snappro.system', '', true);
+end $$;
+do $$ begin
+  alter table public.bookings add constraint bookings_balance_status_check
+    check (balance_status in ('not_required','pending','due','paid'));
+exception when duplicate_object then null; end $$;
 create index if not exists idx_payments_customer on public.payments(customer_id);
 create index if not exists idx_payments_created  on public.payments(created_at desc);
 create unique index if not exists uniq_payments_gateway_order on public.payments(gateway_order_id) where gateway_order_id is not null;
@@ -1124,26 +1180,50 @@ drop function if exists public.pay_set_session(text, text, text, timestamptz);
 drop function if exists public.pay_record(text, text, text, text, numeric, text, text, text, text);
 drop function if exists public.pay_refund_update(text, text, text, text, text);
 
+-- Which part of a booking is payable right now, and how much.
+create or replace function public._pay_stage(b public.bookings)
+returns table(stage text, amount integer, commission numeric, photographer numeric)
+language plpgsql stable set search_path = public
+as $$
+declare adv int := coalesce(b.advance_amount, b.price); adv_comm int := least(coalesce(b.commission_amount,0), adv);
+begin
+  if b.status = 'pending_payment' and b.payment_status = 'unpaid' then
+    return query select 'advance'::text, adv, adv_comm::numeric, (adv - adv_comm)::numeric;
+  elsif b.status in ('shooting','completed') and b.balance_status = 'due' and coalesce(b.balance_amount,0) >= 1 then
+    return query select 'balance'::text, b.balance_amount,
+                        (coalesce(b.commission_amount,0) - adv_comm)::numeric,
+                        (b.balance_amount - (coalesce(b.commission_amount,0) - adv_comm))::numeric;
+  elsif b.status = 'cancelled' then
+    raise exception 'This booking can''t be paid for any more';
+  elsif b.balance_status = 'paid' or (b.payment_status = 'paid' and b.balance_status = 'not_required') then
+    raise exception 'This booking is already paid';
+  elsif b.balance_status = 'pending' then
+    raise exception 'The balance can be paid once the shoot starts';
+  else
+    raise exception 'This booking can''t be paid for any more';
+  end if;
+end $$;
+
 -- 1. Start a payment for a booking (called by the server with the signed-in customer's id)
 create or replace function public.pay_begin(p_booking uuid, p_customer uuid)
 returns jsonb language plpgsql security definer set search_path = public
 as $$
-declare b record; u record; pr record; open_orders jsonb;
+declare b public.bookings; u record; pr record; open_orders jsonb; st record;
 begin
   select * into b from public.bookings where id = p_booking for update;
   if not found or b.customer_id is distinct from p_customer then raise exception 'Booking not found'; end if;
-  if b.payment_status = 'paid' then raise exception 'This booking is already paid'; end if;
-  if b.status <> 'pending_payment' then raise exception 'This booking can''t be paid for any more'; end if;
   if coalesce(b.price,0) < 1 then raise exception 'Invalid booking amount'; end if;
+  select * into st from public._pay_stage(b);
   select email into u from auth.users where id = p_customer;
   select name, phone into pr from public.profiles where id = p_customer;
   select coalesce(jsonb_agg(jsonb_build_object('order_id', order_id, 'gateway_order_id', gateway_order_id,
                                                'environment', environment, 'status', status, 'amount', amount)
                             order by created_at desc), '[]') into open_orders
-    from public.payments where booking_id = p_booking and status in ('created','active','failed','user_dropped','cancelled');
+    from public.payments where booking_id = p_booking and stage = st.stage and amount = st.amount
+     and status in ('created','active','failed','user_dropped','cancelled');
   return jsonb_build_object(
-    'booking_id', b.id, 'amount', b.price, 'currency', 'INR',
-    'commission_amount', b.commission_amount, 'photographer_amount', b.photographer_amount,
+    'booking_id', b.id, 'stage', st.stage, 'amount', st.amount, 'total', b.price, 'currency', 'INR',
+    'commission_amount', st.commission, 'photographer_amount', st.photographer,
     'photographer_id', b.photographer_id, 'category', b.category, 'start_at', b.start_at,
     'photographer_name', b.photographer_name,
     'customer_email', u.email, 'customer_name', pr.name, 'customer_phone', pr.phone,
@@ -1154,21 +1234,21 @@ end $$;
 create or replace function public.pay_create(p_booking uuid, p_customer uuid, p_order_id text, p_env text)
 returns uuid language plpgsql security definer set search_path = public
 as $$
-declare b record; pid uuid;
+declare b public.bookings; st record; pid uuid;
 begin
   if p_order_id !~ '^[A-Za-z0-9_-]{3,40}$' then raise exception 'Bad order id'; end if;
   select * into b from public.bookings where id = p_booking for update;
   if not found or b.customer_id is distinct from p_customer then raise exception 'Booking not found'; end if;
-  if b.payment_status = 'paid' then raise exception 'This booking is already paid'; end if;
-  if b.status <> 'pending_payment' then raise exception 'This booking can''t be paid for any more'; end if;
-  -- two taps / two tabs at the same moment: only one open order per booking
-  if exists (select 1 from public.payments where booking_id = b.id and status in ('created','active')) then
+  select * into st from public._pay_stage(b);
+  -- two taps / two tabs at the same moment: only one open order per part
+  if exists (select 1 from public.payments where booking_id = b.id and stage = st.stage and amount = st.amount
+                and status in ('created','active')) then
     raise exception 'A payment for this booking is already open. Please wait a moment and try again.';
   end if;
   insert into public.payments (order_id, booking_id, customer_id, photographer_id, amount, currency,
-                               commission_amount, photographer_amount, provider, environment)
-  values (p_order_id, b.id, b.customer_id, b.photographer_id, b.price, 'INR',
-          coalesce(b.commission_amount,0), coalesce(b.photographer_amount, b.price), 'razorpay', p_env)
+                               commission_amount, photographer_amount, provider, environment, stage)
+  values (p_order_id, b.id, b.customer_id, b.photographer_id, st.amount, 'INR',
+          st.commission, st.photographer, 'razorpay', p_env, st.stage)
   returning id into pid;
   return pid;
 end $$;
@@ -1248,6 +1328,25 @@ begin
   end if;
 
   perform set_config('snappro.system', 'on', true);
+  if pay.stage = 'balance' then
+    if b.balance_status = 'paid' then
+      update public.payments set is_duplicate = true, refund_status = 'refund_due',
+             note = 'Duplicate payment: the balance was already paid' where id = pay.id;
+      perform set_config('snappro.system', '', true);
+      return jsonb_build_object('result','duplicate_payment','booking_id',b.id,'status','paid','order_id',pay.order_id);
+    elsif b.status = 'cancelled' then
+      update public.payments set refund_status = 'refund_due', note = 'Balance paid after the booking was cancelled' where id = pay.id;
+      perform set_config('snappro.system', '', true);
+      return jsonb_build_object('result','paid_after_cancel','booking_id',b.id,'status','paid','order_id',pay.order_id);
+    end if;
+    update public.bookings
+       set balance_status = 'paid', balance_paid_at = now(), updated_at = now(),
+           payout_status = case when status = 'completed' and payment_status = 'paid' and payout_status = 'not_due'
+                                then 'due' else payout_status end
+     where id = b.id;
+    perform set_config('snappro.system', '', true);
+    return jsonb_build_object('result','balance_paid','booking_id',b.id,'status','paid','order_id',pay.order_id);
+  end if;
   if b.payment_status in ('paid','refund_due','refund_pending','refunded','partially_refunded') then
     update public.payments set is_duplicate = true, refund_status = 'refund_due',
            note = 'Duplicate payment: the booking was already paid' where id = pay.id;
@@ -1259,7 +1358,9 @@ begin
     perform set_config('snappro.system', '', true);
     return jsonb_build_object('result','paid_after_cancel','booking_id',b.id,'status','paid','order_id',pay.order_id);
   else
-    update public.bookings set status = 'confirmed', payment_status = 'paid', paid_at = now(), updated_at = now()
+    update public.bookings set status = 'confirmed', payment_status = 'paid', paid_at = now(), updated_at = now(),
+           -- an order opened for the full amount (before the advance existed) covers the balance too
+           balance_status = case when pay.amount >= b.price then 'not_required' else balance_status end
      where id = b.id;
     perform set_config('snappro.system', '', true);
     return jsonb_build_object('result','confirmed','booking_id',b.id,'status','paid','order_id',pay.order_id);
@@ -1289,7 +1390,8 @@ begin
   values (rid, pay.id, pay.order_id, round(p_amount,2), left(coalesce(p_reason,''),100), p_staff);
   update public.payments set refund_status = 'refund_pending', updated_at = now() where id = pay.id;
   perform set_config('snappro.system', 'on', true);
-  update public.bookings set payment_status = 'refund_pending' where id = pay.booking_id and not pay.is_duplicate;
+  update public.bookings set payment_status = 'refund_pending'
+   where id = pay.booking_id and not pay.is_duplicate and pay.stage = 'advance';
   perform set_config('snappro.system', '', true);
   return jsonb_build_object('refund_id', rid, 'order_id', pay.order_id, 'amount', round(p_amount,2),
                             'gateway_payment_id', pay.gateway_payment_id);
@@ -1336,11 +1438,12 @@ begin
            refund_status = case when total >= amount then 'refunded' else 'partially_refunded' end, updated_at = now()
      where id = pay.id;
     update public.bookings set payment_status = case when total >= pay.amount then 'refunded' else 'partially_refunded' end
-     where id = pay.booking_id and not pay.is_duplicate;
+     where id = pay.booking_id and not pay.is_duplicate and pay.stage = 'advance';
   elsif st in ('cancelled','rejected','failed') then
     update public.payments set refund_status = case when total > 0 then 'partially_refunded' else 'refund_failed' end, updated_at = now()
      where id = pay.id;
-    update public.bookings set payment_status = 'refund_due' where id = pay.booking_id and payment_status = 'refund_pending';
+    update public.bookings set payment_status = 'refund_due'
+     where id = pay.booking_id and payment_status = 'refund_pending' and pay.stage = 'advance';
   end if;
   perform set_config('snappro.system', '', true);
   return jsonb_build_object('result','recorded','status',st);
@@ -1350,7 +1453,8 @@ end $$;
 create or replace function public.pay_lookup(p_order_id text)
 returns jsonb language sql stable security definer set search_path = public
 as $$ select to_jsonb(x) from (select p.order_id, p.gateway_order_id, p.gateway_payment_id, p.customer_id, p.booking_id,
-                                     p.status, p.amount, p.environment, p.refund_status, b.status as booking_status
+                                     p.status, p.amount, p.environment, p.refund_status, p.stage,
+                                     b.status as booking_status, b.balance_status
                                 from public.payments p left join public.bookings b on b.id = p.booking_id
                                where p.order_id = p_order_id or p.gateway_order_id = p_order_id
                                order by (p.order_id = p_order_id) desc limit 1) x $$;
@@ -1389,6 +1493,7 @@ begin
 end $$;
 
 -- The server functions use the service key; nobody else may call pay_*.
+revoke all on function public._pay_stage(public.bookings)            from public, anon, authenticated;
 revoke all on function public.pay_begin(uuid, uuid)                    from public, anon, authenticated;
 revoke all on function public.pay_create(uuid, uuid, text, text)       from public, anon, authenticated;
 revoke all on function public.pay_set_gateway(text, text)              from public, anon, authenticated;
@@ -1411,6 +1516,27 @@ grant execute on function public.admin_mark_payout(uuid, text) to authenticated;
 grant execute on function public.admin_set_commission(numeric) to authenticated;
 -- nobody writes payment tables directly from the browser
 revoke insert, update, delete on public.payments, public.payment_events, public.refunds, public.platform_settings from anon, authenticated;
+
+-- A photographer's own quotes, with what happened to each one:
+-- open / chosen (customer picked it, advance not paid yet) / booked / closed.
+create or replace function public.my_offers()
+returns table(id uuid, request_id uuid, price integer, eta_min integer, note text, created_at timestamptz, state text)
+language sql stable security definer set search_path = public
+as $$
+  select o.id, o.request_id, o.price, o.eta_min, o.note, o.created_at,
+         case
+           when exists (select 1 from public.bookings b where b.offer_id = o.id and b.status = 'pending_payment') then 'chosen'
+           when exists (select 1 from public.bookings b where b.offer_id = o.id and b.status <> 'cancelled') then 'booked'
+           when r.status in ('broadcasting','awaiting') then 'open'
+           else 'closed'
+         end
+    from public.offers o left join public.requests r on r.id = o.request_id
+   where o.photographer_id = auth.uid()
+   order by o.created_at desc
+   limit 60
+$$;
+revoke all on function public.my_offers() from public, anon;
+grant execute on function public.my_offers() to authenticated;
 
 -- =====================================================================
 -- 8. FUNCTION PERMISSIONS
@@ -1576,6 +1702,7 @@ begin
                               where status = 'paid' and not is_duplicate and refund_status in ('none')
                                 and public._ist(paid_at) between p_from and p_to) end,
     'refunds_due',       (select count(*) from public.payments where refund_status in ('refund_due','refund_failed')),
+    'balances_due',      (select count(*) from public.bookings where balance_status = 'due'),
     'payouts_due',       case when money then (select coalesce(sum(photographer_amount),0) from public.bookings where payout_status = 'due') end,
     'payments_failed',   (select count(*) from public.payments where status in ('failed','user_dropped') and public._ist(created_at) between p_from and p_to),
     'now_open_requests',   (select count(*) from public.requests where status = 'broadcasting' and expires_at > now()),

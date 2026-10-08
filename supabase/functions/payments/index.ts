@@ -1,7 +1,9 @@
 // SnapPro — payments (Supabase Edge Function), Razorpay
 //
 // Actions (POST JSON, signed-in user's Supabase token in Authorization):
-//   { action: "create", booking_id }                    customer → Razorpay order for Checkout
+//   { action: "create", booking_id }                    customer → Razorpay order for whatever is due now:
+//                                                        the advance (confirms the booking) or, once the
+//                                                        shoot has started, the balance
 //   { action: "verify", order_id, razorpay_payment_id, razorpay_order_id, razorpay_signature }
 //                                                        customer → after Checkout's success handler
 //   { action: "status", order_id }                       customer → ask Razorpay what happened
@@ -162,9 +164,11 @@ async function createOrder(cfg, fetchImpl, user, body) {
   const checkout = (orderRef, gatewayOrderId) => ({
     order_id: orderRef, gateway_order_id: gatewayOrderId, key_id: cfg.keyId, mode: cfg.mode,
     amount: Math.round(Number(info.amount) * 100), currency: "INR",
-    name: "SnapPro", description: ("Photography with " + (info.photographer_name || "your photographer")).slice(0, 255),
+    name: "SnapPro",
+    description: ((info.stage === "balance" ? "Balance for photography with " : "Advance for photography with ") + (info.photographer_name || "your photographer")).slice(0, 255),
+    stage: info.stage || "advance", total: info.total,
     prefill: { name: String(info.customer_name || "").slice(0, 100), email: info.customer_email || "", contact: "+91" + phone },
-    notes: { booking_id: String(info.booking_id) },
+    notes: { booking_id: String(info.booking_id), stage: String(info.stage || "advance") },
   });
 
   // One Razorpay order per booking: re-use it (Razorpay accepts retries on the
@@ -174,7 +178,7 @@ async function createOrder(cfg, fetchImpl, user, body) {
     if (o.gateway_order_id && o.environment === cfg.mode) {
       const v = await verifyOrder(cfg, fetchImpl, o.gateway_order_id);
       if (v && (v.result === "confirmed" || v.result === "already_paid" || v.status === "paid")) {
-        return { status: "paid", booking_id: info.booking_id, order_id: o.order_id };
+        return { status: "paid", booking_id: info.booking_id, order_id: o.order_id, stage: info.stage };
       }
       if (!reuse && v && v.result !== "not_found") { reuse = o; continue; }
     }
@@ -189,7 +193,7 @@ async function createOrder(cfg, fetchImpl, user, body) {
   try {
     order = await rzp(cfg, fetchImpl, "POST", "/orders", {
       amount: Math.round(Number(info.amount) * 100), currency: "INR", receipt: ref,
-      notes: { booking_id: String(info.booking_id), customer_id: String(user.id) },
+      notes: { booking_id: String(info.booking_id), customer_id: String(user.id), stage: String(info.stage || "advance") },
     });
   } catch (_) {
     await rpc(cfg, fetchImpl, "pay_record", { p_order_id: ref, p_event_key: null, p_status: "TERMINATED" }).catch(() => {});
@@ -208,7 +212,8 @@ async function owned(cfg, fetchImpl, user, ref) {
 }
 async function result(cfg, fetchImpl, ref) {
   const now = await rpc(cfg, fetchImpl, "pay_lookup", { p_order_id: ref });
-  return { order_id: now.order_id, status: now.status, booking_id: now.booking_id, booking_status: now.booking_status, amount: now.amount, refund_status: now.refund_status };
+  return { order_id: now.order_id, status: now.status, booking_id: now.booking_id, booking_status: now.booking_status,
+           amount: now.amount, refund_status: now.refund_status, stage: now.stage || "advance", balance_status: now.balance_status };
 }
 
 async function verifyCheckout(cfg, fetchImpl, user, body) {
