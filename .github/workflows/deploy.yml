@@ -28,12 +28,42 @@ jobs:
           curl -s --ftp-pasv -Q "-DELE public_html/index.html" -Q "-RMD public_html" -u "${{ secrets.FTP_USERNAME }}:${{ secrets.FTP_PASSWORD }}" "ftp://${{ steps.prep.outputs.server }}/" -o /dev/null || true
 
       - name: Sync files to Hostinger
+        id: sync1
+        continue-on-error: true
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server: ${{ steps.prep.outputs.server }}
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
           server-dir: ./
+          timeout: 180000
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/.github*
+            **/.github*/**
+            supabase/**
+            README.md
+            **/*.md
+            LICENSE
+            .gitignore
+            Dockerfile
+            nginx.conf
+            .dockerignore
+
+      - name: Wait before retry
+        if: steps.sync1.outcome == 'failure'
+        run: sleep 30
+
+      - name: Sync files to Hostinger (retry)
+        if: steps.sync1.outcome == 'failure'
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ steps.prep.outputs.server }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          server-dir: ./
+          timeout: 180000
           exclude: |
             **/.git*
             **/.git*/**
