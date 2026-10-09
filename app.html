@@ -415,6 +415,29 @@ button.stat:hover{border-color:var(--muted-2)}
 button.stat:active{transform:scale(.98)}
 button.stat .s-l svg{vertical-align:-1px}
 
+/* to-do list on the home screens */
+.todo{display:flex;flex-direction:column;gap:8px}
+.todo-i{display:flex;align-items:center;gap:10px;background:var(--paper);border:1px solid var(--border);border-radius:var(--r);padding:10px 12px 10px 14px}
+.todo-i.accent{border-color:#ecc3b1;background:#fdf5f0}
+.todo-i.green{border-color:#c9dfd1;background:#f3f8f4}
+.todo-main{display:flex;align-items:center;gap:12px;flex:1;min-width:0;text-align:left;background:none;border:0;padding:0;cursor:pointer;color:inherit}
+.todo-main .xs{margin-top:1px}
+.todo-i .btn{flex-shrink:0}
+.todo-more{align-self:flex-start;margin-top:2px}
+.avatar-btn{background:none;border:0;padding:0;cursor:pointer;border-radius:50%}
+/* how it works */
+.how{display:flex;flex-direction:column;gap:14px}
+.how-i{display:flex;gap:12px;align-items:flex-start}
+.how-n{width:26px;height:26px;border-radius:50%;background:var(--text);color:#fff;font-size:12.5px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
+.how-n.sm{width:20px;height:20px;font-size:11px;margin-right:8px;background:var(--accent)}
+.how-card{background:var(--surface-2);border-color:var(--border-soft)}
+.how-mini{display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;font-size:13px}
+.how-mini>div{display:flex;align-items:center}
+.sm-x{width:28px;height:28px}
+.bottom-bar .grow{min-width:0}
+@media (max-width:380px){.how-mini{grid-template-columns:1fr}}
+.card.tap.warn-card{display:flex}
+
 </style>
 </head>
 <body>
@@ -512,6 +535,9 @@ function icon(name, size=20, color="currentColor", w=2){
     logout:'<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/>',
     edit:'<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
     briefcase:'<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+    help:'<circle cx="12" cy="12" r="9"/><path d="M9.6 9.2a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.2-2.4 3.6"/><path d="M12 17h.01"/>',
+    doc:'<path d="M14 3H7a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V7z"/><path d="M14 3v4h4M9 12h6M9 16h6"/>',
+    arrow:'<path d="M5 12h14M13 6l6 6-6 6"/>',
     chevron:'<path d="M9 18l6-6-6-6"/>'
   };
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[name]||""}</svg>`;
@@ -1839,9 +1865,12 @@ function vCustHome(){
     <div class="between">
       <div><div class="h2">Hi, ${esc(firstName(S.me.name) || "there")}</div>
         <button class="loc-chip" onclick="push('editLoc')">${icon("pin",13,"var(--accent)")} ${esc(city || "Set your location")} ${icon("chevron",12,"var(--muted-2)")}</button></div>
-      ${avatarHtml(S.me.id, S.me.name, "av-40")}
+      <button class="avatar-btn" aria-label="Your profile" onclick="go('profile')">${avatarHtml(S.me.id, S.me.name, "av-40")}</button>
     </div>
+    ${actionsHtml(customerActions())}
+    ${howCard()}
 
+    ${active.length || open.length ? `<div class="between mt20"><div class="sec-title" style="margin:0">Your shoots</div><button class="xs accent bold" onclick="go('activity')">See all</button></div>` : ""}
     ${active.map(b => bookingCard(b)).join("")}
     ${open.map(r => requestCard(r)).join("")}
 
@@ -1883,6 +1912,7 @@ function bookingCard(b){
         <div class="xs muted2">${esc(catById(b.category).name)} · ${whenStr(b.start_at)}</div></div>
       ${statusChip(BK_LABEL[b.status], BK_CHIP[b.status])}</div>
     <div class="steps mt12">${BK_FLOW.slice(0,4).map((s,i) => `<i class="${BK_FLOW.indexOf(b.status)>=i?'on':''}"></i>`).join("")}</div>
+    ${bkHint(b) ? `<div class="xs accent bold mt8" style="text-align:left">${bkHint(b)}</div>` : ""}
   </button>`;
 }
 
@@ -1962,7 +1992,9 @@ function vPgProfile(p){
       : `<div class="card soft sm muted">No reviews yet — reviews appear after completed shoots.</div>`}
   </div>
   ${offer ? `<div class="bottom-bar"><div><div class="xs muted2">Their quote</div><div class="h3">${inr(offer.price)}</div></div>
-    <button class="btn primary grow" onclick="push('confirm',{offerId:'${offer.id}'})">Book ${esc(firstName(pg.display_name))}</button></div>` : `<div style="height:24px"></div>`}`;
+    <button class="btn primary grow" onclick="push('confirm',{offerId:'${offer.id}'})">Book ${esc(firstName(pg.display_name))}</button></div>`
+    : isCustomer() && pg.id !== S.me.id ? `<div class="bottom-bar"><div class="grow"><div class="sm bold">Like ${esc(firstName(pg.display_name))}'s work?</div><div class="xs muted2">Post your shoot — photographers in ${esc(pg.city || "your city")} who do it send you a price.</div></div>
+    <button class="btn primary" onclick="startRequest(null,'${esc((pg.categories||[])[0] || "")}' || null)">Post a shoot</button></div>` : `<div style="height:24px"></div>`}`;
 }
 function vPhoto(p){
   return `<div class="photo-view"><button class="iconbtn photo-close" aria-label="Close" onclick="pop()">${icon("x",20)}</button><img src="${esc(p.url)}" alt=""></div>`;
@@ -2092,7 +2124,7 @@ function vRequest(p){
         <div class="h2 center">Your shoot is live</div>
         <div class="sm muted center mt8">Photographers in ${esc(r.city||"your city")} who shoot ${esc(cat.name.toLowerCase())} can see it. Quotes will appear here — keep this page open or come back later.</div>
         <div class="center mt12"><span class="chip accent">Open for quotes · <span data-until="${esc(r.expires_at)}">${leftStr(r.expires_at)}</span></span></div>
-      </div>`
+      </div>${waitingSteps(r)}`
     : emptyState("⏳", "No quotes this time", "No photographer quoted before your request closed. You can post it again.",
         `<button class="btn primary sm mt12" onclick="repostRequest('${r.id}')">Post again</button>`)) : ""}
 
@@ -2231,6 +2263,7 @@ function vBooking(p){
         ${b.status !== "cancelled" && !unpaid ? `<button class="btn sm grow" onclick="push('chat',{id:'${b.id}'})">${icon("chat",14)} Message</button>` : ""}
         <button class="btn sm grow" onclick="push('pg',{id:'${pg.id}'})">View profile</button>
       </div>
+      ${b.status === "confirmed" ? `<div class="xs muted mt12">${icon("check",12,"var(--green)")} You're booked. ${esc(firstName(pg.display_name))} will tap “On the way” when they set off — you'll see it here. Use <b>Message</b> to share directions or what you want shot.</div>` : ""}
     </div>
     ${unpaid ? `<div class="card mt12 pay-due">
         <div class="bold">Waiting for the advance</div>
@@ -2381,7 +2414,8 @@ function vActivity(){
   const closed = S.d.requests.filter(r => !reqIsOpen(r) && r.status !== "matched");
   if(!open.length && !S.d.bookings.length && !closed.length)
     return `<div class="pad"><div class="h2">Your shoots</div></div>` + emptyState("📷", "No shoots yet", "When you post a shoot, it'll show up here.", `<button class="btn primary sm mt12" onclick="startRequest()">Book a photographer</button>`);
-  return `<div class="pad"><div class="h2">Your shoots</div>
+  return `<div class="pad"><div class="between"><div class="h2">Your shoots</div><button class="btn sm" onclick="startRequest()">${icon("plus",14)} New shoot</button></div>
+    ${actionsHtml(customerActions())}
     ${up.length ? `<div class="sec-title mt16">Upcoming</div>${up.map(bookingCard).join("")}` : ""}
     ${open.length ? `<div class="sec-title mt16">Waiting for quotes</div>${open.map(requestCard).join("")}` : ""}
     ${past.length ? `<div class="sec-title mt20">Past bookings</div>${past.map(bookingCard).join("")}` : ""}
@@ -2400,6 +2434,7 @@ function vProfile(){
       <button class="li" onclick="push('editLoc')">${icon("pin",18,"var(--muted)")}<div class="grow"><div class="sm bold">Location</div><div class="xs muted2">${esc([me.city, me.state, me.pincode].filter(Boolean).join(", ") || "Not set")}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
       <a class="li" href="mailto:${SUPPORT_EMAIL}">${icon("mail",18,"var(--muted)")}<div class="grow"><div class="sm bold">Help and support</div><div class="xs muted2">${SUPPORT_EMAIL}</div></div>${icon("chevron",16,"var(--muted-2)")}</a>
     </div>
+    ${helpCard()}
     <button class="btn block mt16" onclick="logout()">${icon("logout",16)} Log out</button>
   </div>`;
 }
@@ -2488,7 +2523,9 @@ function vPgHome(){
       <button class="stat tap" onclick="push('pgReviews')"><div class="s-v">${pg.review_count ? "★ " + Number(pg.rating).toFixed(1) : "New"}</div><div class="s-l">${pg.review_count ? pg.review_count + " review" + (pg.review_count>1?"s":"") : "No reviews yet"} ${icon("chevron",11,"var(--muted-2)")}</div></button>
     </div>
 
-    ${active.length ? `<div class="sec-title mt20">Upcoming shoots</div>${active.map(bookingCard).join("")}` : ""}
+    ${actionsHtml(photographerActions())}
+    ${howCard()}
+    ${active.length ? `<div class="between mt20"><div class="sec-title" style="margin:0">Upcoming shoots</div><button class="xs accent bold" onclick="go('jobs')">See all</button></div>${active.map(bookingCard).join("")}` : ""}
 
     <div class="between mt20"><div class="sec-title" style="margin:0">New requests for you</div>
       <button class="xs accent bold" onclick="go('requests')">See all</button></div>
@@ -3045,6 +3082,175 @@ function payBox(price, pgFirst){
 }
 
 /* ============================================================
+   GUIDANCE — "what do I do next?"
+   Nothing here adds rules; it points people at what already exists.
+   ============================================================ */
+const soonMs = b => toMs(b.start_at) - Date.now();
+
+/* ---------- things the customer should do now ---------- */
+function customerActions(){
+  const out = [];
+  S.d.bookings.forEach(b => {
+    const pgn = esc(firstName(b.photographer_name || "your photographer"));
+    if(b.status === "pending_payment")
+      out.push({ key: "pay" + b.id, ic: "wallet", tone: "accent", urgent: true,
+        title: `Pay the advance to book ${pgn}`, sub: `${inr(advOf(b))} now · ${esc(catById(b.category).name)}, ${whenStr(b.start_at)}`,
+        btn: "Pay " + inr(advOf(b)), go: `startPayment('${b.id}')`, open: `push('booking',{id:'${b.id}'})` });
+    else if(balanceDue(b))
+      out.push({ key: "bal" + b.id, ic: "wallet", tone: "accent", urgent: true,
+        title: `Balance due for your shoot with ${pgn}`, sub: `Pay the remaining ${inr(balOf(b))} in the app`,
+        btn: "Pay " + inr(balOf(b)), go: `startPayment('${b.id}')`, open: `push('booking',{id:'${b.id}'})` });
+    else if(b.status === "completed" && S.d.reviewed[b.id] === null)
+      out.push({ key: "rate" + b.id, ic: "star", tone: "", urgent: true,
+        title: `How was your shoot with ${pgn}?`, sub: "A quick rating helps other customers choose",
+        btn: "Rate", go: `push('rate',{id:'${b.id}'})` });
+    else if(b.status === "enroute" || b.status === "arrived")
+      out.push({ key: "trk" + b.id, ic: "pin", tone: "green",
+        title: b.status === "enroute" ? `${pgn} is on the way` : `${pgn} has arrived`, sub: esc(catById(b.category).name) + " · " + whenStr(b.start_at),
+        btn: "Message", go: `push('chat',{id:'${b.id}'})`, open: `push('booking',{id:'${b.id}'})` });
+  });
+  S.d.requests.forEach(r => {
+    const n = (S.d.offers[r.id] || []).length;
+    const booked = S.d.bookings.some(b => b.request_id === r.id && b.status !== "cancelled");
+    if(n && !booked && (r.status === "broadcasting" || r.status === "awaiting"))
+      out.push({ key: "q" + r.id, ic: "bolt", tone: "accent", urgent: true,
+        title: `${n} quote${n === 1 ? "" : "s"} for your ${esc(catById(r.category).name.toLowerCase())} shoot`, sub: "Compare prices and portfolios, then book one",
+        btn: "Compare", go: `push('request',{id:'${r.id}'})` });
+  });
+  return out;
+}
+
+/* ---------- things the photographer should do now ---------- */
+function photographerActions(){
+  const out = [], pg = S.pg || {};
+  S.d.bookings.filter(activeBk).sort((a,b) => toMs(a.start_at) - toMs(b.start_at)).forEach(b => {
+    const nx = NEXT_STEP[b.status], cn = esc(firstName(b.customer_name || "the customer"));
+    if(!nx) return;
+    const near = b.status !== "confirmed" || soonMs(b) < 24 * 3600e3;
+    out.push({ key: "job" + b.id, ic: nx.ic, tone: near ? "accent" : "", urgent: near,
+      title: b.status === "confirmed" ? `Shoot with ${cn} · ${whenStr(b.start_at)}` : `${BK_LABEL[b.status]} — shoot with ${cn}`,
+      sub: `Next step: “${nx.label}”`, btn: "Open", go: `push('job',{id:'${b.id}'})` });
+  });
+  S.d.bookings.filter(b => b.status === "completed" && b.balance_status === "due").forEach(b =>
+    out.push({ key: "bal" + b.id, ic: "wallet", tone: "",
+      title: `Waiting for ${esc(firstName(b.customer_name || "the customer"))}'s balance`, sub: `${inr(balOf(b))} — your payout is sent once it's paid`,
+      btn: "Message", go: `push('chat',{id:'${b.id}'})` }));
+  S.d.myOffers.filter(o => o.state === "chosen").forEach(o =>
+    out.push({ key: "ch" + o.id, ic: "check", tone: "green",
+      title: "A customer picked your quote", sub: `${inr(o.price)} — it becomes a shoot as soon as they pay the advance`,
+      btn: "View", go: `S.prefs.reqMode='quoted';savePrefs();go('requests')` }));
+  if(S.payout === undefined && !S.loading.payout){
+    S.loading.payout = true;
+    api.payoutDetails().then(r => { S.payout = r || {}; S.loading.payout = false; softRender(); }).catch(() => { S.loading.payout = false; });
+  }
+  if(S.payout && !S.payout.upi_id)
+    out.push({ key: "upi", ic: "wallet", tone: "accent", urgent: true,
+      title: "Add the UPI ID we pay you on", sub: "Without it we can't send your share after a shoot",
+      btn: "Add", go: `push('editPayout')` });
+  const ph = (pg.portfolio || []).length;
+  if(ph > 0 && ph < 6)   /* with no photos at all, the home screen already shows a bigger card */
+    out.push({ key: "ph", ic: "image", tone: "",
+      title: ph ? `Add ${6 - ph} more portfolio photo${6 - ph === 1 ? "" : "s"}` : "Add portfolio photos",
+      sub: "Customers compare portfolios before they book", btn: "Add", go: `push('portfolio')` });
+  return out;
+}
+
+function actionsHtml(list){
+  if(!list.length) return "";
+  const shown = S.showAllActions ? list : list.slice(0, 3);
+  return `<div class="sec-title mt20">To do</div>
+  <div class="todo">${shown.map(a => `<div class="todo-i ${a.tone || ""}">
+      <button class="todo-main" onclick="${a.open || a.go}">${icon(a.ic, 18, a.tone === "green" ? "var(--green)" : a.tone === "accent" ? "var(--accent)" : "var(--muted)")}
+        <div class="grow"><div class="sm bold">${a.title}</div><div class="xs muted">${a.sub}</div></div></button>
+      <button class="btn sm ${a.tone === "accent" ? "primary" : ""}" onclick="${a.go}">${a.btn}</button></div>`).join("")}
+    ${list.length > 3 ? `<button class="linkish xs accent bold todo-more" onclick="S.showAllActions=!S.showAllActions;render()">${S.showAllActions ? "Show less" : "Show " + (list.length - 3) + " more"}</button>` : ""}
+  </div>`;
+}
+
+/* one line on each booking card saying what happens next */
+function bkHint(b){
+  if(isPg()){
+    const nx = NEXT_STEP[b.status];
+    if(nx) return `Next: ${nx.label} →`;
+    if(b.status === "completed" && b.balance_status === "due") return "Waiting for the customer's balance";
+    return "";
+  }
+  if(b.status === "pending_payment") return `Pay the ${inr(advOf(b))} advance to confirm →`;
+  if(balanceDue(b)) return `Balance of ${inr(balOf(b))} due — tap to pay →`;
+  if(b.status === "completed" && S.d.reviewed[b.id] === null) return "Tap to rate your shoot →";
+  if(b.status === "confirmed" || b.status === "enroute" || b.status === "arrived") return "Tap for details or to message your photographer →";
+  return "";
+}
+
+/* ---------- "how it works" — short, for first-timers ---------- */
+const HOW = {
+  customer: [
+    ["send", "Post your shoot", "Say what you're shooting, when and where, and your budget. It takes about a minute."],
+    ["bolt", "Get quotes", "Photographers in your city who do that kind of shoot send you their price."],
+    ["user", "Compare and choose", "Look at their photos, ratings and price. Tap Book on the one you like."],
+    ["wallet", `Pay ${S_ADV()}% to book`, "The advance confirms your photographer. You can message them in the app."],
+    ["cam", "Shoot, then pay the rest", "Once the shoot starts, pay the balance in the app. Afterwards, leave a rating."]
+  ],
+  photographer: [
+    ["bolt", "See requests near you", "Customers in your city post shoots. The ones that match your shoot types show under Requests."],
+    ["send", "Send your price", "Quote what you'd charge. You'll see what you take home after SnapPro's commission."],
+    ["check", "Get booked", "When a customer books you and pays the advance, the shoot appears under Shoots."],
+    ["cam", "Do the shoot", "Tap through On my way → Arrived → Start → Complete so the customer can follow along."],
+    ["wallet", "Get paid", "Once the shoot is done and fully paid, we send your share to your UPI ID."]
+  ]
+};
+function S_ADV(){ return (typeof S !== "undefined" && S.advance) || 25; }
+function howSteps(role){
+  return HOW[role].map(([ic, t, d], i) => `<div class="how-i"><div class="how-n">${i + 1}</div><div class="grow"><div class="sm bold">${t.replace(/\d+%/, S_ADV() + "%")}</div><div class="xs muted mt2">${d}</div></div></div>`).join("");
+}
+function vHow(){
+  const role = isPg() ? "photographer" : "customer";
+  return `${topbar("How SnapPro works")}
+  <div class="pad">
+    <div class="how">${howSteps(role)}</div>
+    ${role === "customer"
+      ? `<div class="note mt16">${icon("shield",18,"var(--green)")}<div>Cancel before your photographer sets off and you get your advance back in full. <a href="/refunds.html" target="_blank" rel="noopener">Refund policy</a></div></div>
+         <button class="btn primary block mt16" onclick="pop();startRequest()">Book a photographer</button>`
+      : `<button class="btn primary block mt16" onclick="pop();go('requests')">See requests</button>`}
+    <div class="xs muted2 center mt12">Still stuck? Write to <a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a></div>
+  </div>`;
+}
+/* small dismissible version on the home screen for people who haven't done anything yet */
+function howCard(){
+  if(S.prefs.hideHow) return "";
+  const fresh = isPg() ? !S.d.myOffers.length && !S.d.bookings.length : !S.d.requests.length && !S.d.bookings.length;
+  if(!fresh) return "";
+  const role = isPg() ? "photographer" : "customer";
+  return `<div class="card how-card mt16">
+    <div class="between"><div class="sm bold">New here? Here's how it works</div>
+      <button class="iconbtn sm-x" aria-label="Hide" onclick="S.prefs.hideHow=true;savePrefs();render()">${icon("x",14)}</button></div>
+    <div class="how-mini mt8">${HOW[role].slice(0, 4).map(([ic, t], i) => `<div><span class="how-n sm">${i + 1}</span>${t.replace(/\d+%/, S_ADV() + "%")}</div>`).join("")}</div>
+    <button class="linkish xs accent bold mt8" onclick="push('how')">Read the full guide →</button>
+  </div>`;
+}
+
+/* help links (added to the profile screen) */
+function helpCard(){
+  return `<div class="sec-title mt20">Help</div>
+  <div class="card list">
+    <button class="li" onclick="push('how')">${icon("help",18,"var(--muted)")}<div class="grow"><div class="sm bold">How SnapPro works</div><div class="xs muted2">${isPg() ? "Quoting, shoots and getting paid" : "Booking, paying and cancelling"}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
+    <a class="li" href="/refunds.html" target="_blank" rel="noopener">${icon("doc",18,"var(--muted)")}<div class="grow"><div class="sm bold">Cancellation &amp; refunds</div></div>${icon("chevron",16,"var(--muted-2)")}</a>
+    <a class="li" href="/terms.html" target="_blank" rel="noopener">${icon("doc",18,"var(--muted)")}<div class="grow"><div class="sm bold">Terms &amp; privacy</div></div>${icon("chevron",16,"var(--muted-2)")}</a>
+  </div>`;
+}
+
+/* request is live but nobody has quoted yet */
+function waitingSteps(r){
+  return `<div class="card soft mt16"><div class="sm bold">What happens next</div>
+    <div class="how mt8">
+      <div class="how-i"><div class="how-n">1</div><div class="grow xs">Quotes appear on this page — we'll also show a notification while SnapPro is open.</div></div>
+      <div class="how-i"><div class="how-n">2</div><div class="grow xs">Compare price, photos and ratings, then tap <b>Book</b>.</div></div>
+      <div class="how-i"><div class="how-n">3</div><div class="grow xs">Pay the ${S_ADV()}% advance to confirm. The rest is paid after the shoot starts.</div></div>
+    </div>
+    <div class="xs muted2 mt8">You can leave this page — find it any time under <b>Shoots</b>.</div></div>`;
+}
+
+/* ============================================================
    NAVIGATION
    ============================================================ */
 const AUTH_VIEWS = { welcome: vWelcome, signup: vSignup, otp: vOtp, login: vLogin, reset: vReset, newpw: vNewPw,
@@ -3053,7 +3259,7 @@ const STACK_VIEWS = { pg: vPgProfile, photo: vPhoto, newRequest: vNewRequest, re
                       booking: vBooking, rate: vRate, chat: vChat, editName: vEditName, editLoc: vEditLoc,
                       quote: vQuote, job: vJob, portfolio: vPortfolio, editPg: vEditPg,
                       payResult: vPayResult, editPayout: vEditPayout,
-                      pgEarnings: vPgEarnings, pgDone: vPgDone, pgReviews: vPgReviews };
+                      pgEarnings: vPgEarnings, pgDone: vPgDone, pgReviews: vPgReviews, how: vHow };
 const CUST_TABS = [ ["home","Home","home",vCustHome], ["explore","Explore","search",vExplore], ["activity","Shoots","calendar",vActivity], ["profile","Profile","user",vProfile] ];
 const PG_TABS   = [ ["home","Home","home",vPgHome], ["requests","Requests","bolt",vPgRequests], ["jobs","Shoots","calendar",vJobs], ["profile","Profile","user",vProfile] ];
 const tabsFor = () => isPg() ? PG_TABS : CUST_TABS;
@@ -3084,8 +3290,9 @@ window.addEventListener("popstate", () => {
 });
 
 function tabBadge(id){
-  if(isCustomer() && id === "activity") return S.d.requests.filter(r => r.status === "broadcasting" && (S.d.offers[r.id]||[]).length).length;
+  if(isCustomer() && id === "activity") return customerActions().filter(a => a.urgent).length;
   if(isPg() && id === "requests") return newForMe().length;
+  if(isPg() && id === "jobs") return S.d.bookings.filter(b => activeBk(b) && (b.status !== "confirmed" || soonMs(b) < 24*3600e3)).length;
   return 0;
 }
 function tabbarHtml(){
