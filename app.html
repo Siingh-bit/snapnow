@@ -410,6 +410,11 @@ input[type=datetime-local].input{color-scheme:light}
 @keyframes pfPulse{0%{box-shadow:0 0 0 2px var(--red),0 0 0 0 rgba(179,38,30,.35)}100%{box-shadow:0 0 0 2px var(--red),0 0 0 12px rgba(179,38,30,0)}}
 @media (prefers-reduced-motion:reduce){.pf-row.point{animation:none}}
 
+button.stat{text-align:left;width:100%;background:var(--paper);cursor:pointer;transition:border-color .15s,transform .15s}
+button.stat:hover{border-color:var(--muted-2)}
+button.stat:active{transform:scale(.98)}
+button.stat .s-l svg{vertical-align:-1px}
+
 </style>
 </head>
 <body>
@@ -1117,6 +1122,7 @@ async function refresh(fromPoll){
       if(me){
         if(fromPoll && S.pg && (me.review_count || 0) > (S.pg.review_count || 0))
           toast("New review", "Your rating is now ★ " + Number(me.rating).toFixed(1), "star");
+        if(S.pg && (me.review_count || 0) !== (S.pg.review_count || 0)) delete S.d.reviews[me.id];
         S.pg = me; S.d.pgs[me.id] = me;
       }
       if(fromPoll) open.filter(r => !prevOpen.has(r.id) && matchesMe(r)).forEach(r =>
@@ -2477,9 +2483,9 @@ function vPgHome(){
     ${!photos ? `<button class="card tap warn-card mt16" onclick="push('portfolio')">${icon("image",20,"var(--accent)")}<div class="grow" style="text-align:left"><div class="bold sm">Add photos of your work</div><div class="xs muted">Customers compare portfolios before booking. Profiles with photos get chosen far more often.</div></div>${icon("chevron",16,"var(--muted-2)")}</button>` : ""}
 
     <div class="grid3 mt16">
-      <div class="stat"><div class="s-v">${inr(e.month)}</div><div class="s-l">This month</div></div>
-      <div class="stat"><div class="s-v">${e.jobs}</div><div class="s-l">Shoots done</div></div>
-      <div class="stat"><div class="s-v">${pg.review_count ? "★ " + Number(pg.rating).toFixed(1) : "New"}</div><div class="s-l">${pg.review_count ? pg.review_count + " review" + (pg.review_count>1?"s":"") : "No reviews yet"}</div></div>
+      <button class="stat tap" onclick="push('pgEarnings')"><div class="s-v">${inr(e.month)}</div><div class="s-l">This month ${icon("chevron",11,"var(--muted-2)")}</div></button>
+      <button class="stat tap" onclick="push('pgDone')"><div class="s-v">${e.jobs}</div><div class="s-l">Shoots done ${icon("chevron",11,"var(--muted-2)")}</div></button>
+      <button class="stat tap" onclick="push('pgReviews')"><div class="s-v">${pg.review_count ? "★ " + Number(pg.rating).toFixed(1) : "New"}</div><div class="s-l">${pg.review_count ? pg.review_count + " review" + (pg.review_count>1?"s":"") : "No reviews yet"} ${icon("chevron",11,"var(--muted-2)")}</div></button>
     </div>
 
     ${active.length ? `<div class="sec-title mt20">Upcoming shoots</div>${active.map(bookingCard).join("")}` : ""}
@@ -2524,6 +2530,69 @@ function quoteStateCard(o){
       <div class="xs muted2 mt4">The customer picked your quote and is paying the advance. It moves to your shoots as soon as they pay.</div></div>`;
   return `<div class="card mt12"><div class="between"><div class="sm">Quote of <b>${inr(o.price)}</b></div><span class="chip">Closed</span></div>
       <div class="xs muted2 mt4">Sent ${timeAgo(o.created_at)}. The customer booked someone else or the request closed.</div></div>`;
+}
+
+/* ---------- earnings, completed shoots and reviews (from the home tiles) ---------- */
+const shareOf = b => b.photographer_amount != null ? b.photographer_amount : (b.price || 0);
+function payoutLabel(b){
+  if(b.payment_status === "not_required") return ["Paid to you directly", ""];
+  if(b.payout_status === "paid") return ["Sent" + (b.payout_at ? " " + dayStr(b.payout_at) : ""), "green"];
+  if(b.payout_status === "due") return ["Being processed", "accent"];
+  if(b.balance_status === "due") return ["Waiting for the customer's balance", ""];
+  return ["After the shoot", ""];
+}
+function earningRow(b){
+  const [lbl, chip] = payoutLabel(b);
+  return `<button class="li" onclick="push('job',{id:'${b.id}'})">${avatarHtml(b.customer_id, b.customer_name, "av-40")}
+    <div class="grow"><div class="sm bold">${esc(b.customer_name || "Customer")}</div>
+      <div class="xs muted2">${esc(catById(b.category).name)} · ${dayStr(b.start_at)}</div>
+      <div class="mt4"><span class="chip ${chip}" style="font-size:11px">${esc(lbl)}</span></div></div>
+    <div class="stack right"><div class="bold">${inr(shareOf(b))}</div><div class="xs muted2">of ${inr(b.price)}</div></div></button>`;
+}
+function vPgEarnings(){
+  const e = earnings();
+  const done = S.d.bookings.filter(b => b.status === "completed").sort((a,b) => toMs(b.start_at) - toMs(a.start_at));
+  const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0,0,0,0);
+  const month = done.filter(b => toMs(b.start_at) >= monthStart.getTime()), earlier = done.filter(b => toMs(b.start_at) < monthStart.getTime());
+  return `${topbar("Earnings")}
+  <div class="pad">
+    <div class="grid2">
+      <div class="stat"><div class="s-v">${inr(e.month)}</div><div class="s-l">This month · ${e.monthJobs} shoot${e.monthJobs===1?"":"s"}</div></div>
+      <div class="stat"><div class="s-v">${inr(e.total)}</div><div class="s-l">All time · ${e.jobs} shoot${e.jobs===1?"":"s"}</div></div>
+    </div>
+    <div class="xs muted2 mt8">Your share after SnapPro's commission, for each completed shoot.</div>
+    ${month.length ? `<div class="sec-title mt20">This month</div><div class="card list">${month.map(earningRow).join("")}</div>` : ""}
+    ${earlier.length ? `<div class="sec-title mt20">Earlier</div><div class="card list">${earlier.map(earningRow).join("")}</div>` : ""}
+    ${!done.length ? emptyState("💸", "No earnings yet", "When you complete a shoot, the customer and your share show up here.") : ""}
+  </div>`;
+}
+function vPgDone(){
+  const done = S.d.bookings.filter(b => b.status === "completed").sort((a,b) => toMs(b.start_at) - toMs(a.start_at));
+  const rv = {}; (S.d.reviews[S.me.id] || []).forEach(r => rv[r.booking_id] = r);
+  if(!S.d.reviews[S.me.id]) api.reviewsFor(S.me.id).then(softRender).catch(() => {});
+  return `${topbar("Shoots done", done.length + " completed")}
+  <div class="pad">
+    ${done.length ? `<div class="card list">${done.map(b => `<button class="li" onclick="push('job',{id:'${b.id}'})">${avatarHtml(b.customer_id, b.customer_name, "av-40")}
+      <div class="grow"><div class="sm bold">${esc(b.customer_name || "Customer")}</div>
+        <div class="xs muted2">${esc(catById(b.category).name)} · ${b.duration_hrs} hr${b.duration_hrs>1?"s":""} · ${dayStr(b.start_at)}</div>
+        <div class="xs mt4">${rv[b.id] ? `<span class="rating">${"★".repeat(rv[b.id].stars)}</span>` : `<span class="muted2">Not rated yet</span>`}</div></div>
+      ${icon("chevron",16,"var(--muted-2)")}</button>`).join("")}</div>`
+      : emptyState("📷", "No completed shoots yet", "Shoots you mark as complete show up here.")}
+  </div>`;
+}
+function vPgReviews(){
+  const pg = S.pg || {}, list = S.d.reviews[S.me.id];
+  if(!list){ api.reviewsFor(S.me.id).then(softRender).catch(() => { S.d.reviews[S.me.id] = []; softRender(); }); return `${topbar("Your reviews")}<div class="pad"><div class="skeleton"></div></div>`; }
+  const bk = id => S.d.bookings.find(b => b.id === id);
+  return `${topbar("Your reviews", pg.review_count ? "★ " + Number(pg.rating).toFixed(1) + " · " + pg.review_count + " review" + (pg.review_count>1?"s":"") : "")}
+  <div class="pad">
+    ${list.length ? list.map(r => { const b = bk(r.booking_id); return `<div class="card mt12" ${b ? `role="button" style="cursor:pointer" onclick="push('job',{id:'${b.id}'})"` : ""}>
+      <div class="between"><div class="row gap8">${avatarHtml(b ? b.customer_id : r.id, r.customer_name, "av-40")}
+        <div><div class="sm bold">${esc(r.customer_name || "Customer")}</div><div class="xs muted2">${b ? esc(catById(b.category).name) + " · " : ""}${dayStr(r.created_at)}</div></div></div>
+        <span class="rating">${"★".repeat(r.stars)}<span class="muted2">${"★".repeat(5 - r.stars)}</span></span></div>
+      ${r.body ? `<div class="sm mt8">${esc(r.body)}</div>` : `<div class="xs muted2 mt8">No written comment.</div>`}</div>`; }).join("")
+      : emptyState("⭐", "No reviews yet", "After each completed shoot, your customer can rate you. Reviews show up here.")}
+  </div>`;
 }
 
 /* ---------- send a quote ---------- */
@@ -2593,8 +2662,8 @@ function vJobs(){
   return `<div class="pad">
     <div class="h2">Your shoots</div>
     <div class="grid2 mt12">
-      <div class="stat"><div class="s-v">${inr(e.month)}</div><div class="s-l">Earned this month · ${e.monthJobs} shoot${e.monthJobs===1?"":"s"}</div></div>
-      <div class="stat"><div class="s-v">${inr(e.total)}</div><div class="s-l">All time · ${e.jobs} shoot${e.jobs===1?"":"s"}</div></div>
+      <button class="stat tap" onclick="push('pgEarnings')"><div class="s-v">${inr(e.month)}</div><div class="s-l">Earned this month · ${e.monthJobs} shoot${e.monthJobs===1?"":"s"} ${icon("chevron",11,"var(--muted-2)")}</div></button>
+      <button class="stat tap" onclick="push('pgEarnings')"><div class="s-v">${inr(e.total)}</div><div class="s-l">All time · ${e.jobs} shoot${e.jobs===1?"":"s"} ${icon("chevron",11,"var(--muted-2)")}</div></button>
     </div>
     <div class="xs muted2 mt8">Totals count completed shoots at the price you quoted.</div>
     ${up.length ? `<div class="sec-title mt20">Upcoming</div>${up.map(bookingCard).join("")}` : ""}
@@ -2983,7 +3052,8 @@ const AUTH_VIEWS = { welcome: vWelcome, signup: vSignup, otp: vOtp, login: vLogi
 const STACK_VIEWS = { pg: vPgProfile, photo: vPhoto, newRequest: vNewRequest, request: vRequest, confirm: vConfirm,
                       booking: vBooking, rate: vRate, chat: vChat, editName: vEditName, editLoc: vEditLoc,
                       quote: vQuote, job: vJob, portfolio: vPortfolio, editPg: vEditPg,
-                      payResult: vPayResult, editPayout: vEditPayout };
+                      payResult: vPayResult, editPayout: vEditPayout,
+                      pgEarnings: vPgEarnings, pgDone: vPgDone, pgReviews: vPgReviews };
 const CUST_TABS = [ ["home","Home","home",vCustHome], ["explore","Explore","search",vExplore], ["activity","Shoots","calendar",vActivity], ["profile","Profile","user",vProfile] ];
 const PG_TABS   = [ ["home","Home","home",vPgHome], ["requests","Requests","bolt",vPgRequests], ["jobs","Shoots","calendar",vJobs], ["profile","Profile","user",vProfile] ];
 const tabsFor = () => isPg() ? PG_TABS : CUST_TABS;
