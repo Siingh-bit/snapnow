@@ -393,6 +393,23 @@ input[type=datetime-local].input{color-scheme:light}
 .ok-mark{background:var(--green)}.bad-mark{background:var(--red)}
 .pay-due{border-left:3px solid var(--accent)}
 
+/* review screen: nudge to add portfolio photos */
+.photo-nudge{display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:14px 16px;border-radius:var(--r);
+  background:#fbe9e6;border:1px solid #efc4bd;color:var(--red);cursor:pointer;transition:background .15s,transform .15s}
+.photo-nudge:hover{background:#f8ddd8}
+.photo-nudge:active{transform:scale(.99)}
+.photo-nudge .xs{color:#8f2a22;margin-top:2px;line-height:1.4}
+.nowrap{white-space:nowrap;display:inline-flex;align-items:center;gap:2px}
+.pf-row{position:relative;border-radius:8px;transition:background .3s}
+.pf-add{font-size:12px;font-weight:700;color:var(--red);background:#fbe9e6;border-radius:999px;padding:5px 10px;white-space:nowrap}
+.pf-tip{position:absolute;left:44px;bottom:calc(100% - 4px);background:var(--text);color:#fff;font-size:12.5px;font-weight:600;
+  padding:7px 11px;border-radius:8px;white-space:nowrap;pointer-events:none;opacity:0;transform:translateY(6px);transition:opacity .25s,transform .25s}
+.pf-tip::after{content:"";position:absolute;left:18px;top:100%;border:6px solid transparent;border-top-color:var(--text)}
+.pf-row.point{background:#fbe9e6;box-shadow:0 0 0 2px var(--red);margin:0 -10px;padding-left:10px;padding-right:10px;width:calc(100% + 20px);animation:pfPulse 1.4s ease-out 3}
+.pf-row.point .pf-tip{opacity:1;transform:none}
+@keyframes pfPulse{0%{box-shadow:0 0 0 2px var(--red),0 0 0 0 rgba(179,38,30,.35)}100%{box-shadow:0 0 0 2px var(--red),0 0 0 12px rgba(179,38,30,0)}}
+@media (prefers-reduced-motion:reduce){.pf-row.point{animation:none}}
+
 </style>
 </head>
 <body>
@@ -2714,10 +2731,14 @@ function vPgReview(){
 
     <div class="sec-title mt24">${rejected ? "Your profile" : "While you wait"}</div>
     <div class="card list">${done.map(([ok, t]) => `<div class="li"><span class="tick ${ok?'on':''}">${ok ? icon("check",12,"#fff",3) : ""}</span><div class="grow sm ${ok?'':'muted'}">${t}</div></div>`).join("")}</div>
-    ${!rejected && photos < 6 ? `<p class="sm muted mt12">Profiles with good photos get approved fastest. Add your best 6–12 shots.</p>` : ""}
+    ${photos < 6 ? `<button class="photo-nudge mt12" onclick="pointToPortfolio()">
+        ${icon("image",18,"var(--red)")}<div class="grow"><div class="sm bold">${photos ? "Add " + (6 - photos) + " more photo" + (6 - photos === 1 ? "" : "s") : "Add your portfolio photos"}</div>
+        <div class="xs">Profiles with good photos get approved fastest. Add your best 6–12 shots.</div></div>
+        <span class="xs bold nowrap">Show me ${icon("chevron",12,"var(--red)")}</span></button>` : ""}
 
     <div class="card list mt16">
-      <button class="li" onclick="push('portfolio')">${icon("image",18,"var(--muted)")}<div class="grow"><div class="sm bold">Portfolio</div><div class="xs muted2">${photos} photo${photos===1?"":"s"}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
+      <button class="li pf-row" id="pfRow" onclick="push('portfolio')">${icon("image",18,photos < 6 ? "var(--red)" : "var(--muted)")}<div class="grow"><div class="sm bold">Portfolio</div><div class="xs muted2">${photos} photo${photos===1?"":"s"}</div></div>${photos < 6 ? `<span class="pf-add">Add photos</span>` : icon("chevron",16,"var(--muted-2)")}
+        <span class="pf-tip" role="status">Tap here to upload your photos</span></button>
       <button class="li" onclick="push('editPg')">${icon("edit",18,"var(--muted)")}<div class="grow"><div class="sm bold">Bio, shoot types and rates</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
       <button class="li" onclick="push('editLoc')">${icon("pin",18,"var(--muted)")}<div class="grow"><div class="sm bold">Location</div><div class="xs muted2">${esc([pg.city, pg.state, pg.pincode].filter(Boolean).join(", ") || "Not set")}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
       <button class="li" onclick="push('editPayout')">${icon("wallet",18,"var(--muted)")}<div class="grow"><div class="sm bold">Payout details</div><div class="xs muted2">${S.payout && S.payout.upi_id ? esc(S.payout.upi_id) : "The UPI ID we pay you on"}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
@@ -2725,6 +2746,14 @@ function vPgReview(){
     </div>
     <div class="legal">Questions about your review? Write to <a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a></div>
   </div>`;
+}
+/* scroll to the Portfolio row and point at it */
+function pointToPortfolio(){
+  const row = el("pfRow"); if(!row) return;
+  row.scrollIntoView({ behavior: "smooth", block: "center" });
+  row.classList.remove("point"); void row.offsetWidth; row.classList.add("point");
+  clearTimeout(pointToPortfolio.t);
+  pointToPortfolio.t = setTimeout(() => row.classList.remove("point"), 5000);
 }
 async function askForReview(){
   try{
