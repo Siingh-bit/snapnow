@@ -1817,6 +1817,326 @@ grant execute on function public.admin_kpis(date, date)              to authenti
 grant execute on function public.admin_users()                       to authenticated;
 
 -- =====================================================================
+-- 8c. ADMIN DRILL-DOWNS AND REPORTS
+--     Every number on the admin overview can be opened to see the rows
+--     behind it. Staff only. Managers never see money, emails or phones.
+--     Chat message text is never shown — only how many were sent.
+-- =====================================================================
+
+-- The rows behind one number. p_arg narrows some lists (a city, a shoot type…).
+create or replace function public.admin_detail(p_kind text, p_from date default null, p_to date default null, p_arg text default null)
+returns jsonb language plpgsql stable security definer set search_path = public
+as $$
+declare
+  money boolean := coalesce(public.staff_role() in ('super_admin','admin'), false);
+  f date := coalesce(p_from, '2000-01-01'::date);
+  t date := coalesce(p_to, public._ist(now()));
+  res jsonb;
+begin
+  if not public.is_staff() then raise exception 'Staff only'; end if;
+  if not money and p_kind in ('payouts_paid','booking_value','collected','commission','payouts_due','refunds_due','refunds',
+                              'payments_failed','balances_due','customers','top_customers','signups',
+                              'signups_customers','signups_photographers','repeat_customers','setup_incomplete') then
+    raise exception 'Only admins can see this';
+  end if;
+
+  if p_kind in ('visitors','visitors_today','referrer','device') then
+    select coalesce(jsonb_agg(to_jsonb(z) order by z.last_at desc), '[]') into res from (
+      select s.day, s.first_at, s.last_at, s.views, s.device, s.path, coalesce(nullif(s.referrer,''),'Direct') as referrer,
+             p.name as signed_in_as, p.role
+        from public.site_visits s left join public.profiles p on p.id = s.user_id
+       where (case when p_kind = 'visitors_today' then s.day = public._ist(now()) else s.day between f and t end)
+         and (p_kind <> 'referrer' or coalesce(nullif(s.referrer,''),'Direct') = p_arg)
+         and (p_kind <> 'device' or s.device = p_arg)
+       order by s.last_at desc limit 2000) z;
+
+  elsif p_kind = 'returning_visitors' then
+    select coalesce(jsonb_agg(to_jsonb(z) order by z.days desc), '[]') into res from (
+      select count(*)::int as days, sum(s.views)::int as views, min(s.day) as first_day, max(s.day) as last_day,
+             max(p.name) as signed_in_as
+        from public.site_visits s left join public.profiles p on p.id = s.user_id
+       where s.day between f and t group by s.visitor_id having count(*) > 1 limit 2000) z;
+
+  elsif p_kind in ('available_pgs','photographers','pending_pgs','pgs_with_photos','pgs_verified','pgs_city') then
+    select coalesce(jsonb_agg(to_jsonb(z) order by z.jobs_done desc, z.name), '[]') into res from (
+      select g.id, g.display_name as name, case when money then u.email end as email, case when money then pr.phone end as phone,
+             g.city, g.state, array_to_string(g.categories, ', ') as shoot_types, g.approval_status as approval,
+             g.is_online as available, g.is_verified as verified, g.jobs_done, g.rating, g.review_count as reviews,
+             coalesce(array_length(g.portfolio,1),0) as photos, case when money then g.earnings end as earnings,
+             (select count(*) from public.offers o where o.photographer_id = g.id)::int as quotes_sent,
+             g.created_at as joined, g.approved_at
+        from public.photographers g left join auth.users u on u.id = g.id left join public.profiles pr on pr.id = g.id
+       where case p_kind when 'available_pgs' then g.is_online and g.approval_status = 'approved'
+                         when 'pending_pgs' then g.approval_status = 'pending'
+                         when 'pgs_with_photos' then coalesce(array_length(g.portfolio,1),0) > 0
+                         when 'pgs_verified' then g.is_verified
+                         when 'pgs_city' then lower(coalesce(g.city,'')) = lower(coalesce(p_arg,''))
+                         else true end
+       limit 2000) z;
+
+  elsif p_kind in ('requests','requests_quoted','requests_booked','open_requests','city','category') then
+    select coalesce(jsonb_agg(to_jsonb(z) order by z.posted desc), '[]') into res from (
+      select r.id, r.created_at as posted, r.customer_name as customer, r.category, r.city, r.pincode, r.start_at as shoot_time,
+             r.duration_hrs as hours, r.budget, r.status, r.expires_at as closes,
+             (select count(*) from public.offers o where o.request_id = r.id)::int as quotes,
+             (select round(extract(epoch from min(o.created_at) - r.created_at) / 60) from public.offers o where o.request_id = r.id) as first_quote_min,
+             (select min(o.price) from public.offers o where o.request_id = r.id) as lowest_quote,
+             (select b.price from public.bookings b where b.request_id = r.id and b.status <> 'cancelled' limit 1) as booked_price
+        from public.requests r
+       where case when p_kind = 'open_requests' then r.status = 'broadcasting' and r.expires_at > now()
+                  else public._ist(r.created_at) between f and t end
+         and (p_kind <> 'requests_quoted' or exists (select 1 from public.offers o where o.request_id = r.id))
+         and (p_kind <> 'requests_booked' or r.status = 'matched')
+         and (p_kind <> 'city' or lower(coalesce(r.city,'')) = lower(coalesce(p_arg,'')))
+         and (p_kind <> 'category' or r.category = p_arg)
+       limit 2000) z;
+
+  elsif p_kind = 'quotes' then
+    select coalesce(jsonb_agg(to_jsonb(z) order by z.sent desc), '[]') into res from (
+      select o.created_at as sent, o.photographer_name as photographer, r.customer_name as customer, r.category, r.city,
+             o.price, r.budget, round(extract(epoch from o.created_at - r.created_at) / 60) as minutes_after_post,
+             case when exists (select 1 from public.bookings b where b.offer_id = o.id and b.status not in ('cancelled','pending_payment')) then 'booked'
+                  when exists (select 1 from public.bookings b where b.offer_id = o.id and b.status = 'pending_payment') then 'chosen, unpaid'
+                  when r.status in ('broadcasting','awaiting') then 'open' else 'not chosen' end as outcome
+        from public.offers o join public.requests r on r.id = o.request_id
+       where public._ist(o.created_at) between f and t limit 2000) z;
+
+  elsif p_kind in ('bookings','completed','cancelled','booking_value','upcoming_shoots','balances_due','payouts_due','payouts_paid','status') then
+    select coalesce(jsonb_agg(to_jsonb(z) order by z.shoot_time desc), '[]') into res from (
+      select b.id, b.created_at as booked_at, b.start_at as shoot_time, b.customer_name as customer, b.photographer_name as photographer,
+             b.category, b.city, b.status, b.cancelled_by, b.cancelled_from,
+             case when money then b.price end as price,
+             case when money then b.payment_status end as payment,
+             case when money then b.balance_status end as balance,
+             case when money then b.commission_amount end as commission,
+             case when money then b.photographer_amount end as photographer_share,
+             case when money then b.payout_status end as payout,
+             case when money and p_kind = 'payouts_paid' then b.payout_ref end as payout_ref,
+             case when money and p_kind = 'payouts_paid' then b.payout_at end as paid_out_at,
+             case when money and p_kind = 'payouts_due' then (select x.upi_id from public.photographer_payout x where x.id = b.photographer_id) end as pay_to_upi,
+             (select count(*) from public.messages m where m.booking_id = b.id)::int as messages,
+             (select v.stars from public.reviews v where v.booking_id = b.id) as rating
+        from public.bookings b
+       where case p_kind
+               when 'upcoming_shoots' then b.status in ('confirmed','enroute','arrived','shooting')
+               when 'balances_due'    then b.balance_status = 'due'
+               when 'payouts_due'     then b.payout_status = 'due'
+               when 'payouts_paid'    then b.payout_status = 'paid' and public._ist(b.payout_at) between f and t
+               else public._ist(b.created_at) between f and t end
+         and (p_kind <> 'completed' or b.status = 'completed')
+         and (p_kind <> 'cancelled' or b.status = 'cancelled')
+         and (p_kind <> 'booking_value' or b.status <> 'cancelled')
+         and (p_kind <> 'status' or b.status = p_arg)
+       limit 2000) z;
+
+  elsif p_kind in ('collected','commission','payments_failed','refunds_due','method') then
+    select coalesce(jsonb_agg(to_jsonb(z) order by z.at desc), '[]') into res from (
+      select coalesce(p.paid_at, p.created_at) as at, p.order_id, p.booking_id, b.customer_name as customer, b.photographer_name as photographer,
+             p.stage, p.amount, p.commission_amount as commission, p.photographer_amount as photographer_share,
+             p.payment_group as method, p.status, p.refund_status as refund, p.refunded_amount as refunded,
+             p.gateway_payment_id as razorpay_id, p.environment, p.note
+        from public.payments p left join public.bookings b on b.id = p.booking_id
+       where case p_kind
+               when 'refunds_due' then p.refund_status in ('refund_due','refund_failed')
+               when 'payments_failed' then p.status in ('failed','user_dropped') and public._ist(p.created_at) between f and t
+               else p.status = 'paid' and public._ist(p.paid_at) between f and t end
+         and (p_kind <> 'commission' or (not p.is_duplicate and p.refund_status = 'none'))
+         and (p_kind <> 'method' or coalesce(p.payment_group,'other') = p_arg)
+       limit 2000) z;
+
+  elsif p_kind = 'refunds' then
+    select coalesce(jsonb_agg(to_jsonb(z) order by z.requested desc), '[]') into res from (
+      select r.created_at as requested, r.processed_at as done, r.amount, r.status, r.reason, b.customer_name as customer,
+             b.photographer_name as photographer, s.email as started_by, r.gateway_refund_id as razorpay_refund, r.refund_arn as arn
+        from public.refunds r join public.payments p on p.id = r.payment_id left join public.bookings b on b.id = p.booking_id
+        left join public.staff s on s.id = r.requested_by
+       where public._ist(r.created_at) between f and t limit 2000) z;
+
+  elsif p_kind in ('signups','signups_customers','signups_photographers','customers','repeat_customers','setup_incomplete','top_customers') then
+    select coalesce(jsonb_agg(to_jsonb(z) order by z.joined desc), '[]') into res from (
+      select pr.name, u.email, coalesce(pr.phone, u.phone) as phone, pr.role, pr.city, pr.state, pr.pincode,
+             coalesce(pr.created_at, u.created_at) as joined, u.last_sign_in_at as last_sign_in, (u.email_confirmed_at is not null) as email_confirmed,
+             (select count(*) from public.requests q where q.customer_id = pr.id)::int as requests,
+             (select count(*) from public.bookings b where b.customer_id = pr.id and b.status <> 'cancelled')::int as bookings,
+             (select coalesce(sum(p.amount),0) from public.payments p where p.customer_id = pr.id and p.status = 'paid'
+                 and p.refund_status not in ('refunded')) as paid_online
+        from public.profiles pr join auth.users u on u.id = pr.id
+       where not exists (select 1 from public.staff st where st.id = pr.id)
+         and case p_kind
+               when 'signups' then public._ist(pr.created_at) between f and t
+               when 'signups_customers' then pr.role = 'customer' and public._ist(pr.created_at) between f and t
+               when 'signups_photographers' then pr.role = 'photographer' and public._ist(pr.created_at) between f and t
+               when 'customers' then pr.role = 'customer'
+               when 'top_customers' then pr.role = 'customer'
+               when 'repeat_customers' then (select count(*) from public.bookings b where b.customer_id = pr.id and b.status <> 'cancelled') > 1
+               when 'setup_incomplete' then pr.city is null or pr.pincode is null
+               else true end
+       limit 2000) z;
+
+  elsif p_kind = 'reviews' then
+    select coalesce(jsonb_agg(to_jsonb(z) order by z.posted desc), '[]') into res from (
+      select v.created_at as posted, v.customer_name as customer, g.display_name as photographer, v.stars, v.body as comment, b.category
+        from public.reviews v left join public.photographers g on g.id = v.photographer_id left join public.bookings b on b.id = v.booking_id
+       where public._ist(v.created_at) between f and t and (p_arg is null or v.stars = p_arg::int) limit 2000) z;
+
+  elsif p_kind = 'messages' then
+    select coalesce(jsonb_agg(to_jsonb(z) order by z.last_message desc), '[]') into res from (
+      select b.id as booking_id, b.customer_name as customer, b.photographer_name as photographer, b.category, b.status,
+             count(m.*)::int as messages, count(*) filter (where m.sender_id = b.customer_id)::int as from_customer,
+             count(*) filter (where m.sender_id = b.photographer_id)::int as from_photographer, max(m.created_at) as last_message
+        from public.messages m join public.bookings b on b.id = m.booking_id
+       where public._ist(m.created_at) between f and t group by b.id limit 2000) z;
+
+  else
+    raise exception 'Unknown report %', p_kind;
+  end if;
+  return res;
+end $$;
+
+-- Everything about one booking, for the booking detail panel.
+create or replace function public.admin_booking(p_id uuid)
+returns jsonb language plpgsql stable security definer set search_path = public
+as $$
+declare money boolean := coalesce(public.staff_role() in ('super_admin','admin'), false); b public.bookings; res jsonb;
+begin
+  if not public.is_staff() then raise exception 'Staff only'; end if;
+  select * into b from public.bookings where id = p_id;
+  if not found then raise exception 'Booking not found'; end if;
+  res := jsonb_build_object(
+    'booking', to_jsonb(b) - case when money then '{}'::text[] else array['price','total_amount','payout_amount','commission_amount',
+              'photographer_amount','payment_status','payout_ref','payout_by','commission_pct','advance_amount','balance_amount'] end,
+    'request', (select to_jsonb(r) from public.requests r where r.id = b.request_id),
+    'quotes', (select coalesce(jsonb_agg(jsonb_build_object('photographer', o.photographer_name, 'price', o.price, 'sent', o.created_at,
+                 'chosen', o.id = b.offer_id) order by o.created_at), '[]') from public.offers o where o.request_id = b.request_id),
+    'messages', (select count(*) from public.messages m where m.booking_id = b.id),
+    'last_message', (select max(created_at) from public.messages m where m.booking_id = b.id),
+    'review', (select jsonb_build_object('stars', v.stars, 'comment', v.body, 'posted', v.created_at) from public.reviews v where v.booking_id = b.id),
+    'customer', (select jsonb_build_object('name', pr.name, 'email', case when money then pr.email end, 'phone', case when money then pr.phone end)
+                   from public.profiles pr where pr.id = b.customer_id),
+    'photographer', (select jsonb_build_object('name', g.display_name, 'email', case when money then u.email end,
+                       'upi', case when money then x.upi_id end, 'rating', g.rating, 'jobs', g.jobs_done)
+                   from public.photographers g left join auth.users u on u.id = g.id left join public.photographer_payout x on x.id = g.id where g.id = b.photographer_id),
+    'payments', case when money then (select coalesce(jsonb_agg(jsonb_build_object('stage', p.stage, 'amount', p.amount, 'status', p.status,
+                   'method', p.payment_group, 'at', coalesce(p.paid_at, p.created_at), 'razorpay_id', p.gateway_payment_id,
+                   'refund', p.refund_status, 'refunded', p.refunded_amount) order by p.created_at), '[]')
+                   from public.payments p where p.booking_id = b.id) end
+  );
+  return res;
+end $$;
+
+-- Charts and breakdowns for a date range.
+create or replace function public.admin_report(p_from date, p_to date, p_bucket text default 'day')
+returns jsonb language plpgsql stable security definer set search_path = public
+as $$
+declare money boolean := coalesce(public.staff_role() in ('super_admin','admin'), false); res jsonb;
+begin
+  if not public.is_staff() then return null; end if;
+  if p_bucket not in ('day','week','month','year') then raise exception 'Unknown period'; end if;
+  with
+  req as (select * from public.requests where public._ist(created_at) between p_from and p_to),
+  bk  as (select * from public.bookings where public._ist(created_at) between p_from and p_to),
+  pay as (select * from public.payments where status = 'paid' and public._ist(paid_at) between p_from and p_to),
+  buckets as (select g::date as bk from generate_series(date_trunc(p_bucket, p_from::timestamp), date_trunc(p_bucket, p_to::timestamp), ('1 ' || p_bucket)::interval) g)
+  select jsonb_build_object(
+    'funnel', jsonb_build_object(
+      'visitors',   (select count(distinct visitor_id) from public.site_visits where day between p_from and p_to),
+      'signups',    (select count(*) from public.profiles pr where public._ist(pr.created_at) between p_from and p_to
+                       and not exists (select 1 from public.staff st where st.id = pr.id)),
+      'requests',   (select count(*) from req),
+      'quoted',     (select count(*) from req where exists (select 1 from public.offers o where o.request_id = req.id)),
+      'chosen',     (select count(distinct request_id) from public.bookings b where b.request_id in (select id from req)),
+      'paid',       (select count(distinct request_id) from public.bookings b where b.request_id in (select id from req)
+                       and b.payment_status in ('paid','refund_due','refund_pending','refunded','partially_refunded','not_required')),
+      'completed',  (select count(*) from public.bookings b where b.request_id in (select id from req) and b.status = 'completed'),
+      'reviewed',   (select count(*) from public.reviews v join public.bookings b on b.id = v.booking_id where b.request_id in (select id from req))),
+    'by_status',  (select coalesce(jsonb_agg(z order by z.n desc), '[]') from (select status, count(*) n from bk group by 1) z),
+    'cancellations', (select coalesce(jsonb_agg(z order by z.n desc), '[]') from
+                      (select coalesce(cancelled_by,'unknown') as by, coalesce(cancelled_from,'unknown') as stage, count(*) n
+                         from bk where status = 'cancelled' group by 1,2) z),
+    'categories', (select coalesce(jsonb_agg(z order by z.requests desc), '[]') from
+                   (select r.category, count(*) requests,
+                           count(*) filter (where exists (select 1 from public.offers o where o.request_id = r.id)) quoted,
+                           count(*) filter (where r.status = 'matched') booked,
+                           round(avg(r.budget)) avg_budget,
+                           case when money then (select coalesce(sum(b.price),0) from public.bookings b where b.request_id in
+                             (select id from req r2 where r2.category = r.category) and b.status <> 'cancelled') end as value
+                      from req r group by r.category) z),
+    'cities',     (select coalesce(jsonb_agg(z order by z.requests desc), '[]') from
+                   (select coalesce(r.city,'—') city, count(*) requests,
+                           count(*) filter (where r.status = 'matched') booked,
+                           count(*) filter (where not exists (select 1 from public.offers o where o.request_id = r.id)) no_quote,
+                           (select count(*) from public.photographers g where lower(coalesce(g.city,'')) = lower(coalesce(r.city,'')) and g.approval_status = 'approved') photographers,
+                           case when money then (select coalesce(sum(b.price),0) from public.bookings b where b.request_id in
+                             (select id from req r2 where coalesce(r2.city,'—') = coalesce(r.city,'—')) and b.status <> 'cancelled') end as value
+                      from req r group by coalesce(r.city,'—'), r.city) z),
+    'by_hour',    (select coalesce(jsonb_agg(z order by z.h), '[]') from
+                   (select extract(hour from start_at at time zone 'Asia/Kolkata')::int h, count(*) n from req where start_at is not null group by 1) z),
+    'by_weekday', (select coalesce(jsonb_agg(z order by z.d), '[]') from
+                   (select extract(isodow from start_at at time zone 'Asia/Kolkata')::int d, count(*) n from req where start_at is not null group by 1) z),
+    'quote_speed', (select coalesce(jsonb_agg(z order by z.o), '[]') from
+                   (select case when m is null then 5 when m < 15 then 1 when m < 60 then 2 when m < 180 then 3 else 4 end o,
+                           case when m is null then 'No quote' when m < 15 then 'Under 15 min' when m < 60 then '15–60 min'
+                                when m < 180 then '1–3 hours' else 'Over 3 hours' end label, count(*) n
+                      from (select (select extract(epoch from min(o.created_at) - r.created_at) / 60 from public.offers o where o.request_id = r.id) m from req r) q
+                     group by 1,2) z),
+    'prices',     jsonb_build_object(
+                    'avg_budget', (select round(avg(budget)) from req),
+                    'avg_quote',  (select round(avg(o.price)) from public.offers o where public._ist(o.created_at) between p_from and p_to),
+                    'avg_booked', case when money then (select round(avg(price)) from bk where status <> 'cancelled') end,
+                    'quotes_over_budget', (select count(*) from public.offers o join public.requests r on r.id = o.request_id
+                                             where public._ist(o.created_at) between p_from and p_to and o.price > r.budget),
+                    'quotes', (select count(*) from public.offers o where public._ist(o.created_at) between p_from and p_to)),
+    'devices',    (select coalesce(jsonb_agg(z order by z.n desc), '[]') from
+                   (select coalesce(device,'unknown') device, count(distinct visitor_id) n from public.site_visits where day between p_from and p_to group by 1) z),
+    'pages',      (select coalesce(jsonb_agg(z order by z.n desc), '[]') from
+                   (select coalesce(nullif(path,''),'/') path, sum(views)::int n from public.site_visits where day between p_from and p_to group by 1 order by 2 desc limit 10) z),
+    'ratings',    (select coalesce(jsonb_agg(z order by z.stars desc), '[]') from
+                   (select stars, count(*) n from public.reviews where public._ist(created_at) between p_from and p_to group by 1) z),
+    'top_photographers', (select coalesce(jsonb_agg(z order by z.completed desc, z.quotes desc), '[]') from
+                   (select g.display_name as name, g.city,
+                           (select count(*) from public.offers o where o.photographer_id = g.id and public._ist(o.created_at) between p_from and p_to) quotes,
+                           (select count(*) from bk where bk.photographer_id = g.id and bk.status <> 'cancelled') booked,
+                           (select count(*) from bk where bk.photographer_id = g.id and bk.status = 'completed') completed,
+                           case when money then (select coalesce(sum(bk.photographer_amount),0) from bk where bk.photographer_id = g.id and bk.status = 'completed') end earned,
+                           g.rating, g.review_count reviews
+                      from public.photographers g where g.approval_status = 'approved' order by 4 desc, 3 desc limit 15) z),
+    'top_customers', case when money then (select coalesce(jsonb_agg(z order by z.spent desc), '[]') from
+                   (select max(b.customer_name) as name, count(*) bookings, sum(b.price) spent
+                      from bk b where b.status <> 'cancelled' group by b.customer_id order by 3 desc limit 15) z) end,
+    'methods',    case when money then (select coalesce(jsonb_agg(z order by z.amount desc), '[]') from
+                   (select coalesce(payment_group,'other') method, count(*) n, sum(amount) amount from pay group by 1) z) end,
+    'money_series', case when money then (select coalesce(jsonb_agg(z order by z.bucket), '[]') from
+                   (select b.bk as bucket,
+                           coalesce((select sum(amount) from pay where date_trunc(p_bucket, public._ist(pay.paid_at)::timestamp)::date = b.bk), 0) collected,
+                           coalesce((select sum(commission_amount) from pay where not is_duplicate and refund_status = 'none'
+                                       and date_trunc(p_bucket, public._ist(pay.paid_at)::timestamp)::date = b.bk), 0) commission,
+                           coalesce((select sum(r.amount) from public.refunds r where r.status = 'success'
+                                       and date_trunc(p_bucket, public._ist(coalesce(r.processed_at, r.created_at))::timestamp)::date = b.bk), 0) refunded,
+                           coalesce((select sum(x.photographer_amount) from public.bookings x where x.payout_status = 'paid' and x.payout_at is not null
+                                       and date_trunc(p_bucket, public._ist(x.payout_at)::timestamp)::date = b.bk), 0) paid_out
+                      from buckets b) z) end,
+    'money',      case when money then jsonb_build_object(
+                    'advances', (select coalesce(sum(amount),0) from pay where stage = 'advance'),
+                    'balances', (select coalesce(sum(amount),0) from pay where stage = 'balance'),
+                    'refunded', (select coalesce(sum(amount),0) from public.refunds where status = 'success' and public._ist(created_at) between p_from and p_to),
+                    'paid_out', (select coalesce(sum(photographer_amount),0) from public.bookings where payout_status = 'paid' and public._ist(payout_at) between p_from and p_to),
+                    'balances_due_amount', (select coalesce(sum(balance_amount),0) from public.bookings where balance_status = 'due'),
+                    'balances_due', (select count(*) from public.bookings where balance_status = 'due'),
+                    'unpaid_bookings', (select count(*) from public.bookings where status = 'pending_payment'),
+                    'failed', (select count(*) from public.payments where status in ('failed','user_dropped') and public._ist(created_at) between p_from and p_to),
+                    'test_payments', (select count(*) from pay where environment = 'test')) end
+  ) into res;
+  return res;
+end $$;
+
+revoke all on function public.admin_detail(text, date, date, text) from public, anon;
+revoke all on function public.admin_booking(uuid)                 from public, anon;
+revoke all on function public.admin_report(date, date, text)      from public, anon;
+grant execute on function public.admin_detail(text, date, date, text) to authenticated;
+grant execute on function public.admin_booking(uuid)                 to authenticated;
+grant execute on function public.admin_report(date, date, text)      to authenticated;
+
+-- =====================================================================
 -- 9. ONE-OFF CLEAN-UP
 -- =====================================================================
 

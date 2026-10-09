@@ -116,6 +116,29 @@ details>summary{list-style:none}details>summary::-webkit-details-marker{display:
 @media (prefers-reduced-motion:reduce){.pw-flash,.pw-flash-text{animation:none}}
 .field{margin-top:12px}.field label{display:block;font-size:12px;font-weight:700;color:var(--muted);margin-bottom:7px}
 .linkbtn{font-size:12px;font-weight:700;color:var(--accent)}
+/* clickable tiles, drill-down sheet, reports */
+button.stat{text-align:left;width:100%;font:inherit;color:inherit;cursor:pointer;transition:border-color .15s,transform .15s}
+button.stat:hover{border-color:rgba(255,90,31,.45)}
+button.stat:active{transform:scale(.985)}
+.stat .go{color:var(--accent);font-weight:800;margin-left:2px}
+.sheet-bg{position:fixed;inset:0;background:rgba(5,5,10,.72);backdrop-filter:blur(3px);z-index:50;display:flex;justify-content:center;align-items:flex-start;padding:4vh 14px;overflow-y:auto}
+.sheet-bg.top{z-index:60}
+.sheet{width:100%;max-width:1180px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:20px;box-shadow:0 30px 80px -20px rgba(0,0,0,.7)}
+.sheet.narrow{max-width:900px}
+.rowlink{cursor:pointer}.rowlink:hover td{background:var(--surface-2)}
+.kvr{display:flex;justify-content:space-between;gap:14px;padding:7px 0;border-bottom:1px solid var(--border-soft);font-size:13px}
+.kvr>span:last-child{text-align:right}
+.chart-box.sm{height:220px}
+.funnel{display:flex;flex-direction:column;gap:6px;margin-top:6px}
+.fstep{display:grid;grid-template-columns:190px 1fr 130px;align-items:center;gap:12px;padding:6px 8px;border-radius:9px;text-align:left}
+.fstep:hover{background:var(--surface-2)}
+.flabel{font-size:13px;font-weight:600}
+.fbar{height:12px;background:var(--surface-2);border-radius:6px;overflow:hidden}
+.fbar i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),#ff8a3d);border-radius:6px}
+.fnum{font-size:13px;font-weight:700;text-align:right}
+td{white-space:nowrap}
+.miniclick tr{cursor:pointer}.miniclick tr:hover td{background:var(--surface-2)}
+@media (max-width:640px){.fstep{grid-template-columns:1fr 80px}.fbar{grid-column:1/-1;grid-row:2}}
 </style>
 </head>
 <body>
@@ -378,8 +401,8 @@ async function signOut(){
 async function loadData(){
   const isSuper = S.me.role === 'super_admin';
   const [bk, rq, pg, st, inv, ready, est] = await Promise.all([
-    sb.from('bookings').select('id,customer_name,photographer_name,category,start_at,city,pincode,price,status,payment_status,balance_status,created_at').order('created_at',{ascending:false}).limit(200),
-    sb.from('requests').select('id,customer_name,category,city,pincode,budget,status,start_at,created_at').order('created_at',{ascending:false}).limit(200),
+    sb.from('bookings').select('id,request_id,customer_name,photographer_name,category,start_at,city,pincode,price,status,payment_status,balance_status,created_at').order('created_at',{ascending:false}).limit(1000),
+    sb.from('requests').select('id,customer_name,category,city,pincode,budget,status,start_at,created_at').order('created_at',{ascending:false}).limit(1000),
     sb.from('photographers').select('id,display_name,city,state,pincode,bio,categories,years_exp,rating,review_count,jobs_done,is_online,is_verified,portfolio,created_at,approval_status,review_note,submitted_at,approved_at').order('created_at',{ascending:false}).limit(500),
     sb.from('staff').select('id,email,name,role,status,created_at').order('created_at'),
     isSuper ? sb.from('staff_invites').select('id,email,role,created_at,accepted_at,email_request,email_sent_at').order('created_at',{ascending:false}) : null,
@@ -539,6 +562,7 @@ async function loadInsights(quiet){
       : "Couldn't load charts: " + err.message;
     render(); return;
   }
+  loadReport();
   const next = { series: se.data || [], kpis: kp.data || null, range: r };
   const changed = JSON.stringify(next) !== JSON.stringify(S.insights);
   S.insights = next; S.updatedAt = new Date();
@@ -570,9 +594,9 @@ setInterval(() => {
 const pct = (a, b) => b ? Math.round(100 * a / b) + "%" : "—";
 const num = n => (n == null ? "—" : Number(n).toLocaleString("en-IN"));
 function kpi(v, l, sub, cls){ return `<div class="stat ${cls||''}"><div class="v">${v}</div><div class="l">${l}</div>${sub ? `<div class="xs muted2 mt8">${sub}</div>` : ""}</div>`; }
-function miniTable(title, rows, key, label){
+function miniTable(title, rows, key, label, kind, dtitle){
   return `<div class="card"><div class="sec">${title}</div>${rows && rows.length
-    ? `<table><tbody>${rows.map(r => `<tr><td>${esc(label ? label(r[key]) : r[key])}</td><td style="text-align:right;font-weight:700">${num(r.n)}</td></tr>`).join("")}</tbody></table>`
+    ? `<table class="${kind ? "miniclick" : ""}"><tbody>${rows.map(r => `<tr ${kind ? `onclick="openDrill('${kind}', '${dtitle}', ${JSON.stringify(String(r[key] || "")).replace(/"/g,'&quot;')})"` : ""}><td>${esc(label ? label(r[key]) : r[key])}</td><td style="text-align:right;font-weight:700">${num(r.n)}${kind ? ' <span class="muted2">›</span>' : ""}</td></tr>`).join("")}</tbody></table>`
     : `<div class="xs muted2">Nothing yet in this period.</div>`}</div>`;
 }
 
@@ -596,27 +620,37 @@ function vOverview(){
   return head + `
   <div class="sec mt24">Right now</div>
   <div class="grid">
-    ${kpi(num(k.now_visitors_today), "Visitors today")}
-    ${kpi(num(k.now_photographers_available), "Photographers available")}
-    ${kpi(num(k.now_open_requests), "Requests waiting for quotes")}
-    ${kpi(num(k.now_upcoming_shoots), "Upcoming shoots")}
+    ${tile(num(k.now_visitors_today), "Visitors today", "", "", "visitors_today")}
+    ${tile(num(k.now_photographers_available), "Photographers available", "", "", "available_pgs")}
+    ${tile(num(k.now_open_requests), "Requests waiting for quotes", "", "", "open_requests")}
+    ${tile(num(k.now_upcoming_shoots), "Upcoming shoots", "", "", "upcoming_shoots")}
+    ${money && k.balances_due != null ? tile(num(k.balances_due), "Balances owed by customers", "", k.balances_due ? "hl" : "", "balances_due") : ""}
   </div>
 
   <div class="sec mt24">${esc(r.label)}</div>
   <div class="grid">
-    ${money ? kpi(inr(k.booked_value), "Booking value (GMV)", "Completed: " + inr(k.completed_value), "hl") : ""}
-    ${money ? kpi(k.avg_booking_value ? inr(k.avg_booking_value) : "—", "Average booking") : ""}
-    ${money && k.collected != null ? kpi(inr(k.collected), "Collected online", "SnapPro commission: " + inr(k.commission_earned || 0)) : ""}
-    ${money && k.payouts_due != null ? kpi(inr(k.payouts_due), "Owed to photographers", k.refunds_due ? `${k.refunds_due} refund${k.refunds_due===1?"":"s"} to do · <button class="linkbtn" onclick="openTab('payments')">open</button>` : "No refunds waiting") : ""}
-    ${kpi(num(k.visitors), "Unique visitors", num(k.returning_visitors) + " came back · " + num(k.page_views) + " page views" + (k.mobile_share != null ? " · " + k.mobile_share + "% mobile" : ""))}
-    ${kpi(num(k.signups), "New sign-ups", num(k.signups_customers) + " customers · " + num(k.signups_photographers) + " photographers")}
-    ${kpi(pct(k.signups, k.visitors), "Visitor → sign-up")}
-    ${kpi(num(k.requests), "Shoot requests", pct(k.requests_quoted, k.requests) + " got a quote · " + pct(k.requests_booked, k.requests) + " booked")}
-    ${kpi(k.avg_quotes != null ? k.avg_quotes : "—", "Quotes per request", k.median_first_quote_min != null ? "First quote in ~" + k.median_first_quote_min + " min (median)" : "")}
-    ${kpi(num(k.bookings), "Bookings", num(k.completed) + " completed")}
-    ${kpi(pct(k.cancelled, bookedAll), "Cancellation rate", num(k.cancelled) + " cancelled")}
-    ${kpi(k.avg_rating != null ? k.avg_rating + "★" : "—", "Average rating", num(k.reviews) + " reviews")}
-    ${kpi(num(k.messages), "Chat messages")}
+    ${money ? tile(inr(k.booked_value), "Booking value (GMV)", "Completed: " + inr(k.completed_value), "hl", "booking_value", "Bookings (value)") : ""}
+    ${money ? tile(k.avg_booking_value ? inr(k.avg_booking_value) : "—", "Average booking", "", "", "booking_value", "Bookings (value)") : ""}
+    ${money && k.collected != null ? tile(inr(k.collected), "Collected online", "", "", "collected", "Payments collected") : ""}
+    ${money && k.commission_earned != null ? tile(inr(k.commission_earned || 0), "SnapPro commission", "Kept from payments not refunded", "", "commission", "Payments with commission") : ""}
+    ${money && k.payouts_due != null ? tile(inr(k.payouts_due), "Owed to photographers", "Payouts due now", "", "payouts_due", "Payouts due to photographers") : ""}
+    ${money && k.refunds_due != null ? tile(num(k.refunds_due), "Refunds to do", "", k.refunds_due ? "hl" : "", "refunds_due", "Refunds to do") : ""}
+    ${money && k.payments_failed != null ? tile(num(k.payments_failed), "Failed payments", "Declined or abandoned", "", "payments_failed", "Failed or abandoned payments") : ""}
+    ${tile(num(k.visitors), "Unique visitors", num(k.page_views) + " page views" + (k.mobile_share != null ? " · " + k.mobile_share + "% mobile" : ""), "", "visitors", "Visits")}
+    ${tile(num(k.returning_visitors), "Came back", "Visited on more than one day", "", "returning_visitors", "Returning visitors")}
+    ${tile(num(k.signups), "New sign-ups", "", "", "signups", "New sign-ups")}
+    ${tile(num(k.signups_customers), "New customers", "", "", "signups_customers", "New customers")}
+    ${tile(num(k.signups_photographers), "New photographers", "", "", "signups_photographers", "New photographers")}
+    ${tile(pct(k.signups, k.visitors), "Visitor → sign-up", "", "", "signups", "New sign-ups")}
+    ${tile(num(k.requests), "Shoot requests", pct(k.requests_quoted, k.requests) + " got a quote · " + pct(k.requests_booked, k.requests) + " booked", "", "requests", "Shoot requests")}
+    ${tile(num(k.requests_quoted), "Requests that got a quote", "", "", "requests_quoted", "Requests that got a quote")}
+    ${tile(num(k.requests_booked), "Requests booked", "", "", "requests_booked", "Requests that were booked")}
+    ${tile(k.avg_quotes != null ? k.avg_quotes : "—", "Quotes per request", k.median_first_quote_min != null ? "First quote in ~" + k.median_first_quote_min + " min (median)" : "", "", "quotes", "All quotes")}
+    ${tile(num(k.bookings), "Bookings", "", "", "bookings", "Bookings")}
+    ${tile(num(k.completed), "Completed shoots", "", "", "completed", "Completed shoots")}
+    ${tile(pct(k.cancelled, bookedAll), "Cancellation rate", num(k.cancelled) + " cancelled", "", "cancelled", "Cancelled bookings")}
+    ${tile(k.avg_rating != null ? k.avg_rating + "★" : "—", "Average rating", num(k.reviews) + " reviews", "", "reviews", "Reviews")}
+    ${tile(num(k.messages), "Chat messages", "Counts per booking — never the text", "", "messages", "Chats by booking")}
   </div>
 
   ${money ? `<div class="card mt16"><div class="between"><div class="sec" style="margin:0">Revenue — booking value</div>
@@ -630,18 +664,21 @@ function vOverview(){
 
   <div class="sec mt24">All time</div>
   <div class="grid">
-    ${kpi(num(k.total_customers), "Customers")}
-    ${kpi(num(k.total_photographers), "Photographers", num(k.photographers_with_photos) + " with portfolio · " + num(k.photographers_verified) + " verified")}
-    ${kpi(num(k.photographers_pending), "Waiting for approval", k.photographers_pending ? `<button class="linkbtn" onclick="openTab('pros')">Review now →</button>` : "Nobody waiting", k.photographers_pending ? "hl" : "")}
-    ${kpi(num(k.repeat_customers), "Repeat customers", "2+ bookings")}
-    ${kpi(num(k.setup_incomplete), "Sign-ups not finished", "No city or pincode yet")}
+    ${tile(num(k.total_customers), "Customers", "", "", "customers")}
+    ${tile(num(k.total_photographers), "Photographers", "", "", "photographers")}
+    ${tile(num(k.photographers_with_photos), "Photographers with a portfolio", "", "", "pgs_with_photos")}
+    ${tile(num(k.photographers_verified), "Verified photographers", "", "", "pgs_verified")}
+    ${tile(num(k.photographers_pending), "Waiting for approval", k.photographers_pending ? "Approve them on the Photographers tab" : "Nobody waiting", k.photographers_pending ? "hl" : "", "pending_pgs")}
+    ${tile(num(k.repeat_customers), "Repeat customers", "2+ bookings", "", "repeat_customers")}
+    ${tile(num(k.setup_incomplete), "Sign-ups not finished", "No city or pincode yet", "", "setup_incomplete")}
   </div>
 
   <div class="grid3 mt16">
-    ${miniTable("Top cities", k.top_cities, "city")}
-    ${miniTable("Top shoot types", k.top_categories, "category", c => c ? c.charAt(0).toUpperCase() + c.slice(1) : "—")}
-    ${miniTable("Where visitors come from", k.top_referrers, "referrer")}
-  </div>`;
+    ${miniTable("Top cities", k.top_cities, "city", null, "city", "Requests")}
+    ${miniTable("Top shoot types", k.top_categories, "category", c => CAT_NAMES[c] || c || "—", "category", "Requests")}
+    ${miniTable("Where visitors come from", k.top_referrers, "referrer", null, "referrer", "Visits")}
+  </div>
+  ${vReports()}`;
 }
 
 let charts = [];
@@ -727,10 +764,10 @@ function vUsers(){
   if(!S.users) return `<div class="empty">Loading…</div>`;
   const all = S.users, count = f => all.filter(u => f(u)).length;
   return `<div class="grid">
-      ${kpi(num(count(u => !u.is_staff)), "Accounts")}
-      ${kpi(num(count(u => u.role === "customer" && !u.is_staff)), "Customers")}
-      ${kpi(num(count(u => u.role === "photographer")), "Photographers")}
-      ${kpi(num(count(u => !u.city || !u.pincode)), "Sign-up not finished")}
+      ${[["all", num(count(u => !u.is_staff)), "Accounts"], ["customer", num(count(u => u.role === "customer" && !u.is_staff)), "Customers"],
+         ["photographer", num(count(u => u.role === "photographer")), "Photographers"], ["incomplete", num(count(u => !u.city || !u.pincode)), "Sign-up not finished"],
+         ["staff", num(count(u => u.is_staff)), "Staff"]]
+        .map(([f, v, l]) => `<button class="stat tap ${S.usersFilter===f?'hl':''}" onclick="S.usersFilter='${f}';render()"><div class="v">${v}</div><div class="l">${l} <span class="go">›</span></div></button>`).join("")}
     </div>
     <div class="between mt16" style="flex-wrap:wrap;gap:10px">
       <div class="tabs" style="width:fit-content;flex-wrap:wrap">${USER_FILTERS.map(([k, l]) => `<button class="tab ${S.usersFilter===k?'on':''}" onclick="S.usersFilter='${k}';render()">${l}</button>`).join("")}</div>
@@ -866,11 +903,12 @@ function vPayments(){
   const refundsFor = id => P.refunds.filter(r => r.payment_id === id);
   return `
   <div class="grid">
-    <div class="stat hl"><div class="v">${inr(collected)}</div><div class="l">Collected online</div></div>
-    <div class="stat"><div class="v">${inr(commission)}</div><div class="l">SnapPro commission (${P.commission}%)</div></div>
-    <div class="stat"><div class="v">${inr(due.reduce((s,b) => s + (b.photographer_amount||0), 0))}</div><div class="l">Owed to photographers (${due.length})</div></div>
-    <div class="stat"><div class="v">${refundsDue.length}</div><div class="l">Refunds to do</div></div>
-    <div class="stat"><div class="v">${inr(refunded)}</div><div class="l">Refunded</div></div>
+    ${tile(inr(collected), "Collected online", "", "hl", "collected", "Payments collected", null, true)}
+    ${tile(inr(commission), "SnapPro commission (" + P.commission + "%)", "", "", "commission", "Payments with commission", null, true)}
+    ${tile(inr(due.reduce((s,b) => s + (b.photographer_amount||0), 0)), "Owed to photographers (" + due.length + ")", "", "", "payouts_due", "Payouts due to photographers", null, true)}
+    ${tile(num(balances.length), "Balances owed by customers", inr(balances.reduce((s,b) => s + (b.balance_amount||0), 0)), "", "balances_due", "Balances still owed by customers", null, true)}
+    ${tile(num(refundsDue.length), "Refunds to do", "", "", "refunds_due", "Refunds to do", null, true)}
+    ${tile(inr(refunded), "Refunded", "", "", "refunds", "Refunds", null, true)}
   </div>
   ${S.me.role === "super_admin" ? `<div class="xs muted2 mt8">Commission is ${P.commission}% of each booking. Customers pay an advance when they book and the balance online once the shoot starts; payouts become due when both are paid. <button class="linkbtn" onclick="setCommission()">Change</button></div>` : ""}
 
@@ -1075,27 +1113,61 @@ function vConsole(){
 const when = d => d ? new Date(d).toLocaleString("en-IN",{day:"numeric",month:"short",hour:"numeric",minute:"2-digit"}) : "—";
 const statusChip = st => `<span class="chip ${st==='completed'||st==='matched'?'green':st==='cancelled'?'red':''}">${esc(st||'—')}</span>`;
 
+const BK_STATUSES = [["all","All"],["pending_payment","Awaiting payment"],["confirmed","Confirmed"],["enroute","On the way"],["arrived","Arrived"],["shooting","Shooting"],["completed","Completed"],["cancelled","Cancelled"]];
+const RQ_STATUSES = [["all","All"],["broadcasting","Open"],["awaiting","Awaiting"],["matched","Booked"],["expired","Expired"],["cancelled","Cancelled"]];
+const textHit = (o, q) => !q || Object.values(o).some(v => v != null && String(v).toLowerCase().includes(q));
+function bkList(){ const f = S.bkFilter || "all", q = (S.bkQ || "").trim().toLowerCase();
+  return S.bookings.filter(b => (f === "all" || b.status === f) && textHit({ ...b, ref: payRef(b.id) }, q)); }
+function rqList(){ const f = S.rqFilter || "all", q = (S.rqQ || "").trim().toLowerCase();
+  return S.requests.filter(r => (f === "all" || r.status === f) && textHit(r, q)); }
+function csvOf(name, cols, rows){
+  const q = v => { v = v == null ? "" : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g,'""') + '"' : v; };
+  const blob = new Blob([cols.join(",") + "\n" + rows.map(r => cols.map(c => q(r[c])).join(",")).join("\n")], { type: "text/csv" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "snappro-" + name + "-" + istToday() + ".csv";
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+}
+function bkRowsHtml(){
+  const money = S.me.role !== 'manager', list = bkList();
+  if(!list.length) return `<tr><td colspan="9"><div class="empty">No bookings match.</div></td></tr>`;
+  return list.map(b=>`<tr class="rowlink" onclick="openBooking('${b.id}')">
+      <td>${when(b.start_at)}</td><td class="xs">${payRef(b.id)}</td><td>${esc(b.customer_name||'—')}</td><td>${esc(b.photographer_name||'—')}</td>
+      <td class="muted">${esc(CAT_NAMES[b.category]||b.category||'—')}</td><td class="muted">${esc(b.city||'—')} ${esc(b.pincode||'')}</td>
+      <td>${statusChip(b.status === 'pending_payment' ? 'awaiting payment' : b.status)}</td>${money?`<td>${inr(b.price)}</td><td class="xs">${esc(({paid:'Paid online',unpaid:'Unpaid',refund_due:'Refund due',refund_pending:'Refund processing',refunded:'Refunded',partially_refunded:'Part refunded',not_required:'Paid directly'})[b.payment_status] || b.payment_status || '—')}${b.payment_status === 'paid' && b.balance_status && b.balance_status !== 'not_required' ? `<div class="muted2">${b.balance_status === 'paid' ? 'Paid in full' : b.balance_status === 'due' ? 'Balance due' : 'Advance paid'}</div>` : ''}</td>`:''}
+    </tr>`).join('');
+}
 function vBookings(){
   if(!S.bookings.length) return `<div class="card"><div class="empty">No bookings yet.</div></div>`;
-  const money = S.me.role !== 'manager';
-  return `<div class="card tblwrap"><table>
+  const money = S.me.role !== 'manager', n = st => S.bookings.filter(b => st === "all" || b.status === st).length;
+  return `<div class="between" style="flex-wrap:wrap;gap:10px">
+      <div class="tabs" style="width:fit-content;flex-wrap:wrap">${BK_STATUSES.map(([k,l]) => `<button class="tab ${(S.bkFilter||'all')===k?'on':''}" onclick="S.bkFilter='${k}';render()">${l} <span class="muted2">${n(k)}</span></button>`).join("")}</div>
+      <div class="row"><input id="bkQ" class="input" style="width:240px;padding:9px 12px" placeholder="Search name, city, ref…" value="${esc(S.bkQ||'')}" oninput="S.bkQ=this.value;setHtml('bkBody',bkRowsHtml())">
+        <button class="btn sm" onclick="csvOf('bookings',['created_at','start_at','id','customer_name','photographer_name','category','city','pincode','status'${money?",'price','payment_status','balance_status'":""}],bkList())">Download CSV</button></div></div>
+    <div class="xs muted2 mt8">Tap a booking to see payments, quotes, chat activity and the review.</div>
+    <div class="card tblwrap mt8"><table>
     <thead><tr><th>Shoot time</th><th>Booking</th><th>Customer</th><th>Photographer</th><th>Type</th><th>City</th><th>Status</th>${money?'<th>Price</th><th>Payment</th>':''}</tr></thead>
-    <tbody>${S.bookings.map(b=>`<tr>
-      <td>${when(b.start_at)}</td><td class="xs">${payRef(b.id)}</td><td>${esc(b.customer_name||'—')}</td><td>${esc(b.photographer_name||'—')}</td>
-      <td class="muted">${esc(b.category||'—')}</td><td class="muted">${esc(b.city||'—')} ${esc(b.pincode||'')}</td>
-      <td>${statusChip(b.status === 'pending_payment' ? 'awaiting payment' : b.status)}</td>${money?`<td>${inr(b.price)}</td><td class="xs">${esc(({paid:'Paid online',unpaid:'Unpaid',refund_due:'Refund due',refund_pending:'Refund processing',refunded:'Refunded',partially_refunded:'Part refunded',not_required:'Paid directly'})[b.payment_status] || b.payment_status || '—')}${b.payment_status === 'paid' && b.balance_status && b.balance_status !== 'not_required' ? `<div class="muted2">${b.balance_status === 'paid' ? 'Paid in full' : b.balance_status === 'due' ? 'Balance due' : 'Advance paid'}</div>` : ''}</td>`:''}
-    </tr>`).join('')}</tbody></table></div>`;
+    <tbody id="bkBody">${bkRowsHtml()}</tbody></table></div>`;
 }
-
+function rqRowsHtml(){
+  const list = rqList();
+  if(!list.length) return `<tr><td colspan="8"><div class="empty">No requests match.</div></td></tr>`;
+  return list.map(r => { const bk = S.bookings.find(b => b.request_id === r.id && b.status !== 'cancelled');
+    return `<tr ${bk ? `class="rowlink" onclick="openBooking('${bk.id}')" title="Open the booking"` : ""}>
+      <td class="muted">${when(r.created_at)}</td><td>${esc(r.customer_name||'—')}</td><td>${esc(CAT_NAMES[r.category]||r.category||'—')}</td>
+      <td class="muted">${esc(r.city||'—')} ${esc(r.pincode||'')}</td><td>${when(r.start_at)}</td>
+      <td>${inr(r.budget)}</td><td>${statusChip(r.status === 'broadcasting' ? 'open' : r.status === 'matched' ? 'booked' : r.status)}</td><td>${bk ? '<span class="linkbtn">Booking ›</span>' : ''}</td>
+    </tr>`; }).join('');
+}
 function vRequests(){
   if(!S.requests.length) return `<div class="card"><div class="empty">No requests yet.</div></div>`;
-  return `<div class="card tblwrap"><table>
-    <thead><tr><th>Posted</th><th>Customer</th><th>Type</th><th>City</th><th>Shoot time</th><th>Budget</th><th>Status</th></tr></thead>
-    <tbody>${S.requests.map(r=>`<tr>
-      <td class="muted">${when(r.created_at)}</td><td>${esc(r.customer_name||'—')}</td><td>${esc(r.category||'—')}</td>
-      <td class="muted">${esc(r.city||'—')} ${esc(r.pincode||'')}</td><td>${when(r.start_at)}</td>
-      <td>${inr(r.budget)}</td><td>${statusChip(r.status)}</td>
-    </tr>`).join('')}</tbody></table></div>`;
+  const n = st => S.requests.filter(r => st === "all" || r.status === st).length;
+  return `<div class="between" style="flex-wrap:wrap;gap:10px">
+      <div class="tabs" style="width:fit-content;flex-wrap:wrap">${RQ_STATUSES.map(([k,l]) => `<button class="tab ${(S.rqFilter||'all')===k?'on':''}" onclick="S.rqFilter='${k}';render()">${l} <span class="muted2">${n(k)}</span></button>`).join("")}</div>
+      <div class="row"><input id="rqQ" class="input" style="width:240px;padding:9px 12px" placeholder="Search name, city, type…" value="${esc(S.rqQ||'')}" oninput="S.rqQ=this.value;setHtml('rqBody',rqRowsHtml())">
+        <button class="btn sm" onclick="csvOf('requests',['created_at','customer_name','category','city','pincode','start_at','budget','status'],rqList())">Download CSV</button>
+        <button class="btn sm" onclick="openDrill('requests','Requests with quote details')">Quote details ›</button></div></div>
+    <div class="card tblwrap mt12"><table>
+    <thead><tr><th>Posted</th><th>Customer</th><th>Type</th><th>City</th><th>Shoot time</th><th>Budget</th><th>Status</th><th></th></tr></thead>
+    <tbody id="rqBody">${rqRowsHtml()}</tbody></table></div>`;
 }
 
 const CAT_NAMES = {portrait:"Portrait",event:"Party / Event",wedding:"Wedding",birthday:"Birthday",product:"Product",food:"Food",maternity:"Maternity",corporate:"Corporate",realestate:"Real estate",fashion:"Fashion",pet:"Pet",street:"Candid / Street"};
@@ -1242,6 +1314,258 @@ function vTeam(){
   </div>`:''}`;
 }
 
+/* ===================== drill-downs & reports ===================== */
+/* Every number opens the rows behind it. */
+const BOOKING_KINDS = new Set(['bookings','completed','cancelled','booking_value','upcoming_shoots','balances_due','payouts_due','payouts_paid','status']);
+const MONEY_KINDS = new Set(['payouts_paid','booking_value','collected','commission','payouts_due','refunds_due','refunds','payments_failed','balances_due',
+  'customers','top_customers','signups','signups_customers','signups_photographers','repeat_customers','setup_incomplete','method']);
+const PERIOD_KINDS = new Set(['visitors','referrer','device','returning_visitors','requests','requests_quoted','requests_booked','city','category','quotes',
+  'bookings','completed','cancelled','booking_value','status','payouts_paid','collected','commission','payments_failed','method','refunds','signups',
+  'signups_customers','signups_photographers','reviews','messages']);
+const canDrill = kind => kind && (S.me.role !== "manager" || !MONEY_KINDS.has(kind));
+/* a clickable tile */
+function tile(v, l, sub, cls, kind, title, arg, allTime){
+  if(!canDrill(kind)) return kpi(v, l, sub, cls);
+  return `<button class="stat tap ${cls||''}" onclick="openDrill('${kind}', ${JSON.stringify(title || l).replace(/"/g,'&quot;')}, ${arg != null ? JSON.stringify(String(arg)).replace(/"/g,'&quot;') : "null"}, ${allTime ? "true" : "false"})">
+    <div class="v">${v}</div><div class="l">${l} <span class="go">›</span></div>${sub ? `<div class="xs muted2 mt8">${sub}</div>` : ""}</button>`;
+}
+let drillSeq = 0;
+async function openDrill(kind, title, arg, allTime){
+  const r = allTime ? { from: "2000-01-01", to: istToday(), label: "All time" } : periodRange(), seq = ++drillSeq;
+  S.drill = { kind, title, arg: arg == null || arg === "" ? null : arg, rows: null, q: "", err: "", sub: allTime || !PERIOD_KINDS.has(kind) ? "All time / right now" : r.label };
+  render();
+  const { data, error } = await sb.rpc("admin_detail", { p_kind: kind, p_from: r.from, p_to: r.to, p_arg: S.drill.arg });
+  if(seq !== drillSeq || !S.drill) return;
+  if(error){ S.drill.err = /admin_detail|function/i.test(error.message) ? "This needs the latest database update — run supabase/snappro.sql in the Supabase SQL Editor." : error.message; }
+  else S.drill.rows = data || [];
+  render();
+}
+function closeDrill(){ S.drill = null; S.bk = null; render(); }
+const COL_LABEL = { shoot_time:"Shoot time", booked_at:"Booked", posted:"Posted", sent:"Sent", at:"When", joined:"Joined", last_sign_in:"Last sign-in",
+  first_at:"First visit", last_at:"Last visit", photographer_share:"Photographer share", first_quote_min:"First quote (min)", minutes_after_post:"Min after post",
+  booked_price:"Booked price", lowest_quote:"Lowest quote", pay_to_upi:"Pay to (UPI)", razorpay_id:"Razorpay ID", razorpay_refund:"Razorpay refund",
+  signed_in_as:"Signed in as", email_confirmed:"Email confirmed", paid_online:"Paid online", quotes_sent:"Quotes sent", shoot_types:"Shoot types",
+  approved_at:"Approved", last_message:"Last message", from_customer:"From customer", from_photographer:"From photographer", cancelled_by:"Cancelled by",
+  cancelled_from:"Cancelled at stage", started_by:"Started by", first_day:"First day", last_day:"Last day", order_id:"Our ref" };
+const MONEY_COLS = /^(price|amount|commission|photographer_share|budget|booked_price|lowest_quote|earnings|paid_online|refunded|spent|value|earned)$/;
+const HIDE_COLS = new Set(["id","booking_id"]);
+function cellHtml(k, v){
+  if(v == null || v === "") return `<span class="muted2">—</span>`;
+  if(typeof v === "boolean") return v ? "Yes" : "No";
+  if(MONEY_COLS.test(k)) return inr(v);
+  if(/(_at|^at|time|posted|sent|joined|closes|last_sign_in|last_message|^day|_day)$/.test(k) && /^\d{4}-\d\d-\d\d/.test(String(v)))
+    return String(v).length === 10 ? fmt(v) : when(v);
+  if(k === "category") return esc(CAT_NAMES[v] || v);
+  if(k === "method") return esc(methodName(v));
+  if(k === "status" || k === "payment" || k === "balance" || k === "payout" || k === "refund" || k === "approval" || k === "outcome") return `<span class="chip">${esc(String(v).replace(/_/g," "))}</span>`;
+  if(k === "stars" || k === "rating") return esc(v) + "★";
+  return esc(v);
+}
+function drillRows(){
+  const d = S.drill, q = (d.q || "").trim().toLowerCase();
+  return (d.rows || []).filter(r => !q || Object.values(r).some(v => v != null && String(v).toLowerCase().includes(q)));
+}
+/* the database returns rows as JSON objects (no column order), so order them here */
+const COL_ORDER = ["shoot_time","booked_at","posted","sent","at","requested","done","day","first_at","last_at","first_day","last_day","joined",
+  "name","customer","photographer","signed_in_as","role","email","phone","category","shoot_types","city","state","pincode","hours","stage",
+  "status","approval","outcome","available","verified","budget","price","lowest_quote","booked_price","amount","commission","photographer_share",
+  "refunded","method","payment","balance","payout","pay_to_upi","payout_ref","paid_out_at","refund","quotes","quotes_sent","first_quote_min",
+  "minutes_after_post","requests","bookings","paid_online","jobs_done","rating","reviews","stars","comment","photos","earnings","messages",
+  "from_customer","from_photographer","last_message","views","days","device","path","referrer","cancelled_by","cancelled_from","reason",
+  "started_by","closes","last_sign_in","email_confirmed","approved_at","razorpay_id","razorpay_refund","arn","order_id","environment","note"];
+const colRank = k => { const i = COL_ORDER.indexOf(k); return i < 0 ? 999 : i; };
+function drillCols(){ const first = (S.drill.rows || [])[0]; return first ? Object.keys(first).filter(k => !HIDE_COLS.has(k)).sort((a, b) => colRank(a) - colRank(b)) : []; }
+function drillBodyHtml(){
+  const rows = drillRows(), cols = drillCols(), bookingish = BOOKING_KINDS.has(S.drill.kind);
+  if(!rows.length) return `<tr><td colspan="${Math.max(cols.length,1)}"><div class="empty">${(S.drill.rows||[]).length ? "Nothing matches your search." : "Nothing here for this period."}</div></td></tr>`;
+  return rows.slice(0, 500).map(r => {
+    const bid = r.booking_id || (bookingish ? r.id : null);
+    return `<tr ${bid ? `class="rowlink" onclick="openBooking('${bid}')" title="Open booking"` : ""}>${cols.map(k => `<td>${cellHtml(k, r[k])}</td>`).join("")}</tr>`;
+  }).join("") + (rows.length > 500 ? `<tr><td colspan="${cols.length}" class="xs muted2">Showing 500 of ${rows.length} — download the CSV for all.</td></tr>` : "");
+}
+function drillSearch(v){ S.drill.q = v; setHtml("drillBody", drillBodyHtml()); setHtml("drillCount", drillCountText()); }
+function drillCountText(){ const n = drillRows().length; return n + (n === 1 ? " row" : " rows"); }
+function exportDrill(){
+  const cols = drillCols(), rows = drillRows();
+  const q = v => { v = v == null ? "" : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g,'""') + '"' : v; };
+  const blob = new Blob([cols.join(",") + "\n" + rows.map(r => cols.map(c => q(r[c])).join(",")).join("\n")], { type: "text/csv" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "snappro-" + S.drill.kind + "-" + istToday() + ".csv";
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+}
+function vDrill(){
+  const d = S.drill; if(!d) return "";
+  const cols = d.rows ? drillCols() : [];
+  return `<div class="sheet-bg" onclick="if(event.target===this)closeDrill()"><div class="sheet" role="dialog" aria-label="${esc(d.title)}">
+    <div class="between" style="align-items:flex-start"><div><div class="h2">${esc(d.title)}${d.arg ? ` <span class="muted">· ${esc(CAT_NAMES[d.arg] || d.arg)}</span>` : ""}</div>
+      <div class="xs muted2 mt8">${esc(d.sub)}${d.rows ? " · <span id='drillCount'>" + drillCountText() + "</span>" : ""}</div></div>
+      <button class="btn sm" onclick="closeDrill()">Close</button></div>
+    ${d.err ? `<div class="warn mt12">${esc(d.err)}</div>` : !d.rows ? `<div class="empty">Loading…</div>` : `
+    <div class="row mt12" style="flex-wrap:wrap"><input id="drillQ" class="input grow" style="min-width:200px;padding:9px 12px" placeholder="Search these rows" value="${esc(d.q)}" oninput="drillSearch(this.value)">
+      <button class="btn sm" onclick="exportDrill()">Download CSV</button></div>
+    <div class="tblwrap mt12"><table><thead><tr>${cols.map(k => `<th>${esc(COL_LABEL[k] || k.replace(/_/g," "))}</th>`).join("")}</tr></thead>
+      <tbody id="drillBody">${drillBodyHtml()}</tbody></table></div>`}
+  </div></div>`;
+}
+
+/* one booking, everything about it */
+async function openBooking(id){
+  S.bk = { id, data: null, err: "" }; render();
+  const { data, error } = await sb.rpc("admin_booking", { p_id: id });
+  if(!S.bk || S.bk.id !== id) return;
+  if(error) S.bk.err = error.message; else S.bk.data = data;
+  render();
+}
+function vBooking(){
+  const x = S.bk; if(!x) return "";
+  const d = x.data, b = d && d.booking, money = S.me.role !== "manager";
+  const kv = (k, v) => v == null || v === "" ? "" : `<div class="kvr"><span class="muted2">${k}</span><span>${v}</span></div>`;
+  return `<div class="sheet-bg top" onclick="if(event.target===this){S.bk=null;render()}"><div class="sheet narrow" role="dialog" aria-label="Booking">
+    <div class="between"><div class="h2">Booking ${payRef(x.id)}</div><button class="btn sm" onclick="S.bk=null;render()">${S.drill ? "Back" : "Close"}</button></div>
+    ${x.err ? `<div class="warn mt12">${esc(x.err)}</div>` : !d ? `<div class="empty">Loading…</div>` : `
+    <div class="grid2 mt12">
+      <div class="card"><div class="sec">Shoot</div>
+        ${kv("Status", statusChip(b.status === "pending_payment" ? "awaiting payment" : b.status))}
+        ${kv("Type", esc(CAT_NAMES[b.category] || b.category))}${kv("When", when(b.start_at))}${kv("Hours", esc(b.duration_hrs))}
+        ${kv("Where", esc([b.address, b.city, b.pincode].filter(Boolean).join(", ")))}${kv("Booked", when(b.created_at))}
+        ${b.status === "cancelled" ? kv("Cancelled", esc((b.cancelled_by || "—") + " · at " + (b.cancelled_from || "—"))) : ""}
+        ${kv("Messages", esc(d.messages) + (d.last_message ? " · last " + when(d.last_message) : ""))}</div>
+      <div class="card"><div class="sec">People</div>
+        ${kv("Customer", esc(d.customer && d.customer.name))}${kv("Customer email", esc(d.customer && d.customer.email))}${kv("Customer phone", esc(d.customer && d.customer.phone))}
+        ${kv("Photographer", esc(d.photographer && d.photographer.name))}${kv("Photographer email", esc(d.photographer && d.photographer.email))}
+        ${kv("Payout UPI", esc(d.photographer && d.photographer.upi))}
+        ${kv("Review", d.review ? esc(d.review.stars + "★ " + (d.review.comment || "")) : "Not rated yet")}</div>
+    </div>
+    ${money ? `<div class="card mt12"><div class="sec">Money</div>
+      <div class="grid">${[["Price", inr(b.price)], ["Advance", inr(b.advance_amount)], ["Balance", inr(b.balance_amount) + " · " + esc(b.balance_status || "—")],
+        ["Commission", inr(b.commission_amount)], ["Photographer share", inr(b.photographer_amount)], ["Payout", esc(b.payout_status) + (b.payout_ref ? " · " + esc(b.payout_ref) : "")]]
+        .map(([l, v]) => `<div><div class="xs muted2">${l}</div><div class="sm" style="font-weight:700">${v}</div></div>`).join("")}</div>
+      ${(d.payments || []).length ? `<div class="tblwrap mt12"><table><thead><tr><th>Part</th><th>Amount</th><th>Status</th><th>Method</th><th>When</th><th>Razorpay ID</th><th>Refund</th></tr></thead><tbody>
+        ${d.payments.map(p => `<tr><td>${esc(p.stage)}</td><td>${inr(p.amount)}</td><td>${statusChip(p.status)}</td><td>${esc(methodName(p.method))}</td><td>${when(p.at)}</td><td class="xs">${esc(p.razorpay_id || "—")}</td><td>${esc(p.refund)}${Number(p.refunded) ? " · " + inr(p.refunded) : ""}</td></tr>`).join("")}
+      </tbody></table></div>` : `<div class="xs muted2 mt8">No payment attempts yet.</div>`}</div>` : ""}
+    <div class="card mt12"><div class="sec">Quotes on this request (${(d.quotes || []).length})</div>
+      ${(d.quotes || []).map(q => `<div class="kvr"><span>${esc(q.photographer)}${q.chosen ? ' <span class="chip green">chosen</span>' : ""}</span><span>${inr(q.price)} · ${when(q.sent)}</span></div>`).join("") || `<div class="xs muted2">None</div>`}
+      ${d.request ? `<div class="xs muted2 mt8">Customer's budget ${inr(d.request.budget)} · posted ${when(d.request.created_at)}${d.request.notes ? " · “" + esc(d.request.notes) + "”" : ""}</div>` : ""}</div>`}
+  </div></div>`;
+}
+
+/* ---------- reports (below the overview numbers) ---------- */
+let reportSeq = 0;
+async function loadReport(){
+  const r = periodRange(), seq = ++reportSeq;
+  const { data, error } = await sb.rpc("admin_report", { p_from: r.from, p_to: r.to, p_bucket: r.bucket });
+  if(seq !== reportSeq) return;
+  if(error){ S.reportErr = /admin_report|function/i.test(error.message) ? "Reports need the latest database update — run supabase/snappro.sql in the Supabase SQL Editor." : "Couldn't load reports: " + error.message; }
+  else { S.report = data; S.reportErr = ""; }
+  if(S.tab === "overview") render();
+}
+const WEEKDAYS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+function rowsTable(title, head, rows, onRow){
+  return `<div class="card"><div class="sec">${title}</div>${rows && rows.length
+    ? `<div class="tblwrap"><table><thead><tr>${head.map(h => `<th>${h}</th>`).join("")}</tr></thead><tbody>${rows.map((r, i) =>
+        `<tr ${onRow && onRow(r) ? `class="rowlink" onclick="${onRow(r)}"` : ""}>${r.cells.map(c => `<td>${c}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`
+    : `<div class="xs muted2">Nothing yet in this period.</div>`}</div>`;
+}
+function vReports(){
+  const R = S.report, money = S.me.role !== "manager", r = periodRange();
+  if(S.reportErr) return `<div class="warn mt24">${esc(S.reportErr)}</div>`;
+  if(!R) return `<div class="empty">Loading reports…</div>`;
+  const F = R.funnel || {}, M = R.money, P = R.prices || {};
+  const steps = [["Visitors", F.visitors, "visitors"], ["Signed up", F.signups, "signups"], ["Posted a shoot", F.requests, "requests"], ["Got a quote", F.quoted, "requests_quoted"],
+                 ["Picked a photographer", F.chosen, "bookings"], ["Paid the advance", F.paid, "bookings"], ["Shoot completed", F.completed, "completed"], ["Left a review", F.reviewed, "reviews"]];
+  const top = Math.max(1, ...steps.map(s => s[1] || 0));
+  return `
+  <div class="sec mt24">Reports · ${esc(r.label)}</div>
+  ${money && M ? `<div class="grid">
+    ${tile(inr(M.advances), "Advances collected", "25% paid at booking", "", "collected", "Payments collected")}
+    ${tile(inr(M.balances), "Balances collected", "Paid after the shoot started", "", "collected", "Payments collected")}
+    ${tile(inr(M.balances_due_amount), "Balances still owed", num(M.balances_due) + " booking" + (M.balances_due === 1 ? "" : "s"), M.balances_due ? "hl" : "", "balances_due", "Balances still owed by customers")}
+    ${tile(inr(M.refunded), "Refunded", "Completed refunds", "", "refunds", "Refunds")}
+    ${tile(inr(M.paid_out), "Paid out to photographers", "Payouts recorded", "", "payouts_paid", "Payouts sent to photographers")}
+    ${tile(num(M.unpaid_bookings), "Bookings not yet paid", "Customer picked but hasn't paid the advance", "", "status", "Bookings waiting for the advance", "pending_payment")}
+    ${tile(num(M.failed), "Failed / abandoned payments", "", "", "payments_failed", "Failed or abandoned payments")}
+    ${M.test_payments ? kpi(num(M.test_payments), "Test-mode payments", "No real money — Razorpay test keys") : ""}
+  </div>
+  <div class="card mt16"><div class="between"><div class="sec" style="margin:0">Money in and out</div><div class="xs muted2">Collected, SnapPro commission, refunds and photographer payouts</div></div>
+    <div class="chart-box"><canvas id="chMoney"></canvas></div></div>` : ""}
+
+  <div class="card mt16"><div class="sec">Conversion funnel — where people drop off</div>
+    <div class="funnel">${steps.map(([l, n, k], i) => `<button class="fstep" onclick="${canDrill(k) ? `openDrill('${k}','${l}')` : ""}">
+      <div class="flabel">${l}</div><div class="fbar"><i style="width:${Math.max(2, Math.round(100 * (n || 0) / top))}%"></i></div>
+      <div class="fnum">${num(n)}${i ? `<span class="muted2"> · ${pct(n, steps[i - 1][1])}</span>` : ""}</div></button>`).join("")}</div>
+    <div class="xs muted2 mt8">Percentages are compared with the step above. Tap a step to see the people or shoots behind it.</div></div>
+
+  <div class="grid3 mt16">
+    <div class="card"><div class="sec">Bookings by status</div><div class="chart-box sm"><canvas id="chStatus"></canvas></div><div class="xs muted2">Tap a slice to list them</div></div>
+    ${money ? `<div class="card"><div class="sec">How customers pay</div><div class="chart-box sm"><canvas id="chMethods"></canvas></div><div class="xs muted2">Tap a slice to list payments</div></div>` : ""}
+    <div class="card"><div class="sec">Visitors by device</div><div class="chart-box sm"><canvas id="chDevices"></canvas></div><div class="xs muted2">Tap a slice to list visits</div></div>
+  </div>
+  <div class="grid2 mt16">
+    <div class="card"><div class="sec">When shoots are wanted — hour of day</div><div class="chart-box"><canvas id="chHour"></canvas></div></div>
+    <div class="card"><div class="sec">When shoots are wanted — day of week</div><div class="chart-box"><canvas id="chWeekday"></canvas></div></div>
+    <div class="card"><div class="sec">How fast the first quote arrives</div><div class="chart-box"><canvas id="chSpeed"></canvas></div></div>
+    <div class="card"><div class="sec">Ratings given</div><div class="chart-box"><canvas id="chRatings"></canvas></div><div class="xs muted2">Tap a bar to read those reviews</div></div>
+  </div>
+
+  <div class="grid2 mt16">
+    ${rowsTable("Shoot types", ["Type","Requests","Quoted","Booked","Avg budget"].concat(money ? ["Value"] : []),
+      (R.categories || []).map(c => ({ c, cells: [esc(CAT_NAMES[c.category] || c.category || "—"), num(c.requests), num(c.quoted), num(c.booked), inr(c.avg_budget)].concat(money ? [inr(c.value)] : []) })),
+      x => `openDrill('category','Requests',${JSON.stringify(x.c.category || "").replace(/"/g, "&quot;")})`)}
+    ${rowsTable("Cities — demand vs photographers", ["City","Requests","Booked","No quote","Photographers"].concat(money ? ["Value"] : []),
+      (R.cities || []).map(c => ({ c, cells: [esc(c.city), num(c.requests), num(c.booked), c.no_quote ? `<span style="color:#ffd88a">${num(c.no_quote)}</span>` : "0", c.photographers ? num(c.photographers) : `<span style="color:#ff8f9b">0</span>`].concat(money ? [inr(c.value)] : []) })),
+      x => `openDrill('city','Requests',${JSON.stringify(x.c.city || "").replace(/"/g, "&quot;")})`)}
+    ${rowsTable("Top photographers", ["Name","City","Quotes","Booked","Completed"].concat(money ? ["Earned"] : []).concat(["Rating"]),
+      (R.top_photographers || []).map(p => ({ p, cells: [esc(p.name), esc(p.city || "—"), num(p.quotes), num(p.booked), num(p.completed)].concat(money ? [inr(p.earned)] : []).concat([p.reviews ? Number(p.rating).toFixed(1) + "★ (" + p.reviews + ")" : "—"]) })),
+      x => `openDrill('pgs_city','Photographers',${JSON.stringify(x.p.city || "").replace(/"/g, "&quot;")})`)}
+    ${money ? rowsTable("Top customers", ["Name","Bookings","Spent"], (R.top_customers || []).map(c => ({ cells: [esc(c.name || "—"), num(c.bookings), inr(c.spent)] })), () => `openDrill('top_customers','Customers')`) : ""}
+    ${rowsTable("Cancellations", ["Cancelled by","At stage","Count"], (R.cancellations || []).map(c => ({ cells: [esc(c.by), esc(String(c.stage).replace(/_/g," ")), num(c.n)] })), () => `openDrill('cancelled','Cancelled bookings')`)}
+    <div class="card"><div class="sec">Prices</div>
+      <div class="kvr"><span class="muted2">Average customer budget</span><span>${inr(P.avg_budget)}</span></div>
+      <div class="kvr"><span class="muted2">Average quote</span><span>${inr(P.avg_quote)}</span></div>
+      ${money ? `<div class="kvr"><span class="muted2">Average booked price</span><span>${inr(P.avg_booked)}</span></div>` : ""}
+      <div class="kvr"><span class="muted2">Quotes above the customer's budget</span><span>${num(P.quotes_over_budget)} of ${num(P.quotes)} (${pct(P.quotes_over_budget, P.quotes)})</span></div>
+      <button class="linkbtn mt8" onclick="openDrill('quotes','All quotes')">See every quote ›</button></div>
+    ${rowsTable("Most viewed pages", ["Page","Views"], (R.pages || []).map(p => ({ cells: [esc(p.path), num(p.n)] })), () => `openDrill('visitors','Visits')`)}
+  </div>`;
+}
+let reportCharts = [];
+function drawReportCharts(){
+  reportCharts.forEach(c => { try{ c.destroy(); }catch(e){} }); reportCharts = [];
+  if(S.view !== "console" || S.tab !== "overview" || !window.Chart || !S.report || S.drill || S.bk) return;
+  const R = S.report, b = periodRange().bucket, grid = "rgba(255,255,255,.06)", tick = "#8b8b9e";
+  const axes = (m) => ({ x: { grid: { color: grid }, ticks: { color: tick, maxRotation: 0, autoSkip: true, maxTicksLimit: 12 } },
+                         y: { beginAtZero: true, grid: { color: grid }, ticks: m ? { color: tick, callback: v => inr(v) } : { color: tick, precision: 0 } } });
+  const legend = { labels: { color: "#c9c9d6", boxWidth: 12, font: { size: 11 } } };
+  const mk = (id, cfg) => { const c = el(id); if(c) reportCharts.push(new Chart(c, cfg)); };
+  const pie = (id, labels, data, onPick) => mk(id, { type: "doughnut", data: { labels, datasets: [{ data, borderWidth: 0,
+      backgroundColor: ["#ff5a1f","#4d8dff","#28c76f","#a67cff","#ffc857","#ff4d5e","#5fd3e0","#8b8b9e"] }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: "right", labels: legend.labels } },
+      onClick: (e, els) => { if(els.length) onPick(els[0].index); } } });
+  const bars = (id, labels, data, label, color, onPick) => mk(id, { type: "bar", data: { labels, datasets: [{ label, data, backgroundColor: color, borderRadius: 4 }] },
+    options: { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { display: false } }, scales: axes(false),
+      onClick: onPick ? (e, els) => { if(els.length) onPick(els[0].index); } : undefined } });
+  if(R.money_series){
+    const s = R.money_series;
+    mk("chMoney", { type: "bar", data: { labels: s.map(x => bucketLabel(x.bucket, b)), datasets: [
+      { label: "Collected", data: s.map(x => Number(x.collected)), backgroundColor: "rgba(77,141,255,.6)", borderRadius: 3 },
+      { label: "Commission", data: s.map(x => Number(x.commission)), backgroundColor: "rgba(40,199,111,.65)", borderRadius: 3 },
+      { label: "Refunded", data: s.map(x => Number(x.refunded)), backgroundColor: "rgba(255,77,94,.55)", borderRadius: 3 },
+      { label: "Paid to photographers", data: s.map(x => Number(x.paid_out)), backgroundColor: "rgba(166,124,255,.6)", borderRadius: 3 } ] },
+      options: { responsive: true, maintainAspectRatio: false, animation: false, interaction: { mode: "index", intersect: false },
+        plugins: { legend, tooltip: { callbacks: { label: c => c.dataset.label + ": " + inr(c.parsed.y) } } }, scales: axes(true) } });
+  }
+  const st = R.by_status || [];
+  pie("chStatus", st.map(x => x.status === "pending_payment" ? "awaiting payment" : x.status), st.map(x => x.n), i => openDrill("status", "Bookings", st[i].status));
+  if(R.methods){ const m = R.methods; pie("chMethods", m.map(x => methodName(x.method)), m.map(x => Number(x.amount)), i => openDrill("method", "Payments", m[i].method)); }
+  const dv = R.devices || []; pie("chDevices", dv.map(x => x.device), dv.map(x => x.n), i => openDrill("device", "Visits", dv[i].device));
+  const hrs = Array.from({ length: 24 }, (_, h) => ((R.by_hour || []).find(x => x.h === h) || {}).n || 0);
+  bars("chHour", hrs.map((_, h) => (h % 12 || 12) + (h < 12 ? "am" : "pm")), hrs, "Shoots", "rgba(255,90,31,.6)");
+  const wd = [1,2,3,4,5,6,7].map(d => ((R.by_weekday || []).find(x => x.d === d) || {}).n || 0);
+  bars("chWeekday", WEEKDAYS, wd, "Shoots", "rgba(77,141,255,.6)");
+  const sp = R.quote_speed || []; bars("chSpeed", sp.map(x => x.label), sp.map(x => x.n), "Requests", "rgba(40,199,111,.6)");
+  const rt = [5,4,3,2,1].map(s => ((R.ratings || []).find(x => x.stars === s) || {}).n || 0);
+  bars("chRatings", ["5★","4★","3★","2★","1★"], rt, "Reviews", "rgba(255,200,87,.7)", i => openDrill("reviews", "Reviews", String(5 - i)));
+}
+
 /* ============================ render ========================== */
 
 function render(){
@@ -1257,9 +1581,10 @@ function render(){
     S.view==="newpw"   ? vNewPw()   :
     S.view==="code"    ? vCode()    :
     S.view==="denied"  ? vDenied()  :
-    S.view==="console" ? vConsole() : vLogin();
+    S.view==="console" ? vConsole() + vDrill() + vBooking() : vLogin();
 
   try{ drawCharts(); }catch(e){ console.warn('charts', e); }
+  try{ drawReportCharts(); }catch(e){ console.warn('report charts', e); }
   if(fid){
     const n = el(fid);
     if(n){ n.focus(); if(caret!=null && n.setSelectionRange){ try{ n.setSelectionRange(caret,caret); }catch(e){} } }
@@ -1267,6 +1592,7 @@ function render(){
 }
 
 window.addEventListener("error", e => console.error("Admin:", e.message));
+document.addEventListener("keydown", e => { if(e.key === "Escape" && (S.bk || S.drill)){ if(S.bk) S.bk = null; else S.drill = null; render(); } });
 boot();
 </script>
 </body>
