@@ -1111,7 +1111,14 @@ async function refresh(fromPoll){
       refreshing = false; return;
     } else if(isPg()){
       const prevOpen = new Set(S.d.openRequests.map(r => r.id));
-      const [open, mine] = await Promise.all([api.openRequests(), api.myOffers()]);
+      const [open, mine, me] = await Promise.all([api.openRequests(), api.myOffers(),
+        q(sb.from("photographers").select(PG_COLS).eq("id", S.me.id).maybeSingle()).catch(() => null)]);
+      /* ratings, reviews and earnings change when customers review or shoots complete */
+      if(me){
+        if(fromPoll && S.pg && (me.review_count || 0) > (S.pg.review_count || 0))
+          toast("New review", "Your rating is now ★ " + Number(me.rating).toFixed(1), "star");
+        S.pg = me; S.d.pgs[me.id] = me;
+      }
       if(fromPoll) open.filter(r => !prevOpen.has(r.id) && matchesMe(r)).forEach(r =>
         toast("New " + catById(r.category).name.toLowerCase() + " request", (r.city||"") + " · " + whenStr(r.start_at), "bolt"));
       S.d.openRequests = open; S.d.myOffers = mine;
@@ -1138,7 +1145,7 @@ function signature(){
   const d = S.d;
   return JSON.stringify([d.requests.map(r => r.id + r.status), Object.values(d.offers).flat().map(o => o.id),
     d.bookings.map(b => b.id + b.status + (b.address||"")), d.openRequests.map(r => r.id), d.myOffers.map(o => o.id),
-    Object.keys(d.reviewed).length]);
+    Object.keys(d.reviewed).length, S.pg ? [S.pg.rating, S.pg.review_count, S.pg.jobs_done, S.pg.earnings] : null]);
 }
 function matchesMe(r){
   if(!S.pg) return false;
