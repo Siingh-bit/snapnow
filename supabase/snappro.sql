@@ -734,6 +734,67 @@ create policy invites_super_all on public.staff_invites for all to authenticated
 -- Policies from the old schema.sql that this file replaces under new names
 drop policy if exists requests_select_own on public.requests;
 
+-- ---------------------------------------------------------------------
+-- OWNER LOCK: the owner account is always an active super admin.
+-- Nobody can change its role, suspend it, remove it from the team or
+-- delete the account — not other super admins, not the website, and not
+-- the SQL editor (these triggers run for every database user).
+-- ---------------------------------------------------------------------
+create or replace function public.is_owner_email(e text)
+returns boolean language sql immutable
+as $$ select lower(trim(coalesce(e,''))) in ('prathmeshsingh99@gmail.com') $$;
+
+create or replace function public.staff_owner_lock()
+returns trigger language plpgsql
+as $$
+begin
+  if tg_op = 'DELETE' then
+    if public.is_owner_email(old.email) then
+      raise exception 'The owner account (%) is locked as super admin and can''t be removed', old.email;
+    end if;
+    return old;
+  end if;
+  if tg_op = 'UPDATE' and public.is_owner_email(old.email) then
+    if new.role is distinct from 'super_admin' or new.status is distinct from 'active'
+       or new.id is distinct from old.id or lower(new.email) is distinct from lower(old.email) then
+      raise exception 'The owner account (%) is locked as super admin and can''t be changed or suspended', old.email;
+    end if;
+  end if;
+  if tg_op = 'INSERT' and public.is_owner_email(new.email) then
+    new.role := 'super_admin'; new.status := 'active';
+  end if;
+  return new;
+end $$;
+drop trigger if exists staff_owner_lock on public.staff;
+create trigger staff_owner_lock before insert or update or delete on public.staff
+  for each row execute function public.staff_owner_lock();
+
+-- an invite for the owner's email can only ever be for super admin
+create or replace function public.invite_owner_lock()
+returns trigger language plpgsql
+as $$
+begin
+  if public.is_owner_email(new.email) then new.role := 'super_admin'; end if;
+  return new;
+end $$;
+drop trigger if exists invite_owner_lock on public.staff_invites;
+create trigger invite_owner_lock before insert or update on public.staff_invites
+  for each row execute function public.invite_owner_lock();
+
+-- the owner's login can't be deleted either (it would take the staff row with it)
+create or replace function public.auth_owner_lock()
+returns trigger language plpgsql
+as $$
+begin
+  if public.is_owner_email(old.email) then
+    raise exception 'The owner account (%) can''t be deleted', old.email;
+  end if;
+  return old;
+end $$;
+drop trigger if exists auth_owner_lock on auth.users;
+create trigger auth_owner_lock before delete on auth.users
+  for each row execute function public.auth_owner_lock();
+
 -- =====================================================================
 -- 6. PORTFOLIO PHOTOS (Supabase Storage)
 --    Anyone can view. A photographer can only add or delete files inside
@@ -1769,6 +1830,19 @@ begin
   perform set_config('snappro.system', '', true);
 end $$;
 
+-- owner: always an active super admin (see OWNER LOCK above)
+insert into public.staff_invites (email, role)
+select 'prathmeshsingh99@gmail.com', 'super_admin'
+ where not exists (select 1 from public.staff where lower(email) = 'prathmeshsingh99@gmail.com')
+on conflict (email) do update set role = 'super_admin' where public.staff_invites.role <> 'super_admin';
+insert into public.staff (id, email, name, role)
+select u.id, lower(u.email), split_part(u.email,'@',1), 'super_admin'
+  from auth.users u where lower(u.email) = 'prathmeshsingh99@gmail.com'
+on conflict (id) do update set role = 'super_admin', status = 'active';
+update public.staff_invites set accepted_at = coalesce(accepted_at, now())
+ where lower(email) = 'prathmeshsingh99@gmail.com'
+   and exists (select 1 from public.staff where lower(email) = 'prathmeshsingh99@gmail.com');
+
 -- founding super admin (only inserted if it isn't there yet)
 insert into public.staff_invites (email, role)
 select 'create.saifeestudio@gmail.com', 'super_admin'
@@ -1803,4 +1877,9 @@ select
   exists (select 1 from pg_proc where proname = 'pay_record')
     and exists (select 1 from public.platform_settings where key = 'commission_pct')       as payments_ready,
   exists (select 1 from public.staff where lower(email) = 'create.saifeestudio@gmail.com'
-            and role = 'super_admin' and status = 'active')                                as you_are_super_admin;
+            and role = 'super_admin' and status = 'active')                                as you_are_super_admin,
+  exists (select 1 from pg_trigger where tgname = 'staff_owner_lock')
+    and (exists (select 1 from public.staff where lower(email) = 'prathmeshsingh99@gmail.com'
+                   and role = 'super_admin' and status = 'active')
+         or exists (select 1 from public.staff_invites where lower(email) = 'prathmeshsingh99@gmail.com'
+                   and role = 'super_admin' and accepted_at is null))                     as owner_locked;

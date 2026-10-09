@@ -1175,6 +1175,8 @@ function vPros(){
   ${canDecide ? `<div class="xs muted2 mt12">Approved means they can work on SnapPro. "Verified" is an extra badge for photographers whose identity and work you've checked in person.</div>` : ''}`}`;
 }
 
+const OWNER_EMAILS = ['prathmeshsingh99@gmail.com'];   // locked as super admin in the database
+const isOwner = s => OWNER_EMAILS.includes(String(s.email||'').toLowerCase());
 function vTeam(){
   const pending = S.invites.filter(i=>!i.accepted_at);
   return `
@@ -1197,7 +1199,14 @@ function vTeam(){
     <table>
       <thead><tr><th>Person</th><th>Role</th><th>Status</th><th>Joined</th><th></th></tr></thead>
       <tbody>${S.staff.map(s=>{
-        const isMe = s.id===S.me.id;
+        const isMe = s.id===S.me.id, owner = isOwner(s);
+        if(owner) return `<tr>
+          <td><div style="font-weight:600">${esc(s.name||s.email.split('@')[0])}${isMe?' <span class="xs muted2">(you)</span>':''}</div>
+              <div class="xs muted2">${esc(s.email)}</div></td>
+          <td>Super admin</td>
+          <td><span class="chip green">${s.status}</span></td>
+          <td class="muted">${fmt(s.created_at)}</td>
+          <td style="text-align:right"><span class="chip" title="The owner account can't be changed, suspended or removed">Owner · locked</span></td></tr>`;
         return `<tr>
           <td><div style="font-weight:600">${esc(s.name||s.email.split('@')[0])}${isMe?' <span class="xs muted2">(you)</span>':''}</div>
               <div class="xs muted2">${esc(s.email)}</div></td>
