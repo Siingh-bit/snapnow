@@ -1764,7 +1764,7 @@ async function saveSetupCust(){
 
 function pgCatToggle(c){
   const a = S.auth.draft.cats, i = a.indexOf(c);
-  if(i >= 0) a.splice(i, 1); else if(a.length < 3) a.push(c); else { toast("Pick up to 3", "Deselect one first", "x"); return; }
+  if(i >= 0) a.splice(i, 1); else a.push(c);
   render();
 }
 function vSetupPg(){
@@ -1785,7 +1785,7 @@ function vSetupPg(){
       <button class="btn primary block" onclick="pgSetupNext(1)">Continue</button>
     ` : st === 2 ? `
       <div class="h2">What do you shoot?</div>
-      <div class="sm muted mt4">Pick up to 3. You'll be alerted about requests for these.</div>
+      <div class="sm muted mt4">Pick every type you shoot. You'll be alerted about requests for these.</div>
       <div class="grid3 mt16">
         ${CATEGORIES.map(c => `<button class="u-card ${d.cats.includes(c.id)?'on':''}" onclick="pgCatToggle('${c.id}')">
           <div class="u-t">${esc(c.name)}</div></button>`).join("")}
@@ -2833,7 +2833,7 @@ function vEditPg(){
       <textarea id="epBio" class="input" rows="4" maxlength="600" oninput="S.editPg.bio=this.value">${esc(d.bio)}</textarea></div>
     <div class="field"><label>Years of experience — <span id="epYrs">${d.years}</span></label>
       <input type="range" min="0" max="30" value="${d.years}" oninput="S.editPg.years=+this.value;setHtml('epYrs',this.value)"></div>
-    <div class="field"><label>Types of shoot (up to 3)</label>
+    <div class="field"><label>Types of shoot <span class="muted2">(pick as many as you like)</span></label>
       <div class="grid3">${CATEGORIES.map(c => `<button class="u-card ${d.cats.includes(c.id)?'on':''}" onclick="epCat('${c.id}')"><div class="u-t">${esc(c.name)}</div></button>`).join("")}</div></div>
     <div class="field"><label>Your rates vs typical — <span id="epPm">${Math.round(d.pm*100)}</span>%</label>
       <input type="range" min="0.6" max="2" step="0.05" value="${d.pm}" oninput="S.editPg.pm=+this.value;setHtml('epPm',Math.round(this.value*100))"></div>
@@ -2843,7 +2843,7 @@ function vEditPg(){
 }
 function epCat(c){
   const a = S.editPg.cats, i = a.indexOf(c);
-  if(i >= 0) a.splice(i,1); else if(a.length < 3) a.push(c); else { toast("Pick up to 3", "Deselect one first", "x"); return; }
+  if(i >= 0) a.splice(i,1); else a.push(c);
   render();
 }
 async function saveEditPg(){
