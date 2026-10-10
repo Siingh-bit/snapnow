@@ -20,6 +20,12 @@
 <meta name="twitter:description" content="Book a photographer near you. Post your shoot, get quotes from photographers in your city, compare portfolios and prices, and book.">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%23ff5a1f'/%3E%3Cpath d='M74 38H62l-4-6H42l-4 6H26a4 4 0 0 0-4 4v26a4 4 0 0 0 4 4h48a4 4 0 0 0 4-4V42a4 4 0 0 0-4-4z' fill='none' stroke='%23fff' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='50' cy='52' r='9' fill='none' stroke='%23fff' stroke-width='3.5'/%3E%3C/svg%3E">
 <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%23ff5a1f'/%3E%3Cpath d='M74 38H62l-4-6H42l-4 6H26a4 4 0 0 0-4 4v26a4 4 0 0 0 4 4h48a4 4 0 0 0 4-4V42a4 4 0 0 0-4-4z' fill='none' stroke='%23fff' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='50' cy='52' r='9' fill='none' stroke='%23fff' stroke-width='3.5'/%3E%3C/svg%3E">
+<script>
+/* apply the saved appearance before the page paints (no white flash) */
+(function(){ try{ var p = JSON.parse(localStorage.getItem("snappro.v3") || "{}"), m = p.theme || "light", h = new Date().getHours();
+  var dark = m === "dark" || (m === "auto" && (h >= 19 || h < 7));
+  if(dark){ document.documentElement.setAttribute("data-theme","dark"); document.querySelector('meta[name="theme-color"]').setAttribute("content","#161411"); } }catch(e){} })();
+</script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 /* SnapPro app — paper, ink and one colour. */
@@ -32,6 +38,7 @@
   --r:10px; --shadow:0 1px 0 rgba(0,0,0,.04),0 6px 20px -12px rgba(40,30,20,.25);
   --ff:'Instrument Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
   --serif:'Instrument Serif',Georgia,'Times New Roman',serif;
+  --on-text:#fff;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;padding:0}
@@ -100,7 +107,7 @@ a{color:inherit}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:13px 18px;border-radius:8px;font-weight:600;font-size:15px;background:var(--paper);border:1px solid var(--border);transition:background .15s,border-color .15s;text-align:center}
 .btn:hover{border-color:var(--muted-2)}
 .btn:active{background:var(--surface-2)}
-.btn.primary{background:var(--text);border-color:var(--text);color:#fff}
+.btn.primary{background:var(--text);border-color:var(--text);color:var(--on-text)}
 .btn.primary:hover{background:#000}
 .btn.danger{color:var(--red);border-color:#e7c1bd}
 .btn.block{width:100%}
@@ -118,7 +125,7 @@ a{color:inherit}
 button.chip{cursor:pointer;border-color:var(--border);background:var(--paper)}
 button.chip:hover{border-color:var(--muted-2)}
 .chip.lg{padding:8px 14px;font-size:13.5px;color:var(--text)}
-.chip.accent{background:var(--text);border-color:var(--text);color:#fff}
+.chip.accent{background:var(--text);border-color:var(--text);color:var(--on-text)}
 .chip.green{background:var(--green-soft);color:var(--green)}
 .chip.blue{background:#e3ebf4;color:var(--blue)}
 .chip.purple{background:#ece6f2;color:var(--purple)}
@@ -276,7 +283,7 @@ input[type=datetime-local].input{color-scheme:light}
 .chat-scroll{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:6px;padding:16px;background:var(--bg)}
 .bub{max-width:78%;padding:9px 12px;border-radius:14px;font-size:14.5px;line-height:1.4;word-wrap:break-word}
 .bub.them{background:var(--paper);border:1px solid var(--border);align-self:flex-start;border-bottom-left-radius:4px}
-.bub.me{background:var(--text);color:#fff;align-self:flex-end;border-bottom-right-radius:4px}
+.bub.me{background:var(--text);color:var(--on-text);align-self:flex-end;border-bottom-right-radius:4px}
 .bub-time{font-size:10.5px;opacity:.6;margin-top:2px;text-align:right}
 .chat-input{display:flex;gap:8px;padding:10px 12px calc(10px + env(safe-area-inset-bottom));border-top:1px solid var(--border);background:var(--paper)}
 .chat-input input{flex:1;padding:11px 14px;border-radius:999px;background:var(--paper);border:1px solid var(--border);outline:none}
@@ -292,7 +299,7 @@ input[type=datetime-local].input{color-scheme:light}
 .skeleton.sm{height:46px}
 @keyframes sk{from{background-position:200% 0}to{background-position:-200% 0}}
 #toasts{position:fixed;top:calc(12px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);width:min(500px,calc(100% - 24px));z-index:90;display:flex;flex-direction:column;gap:8px;pointer-events:none}
-.toast{background:var(--text);color:#fff;border-radius:10px;padding:11px 14px;display:flex;gap:10px;align-items:flex-start;box-shadow:0 10px 30px -12px rgba(0,0,0,.45);animation:tin .25s ease}
+.toast{background:var(--text);color:var(--on-text);border-radius:10px;padding:11px 14px;display:flex;gap:10px;align-items:flex-start;box-shadow:0 10px 30px -12px rgba(0,0,0,.45);animation:tin .25s ease}
 @keyframes tin{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:none}}
 .toast.out{animation:tout .25s forwards}
 @keyframes tout{to{opacity:0;transform:translateY(-10px)}}
@@ -402,7 +409,7 @@ input[type=datetime-local].input{color-scheme:light}
 .nowrap{white-space:nowrap;display:inline-flex;align-items:center;gap:2px}
 .pf-row{position:relative;border-radius:8px;transition:background .3s}
 .pf-add{font-size:12px;font-weight:700;color:var(--red);background:#fbe9e6;border-radius:999px;padding:5px 10px;white-space:nowrap}
-.pf-tip{position:absolute;left:44px;bottom:calc(100% - 4px);background:var(--text);color:#fff;font-size:12.5px;font-weight:600;
+.pf-tip{position:absolute;left:44px;bottom:calc(100% - 4px);background:var(--text);color:var(--on-text);font-size:12.5px;font-weight:600;
   padding:7px 11px;border-radius:8px;white-space:nowrap;pointer-events:none;opacity:0;transform:translateY(6px);transition:opacity .25s,transform .25s}
 .pf-tip::after{content:"";position:absolute;left:18px;top:100%;border:6px solid transparent;border-top-color:var(--text)}
 .pf-row.point{background:#fbe9e6;box-shadow:0 0 0 2px var(--red);margin:0 -10px;padding-left:10px;padding-right:10px;width:calc(100% + 20px);animation:pfPulse 1.4s ease-out 3}
@@ -428,7 +435,7 @@ button.stat .s-l svg{vertical-align:-1px}
 /* how it works */
 .how{display:flex;flex-direction:column;gap:14px}
 .how-i{display:flex;gap:12px;align-items:flex-start}
-.how-n{width:26px;height:26px;border-radius:50%;background:var(--text);color:#fff;font-size:12.5px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
+.how-n{width:26px;height:26px;border-radius:50%;background:var(--text);color:var(--on-text);font-size:12.5px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
 .how-n.sm{width:20px;height:20px;font-size:11px;margin-right:8px;background:var(--accent)}
 .how-card{background:var(--surface-2);border-color:var(--border-soft)}
 .how-mini{display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;font-size:13px}
@@ -437,6 +444,33 @@ button.stat .s-l svg{vertical-align:-1px}
 .bottom-bar .grow{min-width:0}
 @media (max-width:380px){.how-mini{grid-template-columns:1fr}}
 .card.tap.warn-card{display:flex}
+
+/* ---------- dark theme (Profile → Appearance) ---------- */
+html[data-theme=dark]{color-scheme:dark;
+  --bg:#0e0d0b; --paper:#161411; --surface:#1c1a16; --surface-2:#24211c; --surface-3:#302c25;
+  --border:#38332b; --border-soft:#27231e;
+  --text:#f1ece3; --muted:#b3aa9a; --muted-2:#857c6e;
+  --accent:#ea6a3f; --accent-ink:#ff9168; --accent-soft:#3b231a;
+  --green:#62b98c; --green-soft:#1b2c23; --blue:#7fabd8; --red:#f06e62; --purple:#b79dd8; --accent-2:#e3ab4d;
+  --shadow:0 1px 0 rgba(0,0,0,.3),0 8px 24px -12px rgba(0,0,0,.7); --on-text:#161411}
+html[data-theme=dark] .chip.blue,html[data-theme=dark] .chip.new{background:#1b2633}
+html[data-theme=dark] .chip.red{background:#35191a}
+html[data-theme=dark] .form-err{background:#35191a}
+html[data-theme=dark] .photo-nudge,html[data-theme=dark] .pf-add,html[data-theme=dark] .pf-row.point{background:#33191a;border-color:#5a2a28}
+html[data-theme=dark] .photo-nudge:hover{background:#3d1d1e}
+html[data-theme=dark] .photo-nudge .xs{color:#f2a49b}
+html[data-theme=dark] .todo-i.accent{background:#2a1a13;border-color:#5a3220}
+html[data-theme=dark] .todo-i.green{background:#16241c;border-color:#2d4a39}
+html[data-theme=dark] .input:focus{box-shadow:0 0 0 3px rgba(241,236,227,.08)}
+html[data-theme=dark] .avatar{filter:saturate(.9) brightness(.82)}
+html[data-theme=dark] img{opacity:.96}
+html,body,#app,.tabbar,.card,.input{transition:background-color .25s,border-color .25s,color .25s}
+/* appearance picker */
+.seg{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.seg button{border:1px solid var(--border);border-radius:var(--r);padding:12px 8px;text-align:center;background:var(--paper);display:flex;flex-direction:column;align-items:center;gap:6px;font-size:13px;font-weight:600}
+.seg button.on{border-color:var(--text);box-shadow:inset 0 0 0 1px var(--text)}
+.seg .sw{width:44px;height:28px;border-radius:7px;border:1px solid var(--border);overflow:hidden;display:flex}
+.seg .sw i{flex:1}
 
 </style>
 </head>
@@ -1534,7 +1568,7 @@ function vOtp(){
     <input id="authOtp" class="input mt16 otp-input" inputmode="numeric" maxlength="6" autocomplete="one-time-code"
       placeholder="6-digit code" value="${esc(code)}" oninput="otpInput(this.value)" onkeydown="if(event.key==='Enter')verifyOtp()">
     <button id="otpVerify" class="btn primary block mt12" ${code.length===6&&!a.busy?"":"disabled"} onclick="verifyOtp()">
-      ${a.busy ? "Checking…" : icon("cam",16,"#fff") + " Verify &amp; continue"}</button>
+      ${a.busy ? "Checking…" : icon("cam",16,"var(--on-text)") + " Verify &amp; continue"}</button>
     <div id="authErr">${errHtml(a.err)}</div>
     <div class="center mt16"><button class="linkish" onclick="resendCode()">Didn't get it? <b>Send a new code</b></button></div>
   </div>`;
@@ -1567,7 +1601,7 @@ function vLogin(){
   const a = S.auth, empty = PW.touched && !PW.pw;
   return `${authTop("Log in", "Welcome back", "pwReset();authGo('welcome')")}
   <div class="pad">
-    <div class="center mb16"><div class="logo-md">${icon("cam",26,"#fff",2)}</div><div class="h2 mt12">Welcome back</div></div>
+    <div class="center mb16"><div class="logo-md">${icon("cam",26,"var(--on-text)",2)}</div><div class="h2 mt12">Welcome back</div></div>
     <div class="field"><label for="authEmail">Email address</label>
       <input id="authEmail" class="input" type="email" inputmode="email" autocomplete="email" autocapitalize="off" spellcheck="false"
         placeholder="you@example.com" value="${esc(a.email)}" oninput="emailInput(this.value)" onblur="emailBlur()">
@@ -1582,7 +1616,7 @@ function vLogin(){
       </div>
       <div class="right mt8"><button class="linkish accent" onclick="pwReset();authGo('reset')"><b>Forgot password?</b></button></div>
     </div>
-    <button class="btn primary block mt8" ${a.busy?"disabled":""} onclick="submitLogin()">${a.busy ? "Logging in…" : icon("cam",18,"#fff") + " Log in"}</button>
+    <button class="btn primary block mt8" ${a.busy?"disabled":""} onclick="submitLogin()">${a.busy ? "Logging in…" : icon("cam",18,"var(--on-text)") + " Log in"}</button>
     <div id="authErr">${errHtml(a.err)}</div>
     <div class="center mt16"><button class="linkish" onclick="pwReset();authGo('welcome')">New to SnapPro? <b>Create an account</b></button></div>
   </div>`;
@@ -2055,7 +2089,7 @@ function vNewRequest(){
         <div class="kv"><span>${esc(catById(d.category).name)}</span><span>${d.hours} hr${d.hours>1?'s':''}</span></div>
         <div class="kv"><span>When</span><span>${whenStr(start)}</span></div>
       </div>
-      <button class="btn primary block mt16" ${S.loading.post?"disabled":""} onclick="submitRequest()">${S.loading.post ? "Posting…" : icon("send",17,"#fff") + " Post and get quotes"}</button>
+      <button class="btn primary block mt16" ${S.loading.post?"disabled":""} onclick="submitRequest()">${S.loading.post ? "Posting…" : icon("send",17,"var(--on-text)") + " Post and get quotes"}</button>
     `}
     <div id="formErr">${errHtml(S.formErr)}</div>
   </div>`;
@@ -2120,7 +2154,7 @@ function vRequest(p){
       <div class="stack gap10 mt12">${offers.map((o,i) => offerCard(r, o, soon, i === 0 && (S.prefs.offerSort||"best") === "best")).join("")}</div>`
     : open ? `
       <div class="waiting">
-        <div class="radar"><div class="ring"></div><div class="ring" style="animation-delay:.9s"></div><div class="core">${icon("cam",26,"#fff",2)}</div></div>
+        <div class="radar"><div class="ring"></div><div class="ring" style="animation-delay:.9s"></div><div class="core">${icon("cam",26,"var(--on-text)",2)}</div></div>
         <div class="h2 center">Your shoot is live</div>
         <div class="sm muted center mt8">Photographers in ${esc(r.city||"your city")} who shoot ${esc(cat.name.toLowerCase())} can see it. Quotes will appear here — keep this page open or come back later.</div>
         <div class="center mt12"><span class="chip accent">Open for quotes · <span data-until="${esc(r.expires_at)}">${leftStr(r.expires_at)}</span></span></div>
@@ -2291,7 +2325,7 @@ function vBooking(p){
         <div class="row gap8 mt8"><button class="btn sm grow" onclick="S.editAddr=null;render()">Cancel</button><button class="btn sm primary grow" onclick="saveAddr('${b.id}')">Save address</button></div>`
         : (b.status === "confirmed" || unpaid) ? `<div class="right mt6"><button class="xs accent bold" onclick="S.editAddr='${b.id}';render()">Edit address</button></div>` : ""}
     </div>
-    ${b.status === "completed" && rv === null ? `<button class="btn primary block mt16" onclick="push('rate',{id:'${b.id}'})">${icon("star",16,"#fff")} Rate your shoot</button>` : ""}
+    ${b.status === "completed" && rv === null ? `<button class="btn primary block mt16" onclick="push('rate',{id:'${b.id}'})">${icon("star",16,"var(--on-text)")} Rate your shoot</button>` : ""}
     ${rv ? `<div class="card mt12"><div class="sec-title">Your review</div><div class="rating">${"★".repeat(rv.stars)}</div>${rv.body ? `<div class="sm muted mt6">${esc(rv.body)}</div>` : ""}</div>` : ""}
     ${canCancel ? `<button class="btn block danger mt16" onclick="cancelBooking('${b.id}')">Cancel booking</button>` : ""}
   </div>`;
@@ -2393,7 +2427,7 @@ function vChat(p){
     <div class="chat-scroll" id="chatList">${msgsHtml(b)}</div>
     ${closed ? `<div class="chat-closed">This booking was cancelled, so the chat is closed.</div>` : `<div class="chat-input">
       <input id="chatBox" placeholder="Message ${esc(firstName(other))}…" maxlength="2000" autocomplete="off" onkeydown="if(event.key==='Enter'){event.preventDefault();sendChat('${b.id}')}">
-      <button class="iconbtn send" aria-label="Send" onclick="sendChat('${b.id}')">${icon("send",16,"#fff")}</button></div>`}
+      <button class="iconbtn send" aria-label="Send" onclick="sendChat('${b.id}')">${icon("send",16,"var(--on-text)")}</button></div>`}
   </div>`;
 }
 async function sendChat(id){
@@ -2434,6 +2468,7 @@ function vProfile(){
       <button class="li" onclick="push('editLoc')">${icon("pin",18,"var(--muted)")}<div class="grow"><div class="sm bold">Location</div><div class="xs muted2">${esc([me.city, me.state, me.pincode].filter(Boolean).join(", ") || "Not set")}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
       <a class="li" href="mailto:${SUPPORT_EMAIL}">${icon("mail",18,"var(--muted)")}<div class="grow"><div class="sm bold">Help and support</div><div class="xs muted2">${SUPPORT_EMAIL}</div></div>${icon("chevron",16,"var(--muted-2)")}</a>
     </div>
+    ${appearanceCard()}
     ${helpCard()}
     <button class="btn block mt16" onclick="logout()">${icon("logout",16)} Log out</button>
   </div>`;
@@ -2661,7 +2696,7 @@ function vQuote(p){
     <div class="field"><label for="qNote">Message to the customer <span class="muted2">(optional)</span></label>
       <textarea id="qNote" class="input" rows="3" maxlength="500" placeholder="e.g. I shoot on a full-frame camera and deliver 50+ edited photos within 48 hours." oninput="S.quote.note=this.value">${esc(S.quote.note)}</textarea></div>
     <div class="note">${icon("wallet",18,"var(--green)")}<div>The customer pays ${S.advance}% online when they book and the rest online after the shoot. SnapPro keeps ${S.commission}% and transfers the rest to you once the shoot is done and fully paid.</div></div>
-    <button class="btn primary block mt16" ${S.loading.quote?"disabled":""} onclick="sendQuote('${r.id}')">${S.loading.quote ? "Sending…" : icon("send",16,"#fff") + " Send quote"}</button>
+    <button class="btn primary block mt16" ${S.loading.quote?"disabled":""} onclick="sendQuote('${r.id}')">${S.loading.quote ? "Sending…" : icon("send",16,"var(--on-text)") + " Send quote"}</button>
     <div id="formErr">${errHtml(S.formErr)}</div>
   </div>`;
 }
@@ -2742,7 +2777,7 @@ function vJob(p){
       <div class="kv top"><span>Address</span><span class="right">${esc(b.address||"—")}<br><span class="xs muted2">${esc(b.city||"")} ${esc(b.pincode||"")}</span></span></div>
       ${maps && b.status !== "cancelled" && b.status !== "completed" ? `<a class="btn sm block mt8" href="${maps}" target="_blank" rel="noopener">${icon("pin",14)} Open in Maps</a>` : ""}
     </div>
-    ${nx ? `<button class="btn primary block mt16" ${S.loading.step?"disabled":""} onclick="jobStep('${b.id}','${nx.to}')">${icon(nx.ic,16,"#fff")} ${nx.label}</button>` : ""}
+    ${nx ? `<button class="btn primary block mt16" ${S.loading.step?"disabled":""} onclick="jobStep('${b.id}','${nx.to}')">${icon(nx.ic,16,"var(--on-text)")} ${nx.label}</button>` : ""}
     ${b.status === "completed" ? `<div class="note mt16">${icon("check",18,"var(--green)")}<div>${b.payment_status === "not_required"
         ? "Shoot complete. Collect " + inr(b.price) + " from " + esc(firstName(b.customer_name)) + " if you haven't already."
         : b.payout_status === "paid" ? "Shoot complete. " + inr(b.photographer_amount) + " has been sent to you."
@@ -2781,7 +2816,7 @@ function vPortfolio(){
   return `${topbar("Portfolio", ph.length + " of 30 photos")}
   <div class="pad">
     <div class="sm muted">Show your best work. Photos are resized automatically and appear on your public profile.</div>
-    <label class="btn primary block mt16 file-btn">${icon("plus",16,"#fff")} Add photos
+    <label class="btn primary block mt16 file-btn">${icon("plus",16,"var(--on-text)")} Add photos
       <input type="file" accept="image/jpeg,image/png,image/webp" multiple onchange="uploadPortfolio(this.files);this.value=''"></label>
     <div id="busyNote" class="busy-note" style="display:none"></div>
     ${ph.length ? `<div class="pgrid mt16">${ph.map(u => `<div class="pgrid-i"><img src="${esc(u)}" alt="" loading="lazy"><button class="del" aria-label="Remove photo" onclick="removePortfolio('${esc(u)}')">${icon("trash",14,"#fff")}</button></div>`).join("")}</div>`
@@ -3250,6 +3285,32 @@ function waitingSteps(r){
     <div class="xs muted2 mt8">You can leave this page — find it any time under <b>Shoots</b>.</div></div>`;
 }
 
+/* ---------- appearance: light, dark, or auto by time of day ---------- */
+const DARK_FROM = 19, DARK_UNTIL = 7;          // auto: dark from 7 pm to 7 am (your phone's clock)
+const themeMode = () => S.prefs.theme || "light";
+function isDarkNow(){
+  const m = themeMode(), h = new Date().getHours();
+  return m === "dark" || (m === "auto" && (h >= DARK_FROM || h < DARK_UNTIL));
+}
+function applyTheme(){
+  const dark = isDarkNow(), root = document.documentElement;
+  if(dark) root.setAttribute("data-theme", "dark"); else root.removeAttribute("data-theme");
+  const meta = document.querySelector('meta[name="theme-color"]'); if(meta) meta.setAttribute("content", dark ? "#161411" : "#fffdf8");
+}
+function setTheme(m){ S.prefs.theme = m; savePrefs(); applyTheme(); render(); }
+applyTheme();
+setInterval(() => { if(themeMode() === "auto") applyTheme(); }, 60000);   // switches by itself at 7 pm / 7 am
+function appearanceCard(){
+  const m = themeMode();
+  const opt = (k, label, a, b) => `<button class="${m === k ? "on" : ""}" aria-pressed="${m === k}" onclick="setTheme('${k}')">
+    <span class="sw"><i style="background:${a}"></i><i style="background:${b}"></i></span>${label}</button>`;
+  return `<div class="sec-title mt20">Appearance</div>
+  <div class="card"><div class="seg">
+    ${opt("light", "Light", "#fffdf8", "#f1ece2")}${opt("dark", "Dark", "#161411", "#24211c")}${opt("auto", "Auto", "#fffdf8", "#161411")}
+  </div>
+  <div class="xs muted2 mt8">${m === "auto" ? "Auto uses dark mode from 7 pm to 7 am, and light during the day." : m === "dark" ? "Dark mode is on." : "Light mode is on."}</div></div>`;
+}
+
 /* ============================================================
    NAVIGATION
    ============================================================ */
@@ -3308,7 +3369,7 @@ function render(){
   pendingRender = false;
   let html = "", showTabs = false, mode = "";
   if(!S.booted){
-    html = `<div class="splash"><div class="center"><div class="logo-lg">${icon("cam",32,"#fff",2)}</div><div class="h2 mt16">SnapPro</div></div></div>`;
+    html = `<div class="splash"><div class="center"><div class="logo-lg">${icon("cam",32,"var(--on-text)",2)}</div><div class="h2 mt16">SnapPro</div></div></div>`;
   } else if(!S.me || /^setup/.test(S.auth.step || "")){
     html = (AUTH_VIEWS[S.auth.step] || vWelcome)();
   } else if(pgWaiting() && !(S.stack.length && WAITING_OK.includes(S.stack[S.stack.length - 1].v))){
