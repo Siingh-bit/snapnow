@@ -9,6 +9,7 @@
 //         refund.processed, refund.failed (others are acknowledged and ignored).
 // Each event is applied once (x-razorpay-event-id → unique key in payment_events).
 // Successes are re-checked with Razorpay's API before a booking is confirmed.
+// Also records yearly storage-plan payments (orders created by the "media" function).
 // Card numbers / UPI IDs in the payload are never stored.
 //
 // Secrets: RAZORPAY_WEBHOOK_SECRET (the secret you type when creating the webhook),
@@ -100,6 +101,15 @@ export async function handler(req, env, fetchImpl) {
         }
         if (p.status !== "captured") return bad(409, "not captured yet");    // non-2xx → Razorpay retries
         status = "CAPTURED";
+      }
+      // storage-plan purchases (made by the "media" function) are recorded separately
+      const st = await rpc(cfg, fetchImpl, "storage_lookup", { p_order_id: String(p.order_id) }).catch(() => null);
+      if (st && st.order_id) {
+        const sres = await rpc(cfg, fetchImpl, "storage_record", {
+          p_order_id: String(p.order_id), p_event_key: key, p_status: status, p_payment_ref: String(p.id),
+          p_amount: typeof p.amount === "number" ? p.amount / 100 : null, p_group: p.method || null,
+        });
+        return ok(sres && sres.result);
       }
       const res = await rpc(cfg, fetchImpl, "pay_record", {
         p_order_id: String(p.order_id), p_event_key: key, p_status: status,

@@ -472,6 +472,17 @@ html,body,#app,.tabbar,.card,.input{transition:background-color .25s,border-colo
 .seg .sw{width:44px;height:28px;border-radius:7px;border:1px solid var(--border);overflow:hidden;display:flex}
 .seg .sw i{flex:1}
 
+/* portfolio videos + storage */
+.vthumb{position:relative;display:block;width:100%;height:100%;background:#000}
+.vthumb video{width:100%;height:100%;object-fit:cover;display:block}
+.vthumb .play{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:30px;height:30px;border-radius:50%;background:rgba(0,0,0,.55);display:grid;place-items:center}
+.pstrip .vthumb.pimg{width:84px;height:84px;flex:0 0 84px;border-radius:4px;overflow:hidden}
+.photo-view video{max-width:100%;max-height:100%}
+.meter{height:8px;border-radius:5px;background:var(--surface-3);overflow:hidden}
+.meter i{display:block;height:100%;background:var(--green);border-radius:5px;transition:width .3s}
+.meter.hot i{background:var(--accent)}
+.card.plan.on{border-color:var(--text);box-shadow:inset 0 0 0 1px var(--text)}
+
 </style>
 </head>
 <body>
@@ -572,6 +583,7 @@ function icon(name, size=20, color="currentColor", w=2){
     help:'<circle cx="12" cy="12" r="9"/><path d="M9.6 9.2a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.2-2.4 3.6"/><path d="M12 17h.01"/>',
     doc:'<path d="M14 3H7a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V7z"/><path d="M14 3v4h4M9 12h6M9 16h6"/>',
     arrow:'<path d="M5 12h14M13 6l6 6-6 6"/>',
+    play:'<path d="M8 5.5v13l10.5-6.5z" fill="currentColor" stroke="none"/>',
     chevron:'<path d="M9 18l6-6-6-6"/>'
   };
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[name]||""}</svg>`;
@@ -1100,42 +1112,7 @@ async function resizeImage(file, max, quality){
   c.getContext("2d").drawImage(src, 0, 0, c.width, c.height);
   return new Promise(res => c.toBlob(res, "image/jpeg", quality));
 }
-async function uploadPortfolio(files){
-  const list = Array.from(files || []).filter(f => /^image\//.test(f.type));
-  if(!list.length){ toast("Choose photos", "JPG, PNG or WebP images", "image"); return; }
-  const room = 30 - ((S.pg && S.pg.portfolio) || []).length;
-  if(room <= 0){ toast("Portfolio is full", "Remove a photo to add another (max 30)", "image"); return; }
-  const take = list.slice(0, room);
-  let urls = [], failed = 0;
-  for(let i = 0; i < take.length; i++){
-    setBusyNote("Uploading photo " + (i+1) + " of " + take.length + "…");
-    try{
-      const blob = await resizeImage(take[i]);
-      const path = S.me.id + "/" + Date.now() + "-" + Math.random().toString(36).slice(2,8) + ".jpg";
-      const up = await sb.storage.from("portfolio").upload(path, blob, { contentType: "image/jpeg", upsert: false });
-      if(up.error) throw up.error;
-      const { data } = sb.storage.from("portfolio").getPublicUrl(path);
-      urls.push(data.publicUrl);
-    }catch(e){ failed++; console.error("SnapPro upload", e); }
-  }
-  setBusyNote("");
-  if(urls.length){
-    try{ await api.savePg({ portfolio: [ ...((S.pg && S.pg.portfolio) || []), ...urls ] }); }
-    catch(e){ toast("Couldn't save photos", e.message, "x"); return; }
-  }
-  if(failed) toast("Some photos didn't upload", failed + " failed — try again", "x");
-  else toast(urls.length === 1 ? "Photo added" : urls.length + " photos added", "They're on your public profile now", "image");
-  render();
-}
-async function removePortfolio(url){
-  if(!confirm("Remove this photo from your portfolio?")) return;
-  const marker = "/object/public/portfolio/";
-  const i = url.indexOf(marker);
-  if(i >= 0){ try{ await sb.storage.from("portfolio").remove([decodeURIComponent(url.slice(i + marker.length))]); }catch(e){} }
-  try{ await api.savePg({ portfolio: ((S.pg && S.pg.portfolio) || []).filter(u => u !== url) }); toast("Photo removed", "", "trash"); }
-  catch(e){ toast("Couldn't remove photo", e.message, "x"); }
-  render();
-}
+/* uploading and removing portfolio items lives in v3_media.js (Amazon S3) */
 function setBusyNote(text){ const n = el("busyNote"); if(n){ n.textContent = text; n.style.display = text ? "block" : "none"; } }
 
 /* ============================================================
@@ -1854,7 +1831,7 @@ const fromPrice = pg => catById((pg.categories||[])[0] || "portrait").base * (Nu
 function portfolioStrip(pg, n){
   const ph = (pg.portfolio || []).slice(0, n || 4);
   if(!ph.length) return `<div class="no-photos">${icon("image",16,"var(--muted-2)")} No photos yet</div>`;
-  return `<div class="pstrip">${ph.map(u => `<img class="pimg" src="${esc(u)}" alt="" loading="lazy">`).join("")}</div>`;
+  return `<div class="pstrip">${ph.map(u => mediaThumb(u, "pimg")).join("")}</div>`;
 }
 function pgMeta(pg){
   const bits = [];
@@ -2018,7 +1995,7 @@ function vPgProfile(p){
       <div class="stat"><div class="s-v">${inr(fromPrice(pg))}</div><div class="s-l">From, 2 hrs</div></div>
     </div>
     <div class="sec-title mt24">Portfolio</div>
-    ${photos.length ? `<div class="pgrid">${photos.map(u => `<button class="pgrid-i" onclick="push('photo',{url:'${esc(u)}'})"><img src="${esc(u)}" alt="" loading="lazy"></button>`).join("")}</div>`
+    ${photos.length ? `<div class="pgrid">${photos.map(u => `<button class="pgrid-i" onclick="push('photo',{url:'${esc(u)}'})">${mediaThumb(u)}</button>`).join("")}</div>`
       : `<div class="card soft sm muted">${esc(firstName(pg.display_name))} hasn't added portfolio photos yet.</div>`}
     <div class="sec-title mt24">Reviews</div>
     ${reviews === undefined ? `<div class="skeleton sm"></div>`
@@ -2031,7 +2008,7 @@ function vPgProfile(p){
     <button class="btn primary" onclick="startRequest(null,'${esc((pg.categories||[])[0] || "")}' || null)">Post a shoot</button></div>` : `<div style="height:24px"></div>`}`;
 }
 function vPhoto(p){
-  return `<div class="photo-view"><button class="iconbtn photo-close" aria-label="Close" onclick="pop()">${icon("x",20)}</button><img src="${esc(p.url)}" alt=""></div>`;
+  return `<div class="photo-view"><button class="iconbtn photo-close" aria-label="Close" onclick="pop()">${icon("x",20)}</button>${isVideoUrl(p.url) ? `<video src="${esc(p.url)}" controls autoplay playsinline></video>` : `<img src="${esc(p.url)}" alt="">`}</div>`;
 }
 
 /* ============================================================
@@ -2806,20 +2783,24 @@ function pgProfileExtras(){
   const pg = S.pg || {};
   return `<div class="card mt16 list">
     <button class="li" onclick="push('pg',{id:'${pg.id}'})">${icon("user",18,"var(--muted)")}<div class="grow"><div class="sm bold">See your public profile</div><div class="xs muted2">What customers see</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
-    <button class="li" onclick="push('portfolio')">${icon("image",18,"var(--muted)")}<div class="grow"><div class="sm bold">Portfolio</div><div class="xs muted2">${(pg.portfolio||[]).length} photo${(pg.portfolio||[]).length===1?"":"s"}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
+    <button class="li" onclick="push('portfolio')">${icon("image",18,"var(--muted)")}<div class="grow"><div class="sm bold">Portfolio</div><div class="xs muted2">${(pg.portfolio||[]).length} item${(pg.portfolio||[]).length===1?"":"s"}${S.storage ? " · " + fmtBytes(S.storage.used) + " of " + fmtBytes(S.storage.quota) : ""}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
+    <button class="li" onclick="push('storage')">${icon("grid",18,"var(--muted)")}<div class="grow"><div class="sm bold">Storage plan</div><div class="xs muted2">${S.storage ? (S.storage.plan === "free" ? "Free · " + fmtBytes(S.storage.quota) : esc(S.storage.plan) + " · until " + dayStr(S.storage.expires_at)) : "Free 250 MB · upgrade for more"}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
     <button class="li" onclick="push('editPayout')">${icon("wallet",18,"var(--muted)")}<div class="grow"><div class="sm bold">Payout details</div><div class="xs muted2">${S.payout && S.payout.upi_id ? esc(S.payout.upi_id) : "Add the UPI ID we pay you on"}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
     <button class="li" onclick="push('editPg')">${icon("edit",18,"var(--muted)")}<div class="grow"><div class="sm bold">Bio, shoot types and rates</div><div class="xs muted2">${(pg.categories||[]).map(c => esc(catById(c).name)).join(", ") || "Not set"}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
   </div>`;
 }
 function vPortfolio(){
   const ph = (S.pg && S.pg.portfolio) || [];
-  return `${topbar("Portfolio", ph.length + " of 30 photos")}
+  if(S.storage === undefined && !S.loading.storage){ S.loading.storage = true; loadStorage().then(() => { S.loading.storage = false; softRender(); }); }
+  const nv = ph.filter(isVideoUrl).length, np = ph.length - nv;
+  return `${topbar("Portfolio", np + " photo" + (np === 1 ? "" : "s") + (nv ? " · " + nv + " video" + (nv === 1 ? "" : "s") : ""))}
   <div class="pad">
-    <div class="sm muted">Show your best work. Photos are resized automatically and appear on your public profile.</div>
-    <label class="btn primary block mt16 file-btn">${icon("plus",16,"var(--on-text)")} Add photos
-      <input type="file" accept="image/jpeg,image/png,image/webp" multiple onchange="uploadPortfolio(this.files);this.value=''"></label>
+    <div class="sm muted">Show your best work — photos and short videos. Photos are resized automatically. Videos: MP4, MOV or WebM, up to 100 MB each.</div>
+    ${storageMeter()}
+    <label class="btn primary block mt16 file-btn">${icon("plus",16,"var(--on-text)")} Add photos or videos
+      <input type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm" multiple onchange="uploadPortfolio(this.files);this.value=''"></label>
     <div id="busyNote" class="busy-note" style="display:none"></div>
-    ${ph.length ? `<div class="pgrid mt16">${ph.map(u => `<div class="pgrid-i"><img src="${esc(u)}" alt="" loading="lazy"><button class="del" aria-label="Remove photo" onclick="removePortfolio('${esc(u)}')">${icon("trash",14,"#fff")}</button></div>`).join("")}</div>`
+    ${ph.length ? `<div class="pgrid mt16">${ph.map(u => `<div class="pgrid-i">${mediaThumb(u)}<button class="del" aria-label="Remove" onclick="removePortfolio('${esc(u)}')">${icon("trash",14,"#fff")}</button></div>`).join("")}</div>`
       : emptyState("🖼️", "No photos yet", "Add 6–12 of your best shots across the types of shoot you do.")}
   </div>`;
 }
@@ -2854,7 +2835,7 @@ async function saveEditPg(){
 }
 
 /* ---------- waiting for approval ---------- */
-const WAITING_OK = ["portfolio","editPg","editLoc","editName","pg","photo","editPayout"];
+const WAITING_OK = ["portfolio","editPg","editLoc","editName","pg","photo","editPayout","storage"];
 function vPgReview(){
   const pg = S.pg || {}, photos = (pg.portfolio || []).length, rejected = pg.approval_status === "rejected";
   const cats = (pg.categories || []).map(c => esc(catById(c).name)).join(", ");
@@ -3117,6 +3098,139 @@ function payBox(price, pgFirst){
 }
 
 /* ============================================================
+   PORTFOLIO MEDIA — photos and videos on Amazon S3
+   The phone asks our "media" function for a one-time upload link,
+   uploads the file straight to S3, then the server checks its real
+   size against the photographer's storage plan before it shows.
+   ============================================================ */
+const isVideoUrl = u => /\.(mp4|mov|webm)(\?|$)/i.test(String(u || ""));
+const fmtBytes = n => { n = Number(n) || 0; return n >= 1024*1024*1024 ? (n / 1073741824).toFixed(n % 1073741824 ? 1 : 0) + " GB"
+  : n >= 1024*1024 ? Math.round(n / 1048576) + " MB" : Math.max(1, Math.round(n / 1024)) + " KB"; };
+/* a thumbnail for a photo or a video (videos show their first frame and a play badge) */
+function mediaThumb(u, cls){
+  return isVideoUrl(u)
+    ? `<span class="vthumb ${cls||""}"><video src="${esc(u)}#t=0.1" muted playsinline preload="metadata"></video><i class="play">${icon("play",16,"#fff")}</i></span>`
+    : `<img class="${cls||""}" src="${esc(u)}" alt="" loading="lazy">`;
+}
+async function mediaFn(action, body){
+  const { data, error } = await sb.functions.invoke("media", { body: Object.assign({ action }, body || {}) });
+  if(error){ let m = error.message; try{ const j = await error.context.json(); if(j && j.error) m = j.error; }catch(e){} throw new Error(m); }
+  return data;
+}
+async function loadStorage(){
+  try{ const { data, error } = await sb.rpc("my_storage"); if(!error && data){ S.storage = data; } }catch(e){}
+  return S.storage;
+}
+/* upload with progress (fetch can't report progress) */
+function putWithProgress(url, headers, blob, onPct){
+  return new Promise((resolve, reject) => {
+    const x = new XMLHttpRequest();
+    x.open("PUT", url);
+    Object.keys(headers || {}).forEach(k => x.setRequestHeader(k, headers[k]));
+    x.upload.onprogress = e => { if(e.lengthComputable && onPct) onPct(Math.round(100 * e.loaded / e.total)); };
+    x.onload = () => x.status >= 200 && x.status < 300 ? resolve() : reject(new Error("Upload failed (" + x.status + ")"));
+    x.onerror = () => reject(new Error("Upload failed — check your connection"));
+    x.send(blob);
+  });
+}
+const VIDEO_TYPES = ["video/mp4", "video/quicktime", "video/webm"], MAX_VIDEO = 100 * 1024 * 1024;
+async function uploadPortfolio(files){
+  const list = Array.from(files || []).filter(f => /^image\//.test(f.type) || VIDEO_TYPES.includes(f.type));
+  if(!list.length){ toast("Choose photos or videos", "Photos: JPG, PNG, WebP · Videos: MP4, MOV, WebM", "image"); return; }
+  let added = 0, failed = 0, full = false;
+  for(let i = 0; i < list.length; i++){
+    const f = list[i], video = VIDEO_TYPES.includes(f.type), label = (video ? "video " : "photo ") + (i + 1) + " of " + list.length;
+    try{
+      if(video && f.size > MAX_VIDEO) throw new Error("Videos can be up to 100 MB each (" + f.name + " is " + fmtBytes(f.size) + ")");
+      setBusyNote("Preparing " + label + "…");
+      const blob = video ? f : await resizeImage(f);
+      const type = video ? f.type : "image/jpeg";
+      const slot = await mediaFn("sign", { type, bytes: blob.size });
+      await putWithProgress(slot.upload_url, slot.headers, blob, pct => setBusyNote("Uploading " + label + " — " + pct + "%"));
+      setBusyNote("Checking " + label + "…");
+      await mediaFn("confirm", { key: slot.key });
+      added++;
+    }catch(e){
+      failed++; console.warn("SnapPro upload", e);
+      if(/space|upgrade|storage/i.test(e.message)){ full = true; toast("Out of storage", e.message, "image"); break; }
+      toast("Couldn't upload " + label, e.message, "x");
+    }
+  }
+  setBusyNote("");
+  await Promise.all([api.loadMe(), loadStorage()]).catch(() => {});
+  if(added) toast(added === 1 ? "Added to your portfolio" : added + " items added", "They're on your public profile now", "image");
+  if(full) push("storage");
+  else render();
+}
+async function removePortfolio(url){
+  if(!confirm("Remove this from your portfolio?")) return;
+  try{
+    await mediaFn("delete", { url });
+    const marker = "/object/public/portfolio/", i = url.indexOf(marker);       // photos from before S3
+    if(i >= 0){ try{ await sb.storage.from("portfolio").remove([decodeURIComponent(url.slice(i + marker.length))]); }catch(e){} }
+    toast("Removed", "", "trash");
+  }catch(e){ toast("Couldn't remove", e.message, "x"); }
+  await Promise.all([api.loadMe(), loadStorage()]).catch(() => {});
+  render();
+}
+
+/* ---------- storage meter + plans ---------- */
+function storageMeter(compact){
+  const st = S.storage;
+  if(!st) return "";
+  const pctUsed = Math.min(100, Math.round(100 * st.used / Math.max(1, st.quota)));
+  const plan = (st.plans || []).find(p => p.id === st.plan);
+  const soon = st.expires_at && (toMs(st.expires_at) - Date.now()) < 14 * 864e5;
+  return `<div class="card ${compact ? "" : "mt16"} storage-card">
+    <div class="between"><div class="sm bold">${fmtBytes(st.used)} of ${fmtBytes(st.quota)} used</div>
+      <span class="chip ${st.plan === "free" ? "" : "green"}">${st.plan === "free" ? "Free plan" : esc(plan ? plan.name : st.plan) + " plan"}</span></div>
+    <div class="meter mt8 ${pctUsed >= 90 ? "hot" : ""}"><i style="width:${pctUsed}%"></i></div>
+    ${st.expires_at ? `<div class="xs ${soon ? "accent bold" : "muted2"} mt8">${soon ? "Ends soon — " : ""}Renews on ${dayStr(st.expires_at)}. ${soon ? "Renew to keep everything on your profile." : ""}</div>` : ""}
+    ${st.hidden ? `<div class="note mt8">${icon("image",16,"var(--accent)")}<div><b>${st.hidden} item${st.hidden === 1 ? " is" : "s are"} hidden</b> (${fmtBytes(st.hidden_bytes)}) because your plan ended. ${st.delete_after ? "They'll be deleted on " + dayStr(st.delete_after) + " unless you renew." : ""}</div></div>` : ""}
+    <button class="btn ${st.hidden || pctUsed >= 80 ? "primary" : ""} block mt12" onclick="push('storage')">${st.plan === "free" ? "Get more storage" : soon || st.hidden ? "Renew storage" : "Storage plans"}</button>
+  </div>`;
+}
+function vStorage(){
+  if(!S.storage){ loadStorage().then(softRender); return `${topbar("Storage")}<div class="pad"><div class="skeleton"></div></div>`; }
+  const st = S.storage, plans = st.plans || [];
+  return `${topbar("Portfolio storage", fmtBytes(st.used) + " of " + fmtBytes(st.quota) + " used")}
+  <div class="pad">
+    <p class="sm muted">Every photographer gets <b>${fmtBytes(st.free)} free</b>. Need room for more photos and videos? Pick a yearly plan.</p>
+    <div class="stack gap10 mt16">
+      <div class="card plan ${st.plan === "free" ? "on" : ""}"><div class="between"><div><div class="bold">Free</div><div class="xs muted2">${fmtBytes(st.free)} for photos and videos</div></div><div class="h3">₹0</div></div>
+        ${st.plan === "free" ? `<div class="xs green bold mt8">Your current plan</div>` : ""}</div>
+      ${plans.map(p => { const cur = st.plan === p.id; return `<div class="card plan ${cur ? "on" : ""}">
+        <div class="between"><div><div class="bold">${esc(p.name)}</div><div class="xs muted2">${esc(p.gb)} GB for photos and videos · 1 year</div></div>
+          <div class="stack right"><div class="h3">${inr(p.price)}</div><div class="xs muted2">per year</div></div></div>
+        ${cur ? `<div class="xs green bold mt8">Your current plan · renews on ${dayStr(st.expires_at)}</div>` : ""}
+        <button class="btn ${cur ? "" : "primary"} block mt12" ${S.loading.buy ? "disabled" : ""} onclick="buyStorage('${esc(p.id)}')">${S.loading.buy === p.id ? "Opening secure payment…" : cur ? "Renew for another year — " + inr(p.price) : "Get " + esc(p.name) + " — " + inr(p.price)}</button>
+      </div>`; }).join("")}
+    </div>
+    <div class="xs muted2 mt12">Paid securely with Razorpay (UPI, cards, net banking). Renewing the same plan adds a year to your current end date. If a plan ends, anything over the free ${fmtBytes(st.free)} is hidden from your profile and deleted after 30 days unless you renew.</div>
+  </div>`;
+}
+async function buyStorage(plan){
+  if(S.loading.buy) return;
+  S.loading.buy = plan; render();
+  try{
+    const res = await mediaFn("buy", { plan });
+    const Razorpay = await loadRazorpay();
+    const rzp = new Razorpay({ key: res.key_id, order_id: res.gateway_order_id, amount: res.amount, currency: res.currency || "INR",
+      name: res.name || "SnapPro", description: res.description, prefill: res.prefill || {}, notes: res.notes || {}, theme: { color: "#1d1a16" },
+      modal: { confirm_close: true, ondismiss: () => { S.loading.buy = null; render(); } },
+      handler: async (resp) => {
+        try{
+          const r = await mediaFn("verify_buy", Object.assign({ order_id: res.order_id }, resp));
+          if(r.status === "paid"){ toast("Storage upgraded", "Active until " + dayStr(r.period_end), "check"); }
+          else toast("Payment is being confirmed", "Check again in a minute", "clock");
+        }catch(e){ toast("Couldn't confirm payment", e.message + " — if money was taken it's safe; write to " + SUPPORT_EMAIL, "x"); }
+        S.loading.buy = null; await Promise.all([api.loadMe(), loadStorage()]).catch(() => {}); render();
+      } });
+    rzp.open();
+  }catch(e){ S.loading.buy = null; toast("Payment didn't start", e.message, "x"); render(); }
+}
+
+/* ============================================================
    GUIDANCE — "what do I do next?"
    Nothing here adds rules; it points people at what already exists.
    ============================================================ */
@@ -3182,6 +3296,17 @@ function photographerActions(){
     out.push({ key: "upi", ic: "wallet", tone: "accent", urgent: true,
       title: "Add the UPI ID we pay you on", sub: "Without it we can't send your share after a shoot",
       btn: "Add", go: `push('editPayout')` });
+  const stg = S.storage;
+  if(stg === undefined && !S.loading.storage){ S.loading.storage = true; loadStorage().then(() => { S.loading.storage = false; softRender(); }); }
+  if(stg && stg.hidden)
+    out.push({ key: "stg-hidden", ic: "image", tone: "accent", urgent: true,
+      title: `${stg.hidden} portfolio item${stg.hidden === 1 ? " is" : "s are"} hidden`, sub: "Your storage plan ended — renew to show them again", btn: "Renew", go: `push('storage')` });
+  else if(stg && stg.expires_at && toMs(stg.expires_at) - Date.now() < 14 * 864e5)
+    out.push({ key: "stg-soon", ic: "image", tone: "accent",
+      title: "Your storage plan ends " + dayStr(stg.expires_at), sub: "Renew to keep everything on your profile", btn: "Renew", go: `push('storage')` });
+  else if(stg && stg.used > 0.9 * stg.quota)
+    out.push({ key: "stg-full", ic: "image", tone: "",
+      title: "Portfolio storage almost full", sub: fmtBytes(stg.used) + " of " + fmtBytes(stg.quota) + " used", btn: "Get more", go: `push('storage')` });
   const ph = (pg.portfolio || []).length;
   if(ph > 0 && ph < 6)   /* with no photos at all, the home screen already shows a bigger card */
     out.push({ key: "ph", ic: "image", tone: "",
@@ -3320,7 +3445,7 @@ const STACK_VIEWS = { pg: vPgProfile, photo: vPhoto, newRequest: vNewRequest, re
                       booking: vBooking, rate: vRate, chat: vChat, editName: vEditName, editLoc: vEditLoc,
                       quote: vQuote, job: vJob, portfolio: vPortfolio, editPg: vEditPg,
                       payResult: vPayResult, editPayout: vEditPayout,
-                      pgEarnings: vPgEarnings, pgDone: vPgDone, pgReviews: vPgReviews, how: vHow };
+                      pgEarnings: vPgEarnings, pgDone: vPgDone, pgReviews: vPgReviews, how: vHow, storage: vStorage };
 const CUST_TABS = [ ["home","Home","home",vCustHome], ["explore","Explore","search",vExplore], ["activity","Shoots","calendar",vActivity], ["profile","Profile","user",vProfile] ];
 const PG_TABS   = [ ["home","Home","home",vPgHome], ["requests","Requests","bolt",vPgRequests], ["jobs","Shoots","calendar",vJobs], ["profile","Profile","user",vProfile] ];
 const tabsFor = () => isPg() ? PG_TABS : CUST_TABS;

@@ -93,7 +93,7 @@ td{padding:11px 8px;border-bottom:1px solid var(--border-soft);vertical-align:mi
 .stackc{display:flex;flex-direction:column;gap:12px}
 .pcard{border-color:rgba(255,200,87,.3)}
 .thumbs{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:6px}
-.thumbs img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;display:block;background:var(--surface-2)}
+.thumbs img,.thumbs video{width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;display:block;background:var(--surface-2)}
 .linkbtn{color:var(--accent);font-weight:700;font-size:12.5px}
 details>summary{list-style:none}details>summary::-webkit-details-marker{display:none}
 .spin{width:44px;height:44px;margin:0 auto;border-radius:50%;border:3px solid var(--surface-3);
@@ -790,6 +790,13 @@ async function loadPayments(quiet){
     sb.from('photographer_payout').select('id,upi_id,account_name'),
     sb.from('platform_settings').select('value').eq('key','commission_pct').maybeSingle()
   ]);
+  // storage plans (photographer portfolio space) — optional until the database update is run
+  const [so, ps, sp] = await Promise.all([
+    sb.from('storage_orders').select('order_id,photographer_id,plan,plan_name,amount,status,environment,payment_group,paid_at,period_end,created_at').order('created_at',{ascending:false}).limit(1000),
+    sb.from('photographer_storage').select('id,plan,quota_bytes,expires_at'),
+    sb.from('platform_settings').select('value').eq('key','storage_plans').maybeSingle()
+  ]);
+  S.storagePay = so.error ? null : { orders: so.data || [], plans: ps.data || [], config: sp && sp.data ? sp.data.value : null };
   const err = [p,b,r,po].find(x => x && x.error);
   if(err){
     S.payErr = /payments|refunds|photographer_payout|does not exist|schema cache/i.test(err.error.message)
@@ -952,7 +959,54 @@ function vPayments(){
       <td class="xs">${p.gateway_payment_id ? esc(p.gateway_payment_id) : "—"}${p.gateway_order_id ? `<div class="muted2">${esc(p.gateway_order_id)}</div>` : ""}${p.bank_reference ? `<div class="muted2">RRN ${esc(p.bank_reference)}</div>` : ""}</td>
       <td>${refundChip(p)}${refundsFor(p.id).map(r => `<div class="xs muted2 mt8">${inr(r.amount)} · ${esc(r.status)}${r.refund_arn ? " · ARN " + esc(r.refund_arn) : ""}${["requested","pending","pending_approval","onhold"].includes(r.status) && r.gateway_refund_id ? ` <button class="linkbtn" onclick="checkRefund('${r.refund_id}','${esc(r.gateway_refund_id)}')">check</button>` : ""}</div>`).join("")}</td>
       <td style="text-align:right">${p.status === "paid" && Number(p.refunded_amount) < Number(p.amount) && p.refund_status !== "refund_pending" && !["refund_due","refund_failed"].includes(p.refund_status) ? `<button class="btn sm" onclick="refundPayment('${p.id}')">Refund…</button>` : ""}</td>
-    </tr>`).join("")}</tbody></table></div>` : `<div class="card mt8"><div class="empty">No payments yet.</div></div>`}`;
+    </tr>`).join("")}</tbody></table></div>` : `<div class="card mt8"><div class="empty">No payments yet.</div></div>`}
+  ${vStoragePlans()}`;
+}
+const pgName = id => { const p = (S.photographers || []).find(x => x.id === id); return p ? p.display_name : "—"; };
+function vStoragePlans(){
+  const X = S.storagePay;
+  if(!X) return `<div class="sec mt24">Portfolio storage plans</div><div class="warn">Storage plans need the latest database update — run supabase/snappro.sql in the Supabase SQL Editor.</div>`;
+  const paid = X.orders.filter(o => o.status === "paid"), live = paid.filter(o => o.environment === "live");
+  const now = Date.now(), active = X.plans.filter(p => p.plan !== "free" && Date.parse(p.expires_at) > now);
+  const soon = active.filter(p => Date.parse(p.expires_at) - now < 14 * 864e5);
+  const cfg = X.config || { free_mb: 250, plans: [] };
+  const byPlan = id => active.filter(p => p.plan === id).length;
+  return `<div class="sec mt24">Portfolio storage plans</div>
+  <div class="grid">
+    <div class="stat hl"><div class="v">${inr(paid.reduce((t,o) => t + Number(o.amount), 0))}</div><div class="l">Storage revenue${live.length !== paid.length ? " (incl. test)" : ""}</div></div>
+    <div class="stat"><div class="v">${num(active.length)}</div><div class="l">Photographers on a paid plan</div></div>
+    ${(cfg.plans || []).map(p => `<div class="stat"><div class="v">${num(byPlan(p.id))}</div><div class="l">${esc(p.name)} (${esc(p.gb)} GB · ${inr(p.price)}/yr)</div></div>`).join("")}
+    <div class="stat"><div class="v">${num(soon.length)}</div><div class="l">Ending in the next 14 days</div></div>
+  </div>
+  ${paid.length ? `<div class="card tblwrap mt12"><table><thead><tr><th>Paid</th><th>Photographer</th><th>Plan</th><th>Amount</th><th>Method</th><th>Active until</th><th></th></tr></thead><tbody>
+    ${paid.slice(0, 200).map(o => `<tr><td class="muted">${when(o.paid_at)}</td><td>${esc(pgName(o.photographer_id))}</td><td>${esc(o.plan_name || o.plan)}</td><td>${inr(o.amount)}</td>
+      <td class="sm">${esc(methodName(o.payment_group))}</td><td>${fmt(o.period_end)}</td><td>${o.environment === "test" ? '<span class="chip amber">Test</span>' : ""}</td></tr>`).join("")}
+  </tbody></table></div>` : `<div class="card mt12"><div class="xs muted2">No storage plans bought yet.</div></div>`}
+  ${S.me.role === "super_admin" ? `<div class="card mt12"><div class="sec">Plans and prices</div>
+    <div class="row" style="flex-wrap:wrap;gap:10px"><label class="xs muted">Free storage (MB) <input id="spFree" class="input" type="number" min="10" style="width:110px;padding:8px 10px" value="${esc(cfg.free_mb)}"></label></div>
+    ${(cfg.plans || []).map((p, i) => `<div class="row mt8" style="flex-wrap:wrap;gap:10px">
+      <label class="xs muted">Name <input id="spName${i}" class="input" style="width:120px;padding:8px 10px" value="${esc(p.name)}"></label>
+      <label class="xs muted">GB <input id="spGb${i}" class="input" type="number" min="1" step="0.5" style="width:90px;padding:8px 10px" value="${esc(p.gb)}"></label>
+      <label class="xs muted">₹ per year <input id="spPrice${i}" class="input" type="number" min="1" style="width:110px;padding:8px 10px" value="${esc(p.price)}"></label>
+      <span class="xs muted2">id: ${esc(p.id)}</span></div>`).join("")}
+    <div class="row mt12"><button class="btn sm primary" onclick="saveStoragePlans()">Save plans</button>
+      <button class="btn sm" onclick="purgeMedia()">Clean up expired files now</button></div>
+    <div class="xs muted2 mt8">New prices apply to new purchases and renewals. Files hidden after a plan ends are deleted from S3 after 30 days; this runs automatically, the button just does it now.</div></div>` : ""}`;
+}
+async function saveStoragePlans(){
+  const cfg = (S.storagePay && S.storagePay.config) || { plans: [] };
+  const next = { free_mb: Number(el("spFree").value), plans: (cfg.plans || []).map((p, i) => ({ id: p.id, name: el("spName" + i).value.trim() || p.name,
+                 gb: Number(el("spGb" + i).value), price: Math.round(Number(el("spPrice" + i).value)) })) };
+  S.err = ""; S.note = "";
+  const { error } = await sb.rpc("admin_set_storage_plans", { p: next });
+  if(error){ S.err = error.message; render(); return; }
+  S.note = "Storage plans saved."; await loadPayments();
+}
+async function purgeMedia(){
+  S.err = ""; S.note = "";
+  const { data, error } = await sb.functions.invoke("media", { body: { action: "purge" } });
+  if(error){ let m = error.message; try{ const j = await error.context.json(); if(j && j.error) m = j.error; }catch(e){} S.err = "Couldn't clean up: " + m; render(); return; }
+  S.note = "Deleted " + ((data && data.deleted) || 0) + " expired file(s) from storage."; render();
 }
 
 /* ============================ views =========================== */
@@ -1192,7 +1246,7 @@ async function decide(id, status){
 function pendingCard(p, canDecide){
   const photos = p.portfolio || [], cats = (p.categories || []).map(c => CAT_NAMES[c] || c).join(", ");
   const flags = [];
-  if(photos.length < 6) flags.push(photos.length ? "Only " + photos.length + " portfolio photo" + (photos.length === 1 ? "" : "s") : "No portfolio photos yet");
+  if(photos.length < 6) flags.push(photos.length ? "Only " + photos.length + " portfolio item" + (photos.length === 1 ? "" : "s") : "No portfolio photos yet");
   if(!p.bio || p.bio.trim().length < 20) flags.push("Bio is empty or very short");
   if(!p.city) flags.push("No city");
   const em = emailOf(p.id);
@@ -1207,7 +1261,7 @@ function pendingCard(p, canDecide){
     </div>
     ${p.approval_status === "rejected" && p.review_note ? `<div class="xs mt12" style="color:#ff8f9b">Reason sent: ${esc(p.review_note)}</div>` : ""}
     ${p.bio ? `<p class="sm muted mt12" style="white-space:pre-wrap;margin-bottom:0">${esc(p.bio)}</p>` : ""}
-    ${photos.length ? `<div class="thumbs mt12">${photos.slice(0, 12).map(u => `<a href="${esc(u)}" target="_blank" rel="noopener"><img src="${esc(u)}" alt="" loading="lazy"></a>`).join("")}</div>` : ""}
+    ${photos.length ? `<div class="thumbs mt12">${photos.slice(0, 12).map(u => `<a href="${esc(u)}" target="_blank" rel="noopener">${/\.(mp4|mov|webm)(\?|$)/i.test(u) ? `<video src="${esc(u)}#t=0.1" muted preload="metadata"></video>` : `<img src="${esc(u)}" alt="" loading="lazy">`}</a>`).join("")}</div>` : ""}
     ${flags.length ? `<div class="xs mt12" style="color:#ffd88a">Worth checking: ${flags.map(esc).join(" · ")}</div>` : ""}
     ${canDecide ? (S.rejecting === p.id ? `
       <div class="mt12"><textarea id="rejWhy-${p.id}" class="input" rows="2" maxlength="500" placeholder="What should they fix? e.g. Please add at least 6 photos of your own work."></textarea>

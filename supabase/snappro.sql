@@ -352,7 +352,7 @@ begin
   end if;
   new.display_name := left(coalesce(nullif(trim(new.display_name),''), 'Photographer'), 60);
   new.bio := left(coalesce(new.bio,''), 600);
-  new.portfolio := coalesce(new.portfolio[1:30], '{}');
+  new.portfolio := coalesce(new.portfolio[1:500], '{}');
   return new;
 end $$;
 drop trigger if exists photographer_guard on public.photographers;
@@ -1600,6 +1600,397 @@ revoke all on function public.my_offers() from public, anon;
 grant execute on function public.my_offers() to authenticated;
 
 -- =====================================================================
+-- 7d. PORTFOLIO MEDIA ON AMAZON S3 + YEARLY STORAGE PLANS
+--     Photos and videos go straight from the photographer's phone to the
+--     S3 bucket using one-time upload links made by the "media" Edge
+--     Function. The database keeps the list, the sizes and the limits.
+--     Free: 250 MB. Paid plans (yearly, via Razorpay) add more.
+--     When a plan ends, anything over the free limit is hidden, and
+--     deleted 30 days later unless they renew.
+-- =====================================================================
+
+insert into public.platform_settings (key, value) values ('storage_plans',
+  '{"free_mb":250,"plans":[{"id":"plus","name":"Plus","gb":1,"price":499},{"id":"pro","name":"Pro","gb":5,"price":1499}]}')
+on conflict (key) do nothing;
+
+create table if not exists public.portfolio_media (
+  id              uuid primary key default gen_random_uuid(),
+  photographer_id uuid not null references public.photographers(id) on delete cascade,
+  s3_key          text not null unique,
+  url             text not null,
+  kind            text not null check (kind in ('image','video')),
+  content_type    text,
+  bytes           bigint not null default 0,
+  status          text not null default 'pending' check (status in ('pending','ready','hidden','deleted')),
+  hidden_at       timestamptz,
+  created_at      timestamptz not null default now(),
+  updated_at      timestamptz not null default now()
+);
+create index if not exists idx_media_pg on public.portfolio_media(photographer_id, status);
+
+create table if not exists public.photographer_storage (
+  id          uuid primary key references public.photographers(id) on delete cascade,
+  plan        text not null default 'free',
+  quota_bytes bigint,
+  expires_at  timestamptz,
+  reminded_at timestamptz,
+  updated_at  timestamptz not null default now()
+);
+
+create table if not exists public.storage_orders (
+  id                 uuid primary key default gen_random_uuid(),
+  order_id           text not null unique,
+  photographer_id    uuid not null references public.photographers(id) on delete cascade,
+  plan               text not null,
+  plan_name          text,
+  quota_bytes        bigint not null,
+  amount             numeric(12,2) not null check (amount >= 1),
+  status             text not null default 'created' check (status in ('created','active','paid','failed','cancelled','terminated')),
+  environment        text not null default 'test',
+  gateway_order_id   text unique,
+  gateway_payment_id text,
+  payment_group      text,
+  period_start       timestamptz,
+  period_end         timestamptz,
+  paid_at            timestamptz,
+  created_at         timestamptz not null default now(),
+  updated_at         timestamptz not null default now()
+);
+create index if not exists idx_storage_orders_pg on public.storage_orders(photographer_id);
+
+alter table public.portfolio_media      enable row level security;
+alter table public.photographer_storage enable row level security;
+alter table public.storage_orders       enable row level security;
+drop policy if exists media_public_read on public.portfolio_media;
+create policy media_public_read on public.portfolio_media for select using (status = 'ready' or photographer_id = auth.uid() or public.is_staff());
+drop policy if exists storage_own_read on public.photographer_storage;
+create policy storage_own_read on public.photographer_storage for select to authenticated using (id = auth.uid() or public.is_staff());
+drop policy if exists storage_orders_read on public.storage_orders;
+create policy storage_orders_read on public.storage_orders for select to authenticated
+  using (photographer_id = auth.uid() or coalesce(public.staff_role() in ('super_admin','admin'), false));
+revoke insert, update, delete on public.portfolio_media, public.photographer_storage, public.storage_orders from anon, authenticated;
+
+-- free allowance and the plan a photographer is on right now
+create or replace function public.storage_free_bytes()
+returns bigint language sql stable security definer set search_path = public
+as $$ select (coalesce((select (value->>'free_mb')::numeric from public.platform_settings where key = 'storage_plans'), 250) * 1024 * 1024)::bigint $$;
+create or replace function public.storage_quota(p_pg uuid)
+returns bigint language sql stable security definer set search_path = public
+as $$ select greatest(public.storage_free_bytes(),
+          coalesce((select s.quota_bytes from public.photographer_storage s
+                     where s.id = p_pg and s.plan <> 'free' and s.expires_at > now()), 0)) $$;
+create or replace function public.storage_used(p_pg uuid)
+returns bigint language sql stable security definer set search_path = public
+as $$ select coalesce(sum(bytes), 0)::bigint from public.portfolio_media
+       where photographer_id = p_pg and (status in ('ready','hidden') or (status = 'pending' and created_at > now() - interval '1 hour')) $$;
+
+-- Which uploads show on the profile: oldest first, as many as fit in the
+-- current allowance. Older Supabase-hosted photos (from before S3) stay as they are.
+create or replace function public.media_sync(p_pg uuid)
+returns void language plpgsql security definer set search_path = public
+as $$
+declare quota bigint := public.storage_quota(p_pg); legacy text[]; vis text[];
+begin
+  perform set_config('snappro.system', 'on', true);
+  with m as (select id, bytes, sum(bytes) over (order by created_at, id) as run
+               from public.portfolio_media where photographer_id = p_pg and status in ('ready','hidden'))
+  update public.portfolio_media x
+     set status = case when m.run <= quota then 'ready' else 'hidden' end,
+         hidden_at = case when m.run <= quota then null else coalesce(x.hidden_at, now()) end,
+         updated_at = now()
+    from m where x.id = m.id
+     and x.status is distinct from (case when m.run <= quota then 'ready' else 'hidden' end);
+  select coalesce(array_agg(u), '{}') into legacy from (
+    select unnest(portfolio) u from public.photographers where id = p_pg) z
+   where not exists (select 1 from public.portfolio_media pm where pm.url = z.u);
+  select coalesce(array_agg(url order by created_at, id), '{}') into vis
+    from public.portfolio_media where photographer_id = p_pg and status = 'ready';
+  update public.photographers set portfolio = legacy || vis where id = p_pg;
+  perform set_config('snappro.system', '', true);
+end $$;
+
+-- 1. A one-time upload slot (server only). Checks the type, size and space left.
+create or replace function public.media_begin(p_user uuid, p_kind text, p_type text, p_ext text, p_bytes bigint, p_base_url text)
+returns jsonb language plpgsql security definer set search_path = public
+as $$
+declare quota bigint; used bigint; k text; maxb bigint;
+begin
+  if not exists (select 1 from public.photographers where id = p_user) then raise exception 'Only photographers can upload portfolio work'; end if;
+  if p_kind not in ('image','video') then raise exception 'Upload photos or videos only'; end if;
+  if p_kind = 'image' and (p_type not in ('image/jpeg','image/png','image/webp') or p_ext not in ('jpg','png','webp')) then
+    raise exception 'Photos must be JPG, PNG or WebP'; end if;
+  if p_kind = 'video' and (p_type not in ('video/mp4','video/quicktime','video/webm') or p_ext not in ('mp4','mov','webm')) then
+    raise exception 'Videos must be MP4, MOV or WebM'; end if;
+  maxb := case when p_kind = 'image' then 15 * 1024 * 1024 else 100 * 1024 * 1024 end;
+  if p_bytes is null or p_bytes < 1 then raise exception 'That file is empty'; end if;
+  if p_bytes > maxb then raise exception '% are limited to % MB each', case when p_kind = 'image' then 'Photos' else 'Videos' end, maxb / 1024 / 1024; end if;
+  quota := public.storage_quota(p_user); used := public.storage_used(p_user);
+  if used + p_bytes > quota then
+    raise exception 'STORAGE_FULL: Not enough space — % MB free of % MB. Delete something or upgrade your storage.',
+      greatest(0, (quota - used) / 1024 / 1024), quota / 1024 / 1024;
+  end if;
+  k := 'portfolio/' || p_user || '/' || replace(gen_random_uuid()::text, '-', '') || '.' || p_ext;
+  insert into public.portfolio_media (photographer_id, s3_key, url, kind, content_type, bytes)
+  values (p_user, k, rtrim(p_base_url, '/') || '/' || k, p_kind, p_type, p_bytes);
+  return jsonb_build_object('key', k, 'url', rtrim(p_base_url, '/') || '/' || k, 'quota', quota, 'used', used + p_bytes);
+end $$;
+
+-- 2. The upload finished: record its real size (from S3) and show it.
+create or replace function public.media_confirm(p_user uuid, p_key text, p_bytes bigint)
+returns jsonb language plpgsql security definer set search_path = public
+as $$
+declare m record; quota bigint; used bigint;
+begin
+  select * into m from public.portfolio_media where s3_key = p_key and photographer_id = p_user for update;
+  if not found then raise exception 'Upload not found'; end if;
+  if m.status = 'ready' then return jsonb_build_object('result','ready','url', m.url); end if;
+  if m.status <> 'pending' then raise exception 'Upload not found'; end if;
+  update public.portfolio_media set bytes = coalesce(p_bytes, 0), updated_at = now() where id = m.id;
+  quota := public.storage_quota(p_user);
+  select coalesce(sum(bytes),0) into used from public.portfolio_media
+   where photographer_id = p_user and (status in ('ready','hidden') or id = m.id);
+  if p_bytes is null or p_bytes < 1 or used > quota or p_bytes > (case when m.kind = 'image' then 15 else 100 end) * 1024 * 1024 then
+    update public.portfolio_media set status = 'deleted', updated_at = now() where id = m.id;
+    return jsonb_build_object('result','rejected','delete_key', m.s3_key);
+  end if;
+  update public.portfolio_media set status = 'ready', updated_at = now() where id = m.id;
+  perform public.media_sync(p_user);
+  return jsonb_build_object('result','ready','url', m.url, 'kind', m.kind);
+end $$;
+
+-- 3. Remove one item (by link). Returns the S3 key to delete, or null for old Supabase photos.
+create or replace function public.media_delete(p_user uuid, p_url text)
+returns jsonb language plpgsql security definer set search_path = public
+as $$
+declare m record;
+begin
+  select * into m from public.portfolio_media where url = p_url and photographer_id = p_user and status <> 'deleted' for update;
+  if found then
+    update public.portfolio_media set status = 'deleted', updated_at = now() where id = m.id;
+    perform public.media_sync(p_user);
+    return jsonb_build_object('delete_key', m.s3_key);
+  end if;
+  perform set_config('snappro.system', 'on', true);
+  update public.photographers set portfolio = array_remove(portfolio, p_url) where id = p_user;
+  perform set_config('snappro.system', '', true);
+  return jsonb_build_object('delete_key', null);
+end $$;
+
+-- 4. Files to remove from S3: hidden for 30+ days, or uploads abandoned for a day.
+create or replace function public.media_purge_list(p_limit int default 50)
+returns jsonb language sql security definer set search_path = public
+as $$ select coalesce(jsonb_agg(s3_key), '[]') from (
+        select s3_key from public.portfolio_media
+         where (status = 'hidden' and hidden_at < now() - interval '30 days')
+            or (status = 'pending' and created_at < now() - interval '1 day')
+         limit greatest(1, least(p_limit, 500))) z $$;
+create or replace function public.media_mark_purged(p_keys text[])
+returns int language plpgsql security definer set search_path = public
+as $$ declare n int; pgs uuid[];
+begin
+  select array_agg(distinct photographer_id) into pgs from public.portfolio_media where s3_key = any(p_keys);
+  update public.portfolio_media set status = 'deleted', updated_at = now() where s3_key = any(p_keys) and status in ('hidden','pending');
+  get diagnostics n = row_count;
+  perform public.media_sync(x) from unnest(coalesce(pgs, '{}')) x;
+  return n;
+end $$;
+
+-- What the photographer sees: used, allowance, plan, end date, plans on offer.
+create or replace function public.my_storage()
+returns jsonb language plpgsql security definer set search_path = public
+as $$
+declare me uuid := auth.uid(); s record;
+begin
+  if me is null or not exists (select 1 from public.photographers where id = me) then return null; end if;
+  -- a plan that ended since the last daily check: apply it now
+  if exists (select 1 from public.photographer_storage where id = me and plan <> 'free' and expires_at <= now()) then
+    update public.photographer_storage set plan = 'free', quota_bytes = null, updated_at = now() where id = me;
+    perform public.media_sync(me);
+  end if;
+  select * into s from public.photographer_storage where id = me;
+  return jsonb_build_object(
+    'used', public.storage_used(me), 'quota', public.storage_quota(me), 'free', public.storage_free_bytes(),
+    'plan', case when s.plan is not null and s.plan <> 'free' and s.expires_at > now() then s.plan else 'free' end,
+    'expires_at', case when s.plan <> 'free' and s.expires_at > now() then s.expires_at end,
+    'ended_at', case when s.plan = 'free' and s.expires_at <= now() then s.expires_at end,
+    'hidden', (select count(*) from public.portfolio_media where photographer_id = me and status = 'hidden'),
+    'hidden_bytes', (select coalesce(sum(bytes),0) from public.portfolio_media where photographer_id = me and status = 'hidden'),
+    'delete_after', (select min(hidden_at) + interval '30 days' from public.portfolio_media where photographer_id = me and status = 'hidden'),
+    'plans', (select value->'plans' from public.platform_settings where key = 'storage_plans'),
+    'items', (select coalesce(jsonb_agg(jsonb_build_object('url', url, 'kind', kind, 'bytes', bytes, 'status', status) order by created_at), '[]')
+                from public.portfolio_media where photographer_id = me and status in ('ready','hidden')));
+end $$;
+
+-- ---------- buying storage (yearly, through Razorpay) ----------
+create or replace function public.storage_begin(p_user uuid, p_plan text)
+returns jsonb language plpgsql security definer set search_path = public
+as $$
+declare pl jsonb; u record; pr record; open_o jsonb;
+begin
+  if not exists (select 1 from public.photographers where id = p_user) then raise exception 'Only photographers can buy storage'; end if;
+  select x into pl from public.platform_settings s, jsonb_array_elements(s.value->'plans') x where s.key = 'storage_plans' and x->>'id' = p_plan;
+  if pl is null then raise exception 'Unknown plan'; end if;
+  select email into u from auth.users where id = p_user;
+  select name, phone into pr from public.profiles where id = p_user;
+  select coalesce(jsonb_agg(jsonb_build_object('order_id', order_id, 'gateway_order_id', gateway_order_id, 'environment', environment)
+                            order by created_at desc), '[]') into open_o
+    from public.storage_orders where photographer_id = p_user and plan = p_plan and amount = (pl->>'price')::numeric
+     and status in ('created','active','failed') and created_at > now() - interval '1 day';
+  return jsonb_build_object('plan', p_plan, 'name', pl->>'name', 'amount', (pl->>'price')::numeric,
+    'quota_bytes', ((pl->>'gb')::numeric * 1024 * 1024 * 1024)::bigint, 'gb', pl->'gb',
+    'customer_email', u.email, 'customer_name', pr.name, 'customer_phone', pr.phone, 'open_orders', open_o);
+end $$;
+create or replace function public.storage_create(p_user uuid, p_plan text, p_order_id text, p_env text)
+returns uuid language plpgsql security definer set search_path = public
+as $$
+declare b jsonb := public.storage_begin(p_user, p_plan); oid uuid;
+begin
+  if p_order_id !~ '^[A-Za-z0-9_-]{3,40}$' then raise exception 'Bad order id'; end if;
+  insert into public.storage_orders (order_id, photographer_id, plan, plan_name, quota_bytes, amount, environment)
+  values (p_order_id, p_user, p_plan, b->>'name', (b->>'quota_bytes')::bigint, (b->>'amount')::numeric, p_env)
+  returning id into oid;
+  return oid;
+end $$;
+create or replace function public.storage_set_gateway(p_order_id text, p_gateway_order_id text)
+returns void language sql security definer set search_path = public
+as $$ update public.storage_orders set gateway_order_id = p_gateway_order_id, status = 'active', updated_at = now() where order_id = p_order_id $$;
+create or replace function public.storage_lookup(p_order_id text)
+returns jsonb language sql stable security definer set search_path = public
+as $$ select to_jsonb(o) from public.storage_orders o where o.order_id = p_order_id or o.gateway_order_id = p_order_id limit 1 $$;
+
+-- A verified payment for a storage order. Safe to call more than once.
+create or replace function public.storage_record(p_order_id text, p_event_key text, p_status text,
+    p_payment_ref text default null, p_amount numeric default null, p_group text default null)
+returns jsonb language plpgsql security definer set search_path = public
+as $$
+declare o record; s record; n int; st text; start_at timestamptz; ends timestamptz;
+begin
+  if p_event_key is not null then
+    insert into public.payment_events (event_key, order_id, event_type, payment_status, payment_ref)
+    values (p_event_key, p_order_id, 'STORAGE', p_status, p_payment_ref) on conflict (event_key) do nothing;
+    get diagnostics n = row_count;
+    if n = 0 then return jsonb_build_object('result','duplicate_event'); end if;
+  end if;
+  select * into o from public.storage_orders where order_id = p_order_id or gateway_order_id = p_order_id limit 1 for update;
+  if not found then return jsonb_build_object('result','unknown_order'); end if;
+  if o.status = 'paid' then return jsonb_build_object('result','already_paid','status','paid','plan',o.plan,'period_end',o.period_end); end if;
+  st := case upper(coalesce(p_status,'')) when 'CAPTURED' then 'paid' when 'PAID' then 'paid' when 'SUCCESS' then 'paid'
+          when 'FAILED' then 'failed' when 'TERMINATED' then 'terminated' when 'CANCELLED' then 'cancelled' else null end;
+  if st is null then return jsonb_build_object('result','pending','status',o.status); end if;
+  if st <> 'paid' then
+    update public.storage_orders set status = st, gateway_payment_id = coalesce(p_payment_ref, gateway_payment_id), updated_at = now() where id = o.id;
+    return jsonb_build_object('result','recorded','status',st);
+  end if;
+  if p_amount is not null and round(p_amount,2) <> round(o.amount,2) then
+    update public.storage_orders set status = 'failed', gateway_payment_id = p_payment_ref, updated_at = now() where id = o.id;
+    return jsonb_build_object('result','amount_mismatch','status','failed');
+  end if;
+  -- renewing the same plan adds a year to whatever is left; a different plan starts today
+  select * into s from public.photographer_storage where id = o.photographer_id for update;
+  start_at := case when s.plan = o.plan and s.expires_at > now() then s.expires_at else now() end;
+  ends := start_at + interval '1 year';
+  insert into public.photographer_storage (id, plan, quota_bytes, expires_at, reminded_at, updated_at)
+  values (o.photographer_id, o.plan, o.quota_bytes, ends, null, now())
+  on conflict (id) do update set plan = excluded.plan, quota_bytes = excluded.quota_bytes, expires_at = excluded.expires_at,
+                                 reminded_at = null, updated_at = now();
+  update public.storage_orders set status = 'paid', gateway_payment_id = p_payment_ref, payment_group = p_group,
+         paid_at = now(), period_start = start_at, period_end = ends, updated_at = now() where id = o.id;
+  perform public.media_sync(o.photographer_id);
+  return jsonb_build_object('result','paid','status','paid','plan',o.plan,'period_end',ends);
+end $$;
+
+-- Daily: end lapsed plans (hide what no longer fits) and remind people 7 days before.
+create or replace function public.storage_sweep()
+returns int language plpgsql security definer set search_path = public
+as $$
+declare r record; n int := 0;
+begin
+  for r in select * from public.photographer_storage where plan <> 'free' and expires_at <= now() loop
+    update public.photographer_storage set plan = 'free', quota_bytes = null, updated_at = now() where id = r.id;
+    perform public.media_sync(r.id); n := n + 1;
+  end loop;
+  for r in select s.id, u.email, g.display_name, s.expires_at from public.photographer_storage s
+             join auth.users u on u.id = s.id join public.photographers g on g.id = s.id
+            where s.plan <> 'free' and s.expires_at between now() and now() + interval '7 days' and s.reminded_at is null loop
+    begin
+      perform public._send_email(r.email, 'Your SnapPro storage plan ends soon',
+        '<p>Hi ' || coalesce(r.display_name,'there') || ',</p><p>Your SnapPro storage plan ends on <b>' ||
+        to_char(r.expires_at at time zone 'Asia/Kolkata', 'DD Mon YYYY') ||
+        '</b>. Renew it from <b>Profile → Portfolio</b> in the app to keep all your photos and videos on your profile.</p>' ||
+        '<p>If it ends, anything over the free 250 MB is hidden and then deleted after 30 days.</p><p>— SnapPro</p>');
+    exception when others then null; end;
+    update public.photographer_storage set reminded_at = now() where id = r.id;
+  end loop;
+  return n;
+end $$;
+do $$ begin
+  create extension if not exists pg_cron;
+  perform cron.schedule('snappro-storage-sweep', '30 0 * * *', 'select public.storage_sweep()');
+exception when others then raise notice 'pg_cron not available — storage_sweep also runs when photographers open their portfolio'; end $$;
+
+-- Super admins can change the storage plans and prices (new purchases only).
+create or replace function public.admin_set_storage_plans(p jsonb)
+returns jsonb language plpgsql security definer set search_path = public
+as $$
+declare x jsonb;
+begin
+  if not public.is_super() then raise exception 'Only a super admin can change storage plans'; end if;
+  if (p->>'free_mb')::numeric is null or (p->>'free_mb')::numeric < 10 then raise exception 'Free storage must be at least 10 MB'; end if;
+  for x in select * from jsonb_array_elements(coalesce(p->'plans','[]')) loop
+    if coalesce(x->>'id','') !~ '^[a-z0-9_-]{2,20}$' or (x->>'gb')::numeric <= 0 or (x->>'price')::numeric < 1 then
+      raise exception 'Each plan needs an id, a size in GB and a price of at least ₹1'; end if;
+  end loop;
+  insert into public.platform_settings (key, value, updated_at) values ('storage_plans', p, now())
+  on conflict (key) do update set value = excluded.value, updated_at = now();
+  return p;
+end $$;
+
+-- Photographers may reorder or remove items in their portfolio list, but
+-- only the server adds to it (so uploads always go through the size checks).
+create or replace function public.photographer_portfolio_guard()
+returns trigger language plpgsql
+as $$
+begin
+  if public.snappro_system() or tg_op <> 'UPDATE' then return new; end if;
+  if not (coalesce(new.portfolio,'{}') <@ coalesce(old.portfolio,'{}')) then
+    raise exception 'Add photos and videos with the Add button on your Portfolio screen';
+  end if;
+  return new;
+end $$;
+drop trigger if exists photographer_portfolio_guard on public.photographers;
+create trigger photographer_portfolio_guard before update on public.photographers
+  for each row execute function public.photographer_portfolio_guard();
+
+revoke all on function public.media_begin(uuid, text, text, text, bigint, text) from public, anon, authenticated;
+revoke all on function public.media_confirm(uuid, text, bigint)                 from public, anon, authenticated;
+revoke all on function public.media_delete(uuid, text)                          from public, anon, authenticated;
+revoke all on function public.media_purge_list(int)                             from public, anon, authenticated;
+revoke all on function public.media_mark_purged(text[])                         from public, anon, authenticated;
+revoke all on function public.media_sync(uuid)                                  from public, anon, authenticated;
+revoke all on function public.storage_begin(uuid, text)                         from public, anon, authenticated;
+revoke all on function public.storage_create(uuid, text, text, text)            from public, anon, authenticated;
+revoke all on function public.storage_set_gateway(text, text)                   from public, anon, authenticated;
+revoke all on function public.storage_lookup(text)                              from public, anon, authenticated;
+revoke all on function public.storage_record(text, text, text, text, numeric, text) from public, anon, authenticated;
+revoke all on function public.storage_sweep()                                   from public, anon, authenticated;
+grant execute on function public.media_begin(uuid, text, text, text, bigint, text) to service_role;
+grant execute on function public.media_confirm(uuid, text, bigint)                 to service_role;
+grant execute on function public.media_delete(uuid, text)                          to service_role;
+grant execute on function public.media_purge_list(int)                             to service_role;
+grant execute on function public.media_mark_purged(text[])                         to service_role;
+grant execute on function public.media_sync(uuid)                                  to service_role;
+grant execute on function public.storage_begin(uuid, text)                         to service_role;
+grant execute on function public.storage_create(uuid, text, text, text)            to service_role;
+grant execute on function public.storage_set_gateway(text, text)                   to service_role;
+grant execute on function public.storage_lookup(text)                              to service_role;
+grant execute on function public.storage_record(text, text, text, text, numeric, text) to service_role;
+grant execute on function public.storage_sweep()                                   to service_role;
+revoke all on function public.my_storage() from public, anon;
+grant execute on function public.my_storage() to authenticated;
+revoke all on function public.admin_set_storage_plans(jsonb) from public, anon;
+grant execute on function public.admin_set_storage_plans(jsonb) to authenticated;
+
+-- =====================================================================
 -- 8. FUNCTION PERMISSIONS
 --    Supabase lets browsers call any public function by default. The
 --    email sender is locked away; the rest check the caller themselves.
@@ -2202,4 +2593,6 @@ select
     and (exists (select 1 from public.staff where lower(email) = 'prathmeshsingh99@gmail.com'
                    and role = 'super_admin' and status = 'active')
          or exists (select 1 from public.staff_invites where lower(email) = 'prathmeshsingh99@gmail.com'
-                   and role = 'super_admin' and accepted_at is null))                     as owner_locked;
+                   and role = 'super_admin' and accepted_at is null))                     as owner_locked,
+  exists (select 1 from pg_proc where proname = 'media_begin')
+    and exists (select 1 from public.platform_settings where key = 'storage_plans')      as media_storage_ready;
