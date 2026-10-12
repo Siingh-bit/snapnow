@@ -483,6 +483,28 @@ html,body,#app,.tabbar,.card,.input{transition:background-color .25s,border-colo
 .meter.hot i{background:var(--accent)}
 .card.plan.on{border-color:var(--text);box-shadow:inset 0 0 0 1px var(--text)}
 
+/* offers & rewards */
+.reward{display:flex;align-items:center;gap:12px;padding:14px;border-radius:12px;color:#fff;background:linear-gradient(135deg,#c8471d,#e3743f);box-shadow:var(--shadow)}
+.reward.k-booking_pct{background:linear-gradient(135deg,#a2331a,#df6a3c)}
+.reward.k-storage_bonus{background:linear-gradient(135deg,#2d5b8a,#4f86bd)}
+.reward.k-commission_cut{background:linear-gradient(135deg,#2f6b4f,#4c9a73)}
+.reward.k-featured{background:linear-gradient(135deg,#7a5a12,#c79a2e)}
+.reward.k-storage_discount{background:linear-gradient(135deg,#5b437d,#8a6bb3)}
+.reward.on{opacity:.96}
+.reward .r-ic{width:40px;height:40px;border-radius:10px;background:rgba(255,255,255,.18);display:grid;place-items:center;flex-shrink:0}
+.reward .r-sub{color:rgba(255,255,255,.85)} .reward .r-when{color:rgba(255,255,255,.7)}
+.reward .btn.primary{background:#fff;color:#1d1a16;border-color:#fff}
+.reward .chip.green{background:rgba(255,255,255,.2);color:#fff}
+.r-badge{font-size:10px;font-weight:800;letter-spacing:.5px;background:#fff;color:#1d1a16;border-radius:5px;padding:2px 6px}
+.invite-hero{border-radius:14px;padding:20px;text-align:center;color:#fff;background:linear-gradient(135deg,#1d1a16,#3a2b22)}
+.invite-code{font-size:30px;font-weight:800;letter-spacing:2px;margin-top:4px;font-variant-numeric:tabular-nums}
+.invite-card{display:flex;align-items:center;gap:12px}
+.feat{font-size:10.5px;font-weight:800;color:#7a5a12;background:#f6e7c1;border-radius:5px;padding:2px 6px;white-space:nowrap}
+html[data-theme=dark] .feat{background:#3a2f15;color:#e8c46a}
+.badge-dot{background:var(--accent);color:#fff;font-size:11px;font-weight:700;border-radius:9px;min-width:18px;height:18px;display:grid;place-items:center;padding:0 5px;margin-right:6px}
+.reward-line{color:var(--green);font-size:13px;margin-bottom:8px}
+.card.tap.invite-card{display:flex;text-align:left}
+
 </style>
 </head>
 <body>
@@ -966,9 +988,9 @@ async function q(promise){
   return res ? res.data : null;
 }
 
-const PG_COLS = "id,display_name,city,state,pincode,bio,categories,years_exp,price_multiplier,rating,review_count,jobs_done,is_online,is_verified,portfolio,created_at,approval_status,review_note";
+const PG_COLS = "id,display_name,city,state,pincode,bio,categories,years_exp,price_multiplier,rating,review_count,jobs_done,is_online,is_verified,portfolio,created_at,approval_status,review_note,featured_until";
 const REQ_COLS = "id,customer_id,customer_name,category,urgency,duration_hrs,city,state,pincode,budget,deliverables,notes,status,start_at,expires_at,created_at";
-const BK_COLS = "id,request_id,offer_id,customer_id,photographer_id,customer_name,photographer_name,category,start_at,duration_hrs,city,pincode,address,price,status,created_at,updated_at,commission_pct,commission_amount,photographer_amount,payment_status,paid_at,payout_status,payout_at,cancelled_from,cancelled_by,advance_amount,balance_amount,balance_status,balance_paid_at";
+const BK_COLS = "id,request_id,offer_id,customer_id,photographer_id,customer_name,photographer_name,category,start_at,duration_hrs,city,pincode,address,price,status,created_at,updated_at,commission_pct,commission_amount,photographer_amount,payment_status,paid_at,payout_status,payout_at,cancelled_from,cancelled_by,advance_amount,balance_amount,balance_status,balance_paid_at,discount_amount";
 
 const api = {
   async uid(){ const { data } = await sb.auth.getSession(); return data && data.session ? data.session.user.id : null; },
@@ -977,7 +999,7 @@ const api = {
     const { data: u } = await sb.auth.getUser();
     const user = u && u.user; if(!user) return null;
     S.email = user.email || "";
-    const p = await q(sb.from("profiles").select("id,name,role,email,phone,city,state,pincode").eq("id", user.id).maybeSingle());
+    const p = await q(sb.from("profiles").select("id,name,role,email,phone,city,state,pincode,public_id").eq("id", user.id).maybeSingle());
     S.me = p || { id: user.id, name: "", role: "customer", email: user.email };
     S.pg = null;
     if(S.me.role === "photographer"){
@@ -987,7 +1009,7 @@ const api = {
     return S.me;
   },
   async saveProfile(patch){
-    const row = await q(sb.from("profiles").update(patch).eq("id", S.me.id).select("id,name,role,email,phone,city,state,pincode").single());
+    const row = await q(sb.from("profiles").update(patch).eq("id", S.me.id).select("id,name,role,email,phone,city,state,pincode,public_id").single());
     S.me = row; return row;
   },
   async savePg(patch, isNew){
@@ -1128,6 +1150,8 @@ async function refresh(fromPoll){
   if(!S.me || refreshing || !sb) return;
   refreshing = true;
   const before = signature();
+  tryPendingRef();
+  if(S.rewards === undefined && !S.loading.rewards){ S.loading.rewards = true; loadRewards().then(() => { S.loading.rewards = false; softRender(); }); }
   try{
     if(isCustomer()){
       const reqs = await api.myRequests();
@@ -1845,7 +1869,7 @@ function pgCardHtml(pg, extra){
     <div class="row gap12">
       ${avatarHtml(pg.id, pg.display_name, "av-48", pg.is_online)}
       <div class="grow" style="text-align:left">
-        <div class="row gap6"><span class="bold truncate">${esc(pg.display_name)}</span>${pg.is_verified ? `<span class="verified" title="Verified by SnapPro">${icon("shield",13,"var(--blue)")}</span>` : ""}</div>
+        <div class="row gap6"><span class="bold truncate">${esc(pg.display_name)}</span>${pg.is_verified ? `<span class="verified" title="Verified by SnapPro">${icon("shield",13,"var(--blue)")}</span>` : ""}${isFeatured(pg) ? `<span class="feat">★ Featured</span>` : ""}</div>
         <div class="xs muted mt2">${ratingHtml(pg)}</div>
         <div class="xs muted2 mt2">${pgMeta(pg)}</div>
       </div>
@@ -1871,7 +1895,7 @@ function vCustHome(){
   const active = S.d.bookings.filter(activeBk);
   const open = S.d.requests.filter(reqIsOpen);
   const local = S.d.pgList.filter(p => p.city && city && p.city.toLowerCase() === city.toLowerCase())
-    .sort((a,b) => (b.is_online - a.is_online) || ((b.rating||0) - (a.rating||0)) || ((b.jobs_done||0) - (a.jobs_done||0)));
+    .sort((a,b) => (isFeatured(b) - isFeatured(a)) || (b.is_online - a.is_online) || ((b.rating||0) - (a.rating||0)) || ((b.jobs_done||0) - (a.jobs_done||0)));
   return `<div class="pad">
     <div class="between">
       <div><div class="h2">Hi, ${esc(firstName(S.me.name) || "there")}</div>
@@ -1938,9 +1962,10 @@ function exFilter(){
   if(f.cat !== "all") list = list.filter(p => (p.categories||[]).includes(f.cat));
   const qv = (f.q||"").trim().toLowerCase();
   if(qv) list = list.filter(p => (p.display_name||"").toLowerCase().includes(qv) || (p.bio||"").toLowerCase().includes(qv) || (p.city||"").toLowerCase().includes(qv));
-  list.sort(f.sort === "jobs" ? (a,b) => (b.jobs_done||0) - (a.jobs_done||0)
+  const cmp = (f.sort === "jobs" ? (a,b) => (b.jobs_done||0) - (a.jobs_done||0)
           : f.sort === "new" ? (a,b) => toMs(b.created_at) - toMs(a.created_at)
           : (a,b) => ((b.rating||0) - (a.rating||0)) || ((b.review_count||0) - (a.review_count||0)) || ((b.jobs_done||0)-(a.jobs_done||0)));
+  list.sort((a,b) => (isFeatured(b) - isFeatured(a)) || cmp(a,b));
   return list;
 }
 function exResultsHtml(){
@@ -1984,7 +2009,7 @@ function vPgProfile(p){
   <div class="cover">${photos[0] ? `<img src="${esc(photos[0])}" alt="">` : ""}</div>
   <div class="pad" style="margin-top:-40px">
     ${avatarHtml(pg.id, pg.display_name, "av-72 ring", pg.is_online)}
-    <div class="row gap6 mt12"><span class="h2">${esc(pg.display_name)}</span>${pg.is_verified ? icon("shield",16,"var(--blue)") : ""}</div>
+    <div class="row gap6 mt12"><span class="h2">${esc(pg.display_name)}</span>${pg.is_verified ? icon("shield",16,"var(--blue)") : ""}${isFeatured(pg) ? `<span class="feat">★ Featured</span>` : ""}</div>
     <div class="sm mt4">${ratingHtml(pg)} ${pg.is_online ? `<span class="chip green">Available</span>` : `<span class="chip">Away</span>`}</div>
     <div class="xs muted2 mt4">${pgMeta(pg)}</div>
     ${pg.bio ? `<p class="sm muted mt12 prose">${esc(pg.bio)}</p>` : ""}
@@ -2220,7 +2245,7 @@ function vConfirm(p){
       <input id="bkPhone" class="input" type="tel" inputmode="numeric" autocomplete="tel-national" maxlength="14" placeholder="10-digit mobile number" value="${esc(S.confirmPhone)}" oninput="S.confirmPhone=this.value;setHtml('formErr','')">
       <div class="xs muted2 mt6">For payment receipts and for ${esc(firstName(pg.display_name))} to reach you on the day.</div></div>
     ${payBox(o.price, firstName(pg.display_name))}
-    <button class="btn primary block mt16" ${S.loading.book||S.loading.pay?"disabled":""} onclick="confirmBooking('${o.id}')">${S.loading.book ? "Booking…" : S.loading.pay ? "Opening secure payment…" : "Pay advance " + inr(advFor(o.price))}</button>
+    <button class="btn primary block mt16" ${S.loading.book||S.loading.pay?"disabled":""} onclick="confirmBooking('${o.id}')">${S.loading.book ? "Booking…" : S.loading.pay ? "Opening secure payment…" : "Pay advance " + inr(advFor(o.price) - ((bestDiscountFor(o.price) || {}).amount > 0 ? bestDiscountFor(o.price).amount : 0))}</button>
     <div id="formErr">${errHtml(S.formErr)}</div>
   </div>`;
 }
@@ -2293,6 +2318,7 @@ function vBooking(p){
       <div class="kv"><span>When</span><span>${whenStr(b.start_at)}</span></div>
       <div class="kv"><span>Duration</span><span>${b.duration_hrs} hr${b.duration_hrs>1?'s':''}</span></div>
       <div class="kv"><span>Price</span><span class="bold">${inr(b.price)}</span></div>
+      ${b.discount_amount ? `<div class="kv"><span>Reward applied</span><span class="green bold">− ${inr(b.discount_amount)}</span></div>` : ""}
       ${b.balance_status && b.balance_status !== "not_required" ? `<div class="kv"><span>Advance (${S.advance}%)</span><span>${inr(advOf(b))}</span></div>
       <div class="kv"><span>Balance</span><span>${inr(balOf(b))}</span></div>` : ""}
       <div class="kv"><span>Payment</span><span class="right">${paymentLine(b, pg)}</span></div>
@@ -2438,7 +2464,11 @@ function vProfile(){
   return `<div class="pad">
     <div class="row gap16 mt8">${avatarHtml(me.id, me.name, "av-72")}
       <div class="grow"><div class="h2">${esc(me.name)}</div><div class="sm muted">${esc(S.email)}</div>
-        <div class="chips mt8"><span class="chip">${isPg() ? "Photographer" : "Customer"}</span></div></div></div>
+        <div class="chips mt8"><span class="chip">${isPg() ? "Photographer" : "Customer"}</span>${me.public_id ? `<button class="chip" title="Copy" onclick="navigator.clipboard&&navigator.clipboard.writeText('${esc(me.public_id)}');toast('SnapPro ID copied','${esc(me.public_id)}','check')">ID ${esc(me.public_id)}</button>` : ""}</div></div></div>
+    <div class="card mt16 list">
+      <button class="li" onclick="push('rewards')">${icon("star",18,"var(--accent)")}<div class="grow"><div class="sm bold">Offers &amp; rewards</div><div class="xs muted2">${S.rewards ? ((S.rewards.offers||[]).length ? (S.rewards.offers.length + " offer" + (S.rewards.offers.length === 1 ? "" : "s") + " to claim · ") : "") + ((S.rewards.benefits||[]).length) + " active reward" + ((S.rewards.benefits||[]).length === 1 ? "" : "s") : "Promo codes and rewards"}</div></div>${S.rewards && (S.rewards.offers||[]).length ? `<span class="badge-dot">${S.rewards.offers.length}</span>` : ""}${icon("chevron",16,"var(--muted-2)")}</button>
+      <button class="li" onclick="push('invite')">${icon("send",18,"var(--muted)")}<div class="grow"><div class="sm bold">Invite friends</div><div class="xs muted2">Share your SnapPro ID${S.rewards && S.rewards.referral && S.rewards.referral.enabled ? " — you both get rewarded" : ""}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
+    </div>
     ${isPg() ? pgProfileExtras() : ""}
     <div class="card mt16 list">
       <button class="li" onclick="push('editName')">${icon("user",18,"var(--muted)")}<div class="grow"><div class="sm bold">Name</div><div class="xs muted2">${esc(me.name)}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
@@ -2672,7 +2702,7 @@ function vQuote(p){
       <div class="chips">${[15,30,45,60,90].map(m => `<button class="chip lg ${S.quote.eta===m?'accent':''}" onclick="S.quote.eta=${m};render()">${m} min</button>`).join("")}</div></div>` : ""}
     <div class="field"><label for="qNote">Message to the customer <span class="muted2">(optional)</span></label>
       <textarea id="qNote" class="input" rows="3" maxlength="500" placeholder="e.g. I shoot on a full-frame camera and deliver 50+ edited photos within 48 hours." oninput="S.quote.note=this.value">${esc(S.quote.note)}</textarea></div>
-    <div class="note">${icon("wallet",18,"var(--green)")}<div>The customer pays ${S.advance}% online when they book and the rest online after the shoot. SnapPro keeps ${S.commission}% and transfers the rest to you once the shoot is done and fully paid.</div></div>
+    <div class="note">${icon("wallet",18,"var(--green)")}<div>The customer pays ${S.advance}% online when they book and the rest online after the shoot. SnapPro keeps ${myCommission()}% and transfers the rest to you once the shoot is done and fully paid.</div></div>
     <button class="btn primary block mt16" ${S.loading.quote?"disabled":""} onclick="sendQuote('${r.id}')">${S.loading.quote ? "Sending…" : icon("send",16,"var(--on-text)") + " Send quote"}</button>
     <div id="formErr">${errHtml(S.formErr)}</div>
   </div>`;
@@ -2681,7 +2711,8 @@ function quoteHint(budget){
   const p = S.quote ? S.quote.price : 0;
   if(!p || p < 100) return `<div class="field-err">Enter a price of at least ₹100.</div>`;
   if(p > 1000000) return `<div class="field-err">That's above the ₹10,00,000 limit.</div>`;
-  const yours = `<div class="xs mt4">You'll receive <b>${inr(p - Math.round(p * S.commission / 100))}</b> after SnapPro's ${S.commission}% commission.</div>`;
+  const cm = myCommission();
+  const yours = `<div class="xs mt4">You'll receive <b>${inr(p - Math.round(p * cm / 100))}</b> after SnapPro's ${cm}% commission${cm < S.commission ? ' <span class="green bold">(your reduced rate)</span>' : ""}.</div>`;
   if(budget && p > budget) return `<div class="xs muted">${inr(p - budget)} above their budget — add a note explaining what's included.</div>` + yours;
   return `<div class="xs green">Within their budget.</div>` + yours;
 }
@@ -3086,11 +3117,14 @@ function vPayResult(p){
 
 /* customers pay through the confirm screen; this is the summary block */
 function payBox(price, pgFirst){
-  const adv = advFor(price), bal = price - adv;
+  const adv = advFor(price), bal = price - adv, disc = bestDiscountFor(price);
+  const now = disc && disc.amount > 0 ? adv - disc.amount : adv;
   return `<div class="card soft mt16">
-    <div class="between"><span class="bold">Advance to pay now (${S.advance}%)</span><span class="h2">${inr(adv)}</span></div>
+    ${disc && disc.amount > 0 ? `<div class="between reward-line"><span>${icon("star",14,"var(--green)")} ${esc(disc.title || "Your reward")}</span><span class="bold">− ${inr(disc.amount)}</span></div>` : ""}
+    <div class="between"><span class="bold">Advance to pay now (${S.advance}%)</span><span class="h2">${disc && disc.amount > 0 ? `<s class="muted2 sm">${inr(adv)}</s> ` : ""}${inr(now)}</span></div>
     ${bal > 0 ? `<div class="kv mt8"><span>Balance, paid in the app after the shoot</span><span>${inr(bal)}</span></div>` : ""}
-    <div class="kv"><span>Total</span><span class="bold">${inr(price)}</span></div>
+    <div class="kv"><span>Total</span><span class="bold">${disc && disc.amount > 0 ? inr(price - disc.amount) + " after your reward" : inr(price)}</span></div>
+    <button class="linkish xs accent bold mt6" onclick="push('rewards')">Have a promo code?</button>
     <div class="xs muted mt6">Pay securely with ${PAY_METHODS_LINE}. Payments are processed by Razorpay — SnapPro never sees your card details or UPI PIN.</div>
   </div>
   <div class="note mt12">${icon("shield",18,"var(--green)")}<div>Your booking is confirmed as soon as the advance goes through. Cancel before ${esc(pgFirst)} sets off and you get the advance back in full.</div></div>
@@ -3201,9 +3235,9 @@ function vStorage(){
         ${st.plan === "free" ? `<div class="xs green bold mt8">Your current plan</div>` : ""}</div>
       ${plans.map(p => { const cur = st.plan === p.id; return `<div class="card plan ${cur ? "on" : ""}">
         <div class="between"><div><div class="bold">${esc(p.name)}</div><div class="xs muted2">${esc(p.gb)} GB for photos and videos · 1 year</div></div>
-          <div class="stack right"><div class="h3">${inr(p.price)}</div><div class="xs muted2">per year</div></div></div>
+          <div class="stack right"><div class="h3">${storageDiscountPct() ? `<s class="muted2 sm">${inr(p.price)}</s> ` + inr(Math.max(1, Math.round(p.price * (100 - storageDiscountPct()) / 100))) : inr(p.price)}</div><div class="xs muted2">${storageDiscountPct() ? storageDiscountPct() + "% off with your reward" : "per year"}</div></div></div>
         ${cur ? `<div class="xs green bold mt8">Your current plan · renews on ${dayStr(st.expires_at)}</div>` : ""}
-        <button class="btn ${cur ? "" : "primary"} block mt12" ${S.loading.buy ? "disabled" : ""} onclick="buyStorage('${esc(p.id)}')">${S.loading.buy === p.id ? "Opening secure payment…" : cur ? "Renew for another year — " + inr(p.price) : "Get " + esc(p.name) + " — " + inr(p.price)}</button>
+        <button class="btn ${cur ? "" : "primary"} block mt12" ${S.loading.buy ? "disabled" : ""} onclick="buyStorage('${esc(p.id)}')">${S.loading.buy === p.id ? "Opening secure payment…" : cur ? "Renew for another year — " + inr(Math.max(1, Math.round(p.price * (100 - storageDiscountPct()) / 100))) : "Get " + esc(p.name) + " — " + inr(Math.max(1, Math.round(p.price * (100 - storageDiscountPct()) / 100)))}</button>
       </div>`; }).join("")}
     </div>
     <div class="xs muted2 mt12">Paid securely with Razorpay (UPI, cards, net banking). Renewing the same plan adds a year to your current end date. If a plan ends, anything over the free ${fmtBytes(st.free)} is hidden from your profile and deleted after 30 days unless you renew.</div>
@@ -3228,6 +3262,141 @@ async function buyStorage(plan){
       } });
     rzp.open();
   }catch(e){ S.loading.buy = null; toast("Payment didn't start", e.message, "x"); render(); }
+}
+
+/* ============================================================
+   OFFERS, REWARDS & REFERRALS
+   Rewards live on the account and are applied by the server
+   (booking discounts, commission, storage, featured badge).
+   ============================================================ */
+/* remember a friend's code from a shared link (snappro.in/app.html?ref=SPC100245) */
+(function(){ try{ const r = new URLSearchParams(location.search).get("ref");
+  if(r && /^SP[CP]\d{4,}$/i.test(r)){ S.prefs.pendingRef = r.toUpperCase(); savePrefs(); } }catch(e){} })();
+
+async function loadRewards(){
+  try{ const { data, error } = await sb.rpc("my_rewards"); if(!error && data) S.rewards = data; }catch(e){}
+  return S.rewards;
+}
+/* once the account is set up, attach the friend's code they arrived with */
+async function tryPendingRef(){
+  const code = S.prefs.pendingRef;
+  if(!code || !S.me || !S.me.city || S.refTried) return;
+  S.refTried = true;
+  try{ const { data, error } = await sb.rpc("apply_referral", { p_code: code });
+       if(!error) toast("Referral added", "Thanks for joining through " + ((data && data.by) || "a friend"), "check"); }catch(e){}
+  delete S.prefs.pendingRef; savePrefs(); loadRewards();
+}
+async function claimOffer(offerId){
+  try{
+    const { data, error } = await sb.rpc("claim_offer", { p_code: null, p_offer: offerId });
+    if(error) throw new Error(error.message);
+    toast("Added to your account", (data && data.title) || "", "check");
+    await Promise.all([loadRewards(), isPg() ? loadStorage() : null, isPg() ? api.loadMe() : null]); render();
+  }catch(e){ toast("Couldn't add offer", e.message, "x"); }
+}
+async function redeemCode(inputId){
+  const box = el(inputId), code = box ? box.value.trim() : "";
+  if(code.length < 3){ toast("Enter a code", "", "x"); return; }
+  try{
+    const { data, error } = await sb.rpc("claim_offer", { p_code: code, p_offer: null });
+    if(error) throw new Error(error.message);
+    toast(data && data.result === "referred" ? "Referral added" : "Code applied", data && data.title ? data.title : (data && data.by ? "Thanks for joining through " + data.by : ""), "check");
+    if(box) box.value = "";
+    await Promise.all([loadRewards(), isPg() ? loadStorage() : null, isPg() ? api.loadMe() : null]); render();
+  }catch(e){ toast("Code not applied", e.message, "x"); }
+}
+
+/* plain-English description of a reward */
+function rewardLine(b){
+  const a = Number(b.amount);
+  switch(b.kind){
+    case "booking_flat": return inr(a) + " off a booking" + (b.min_booking ? " of " + inr(b.min_booking) + "+" : "");
+    case "booking_pct": return a + "% off a booking" + (b.max_amount ? " (up to " + inr(b.max_amount) + ")" : "");
+    case "storage_bonus": return a + " GB extra portfolio storage";
+    case "commission_cut": return a + "% commission" + (b.uses || b.uses_left ? " on your next " + (b.uses_left || b.uses) + " booking" + ((b.uses_left || b.uses) == 1 ? "" : "s") : "");
+    case "featured": return "Featured photographer badge — shown first in search";
+    case "storage_discount": return a + "% off a storage plan";
+  }
+  return b.title || "";
+}
+const REWARD_IC = { booking_flat: "wallet", booking_pct: "wallet", storage_bonus: "image", commission_cut: "briefcase", featured: "star", storage_discount: "image" };
+function rewardCard(b, active){
+  const left = b.expires_at ? "Use by " + dayStr(b.expires_at) : b.days ? "Lasts " + b.days + " days once added" : b.ends_at ? "Until " + dayStr(b.ends_at) : "";
+  return `<div class="reward ${active ? "on" : ""} k-${esc(b.kind)}">
+    <div class="r-ic">${icon(REWARD_IC[b.kind] || "star", 20, "#fff")}</div>
+    <div class="grow"><div class="row gap6"><span class="bold sm">${esc(b.title || rewardLine(b))}</span>${b.badge ? `<span class="r-badge">${esc(b.badge)}</span>` : ""}</div>
+      <div class="xs r-sub">${esc(rewardLine(b))}${b.uses_left != null && active && !/next/.test(rewardLine(b)) ? " · " + b.uses_left + " use" + (b.uses_left == 1 ? "" : "s") + " left" : ""}</div>
+      ${b.description ? `<div class="xs r-sub mt2">${esc(b.description)}</div>` : ""}
+      ${left ? `<div class="xs r-when mt4">${left}</div>` : ""}</div>
+    ${active ? `<span class="chip green">Active</span>` : `<button class="btn sm primary" onclick="claimOffer('${b.id}')">Claim</button>`}
+  </div>`;
+}
+function vRewards(){
+  if(!S.rewards){ loadRewards().then(softRender); return `${topbar("Offers & rewards")}<div class="pad"><div class="skeleton"></div></div>`; }
+  const R = S.rewards, act = R.benefits || [], avail = R.offers || [];
+  return `${topbar("Offers & rewards", "Your SnapPro ID: " + (R.public_id || ""))}
+  <div class="pad">
+    <div class="card"><div class="sm bold">Have a promo code?</div>
+      <div class="row gap8 mt8"><input id="promoIn" class="input" autocapitalize="characters" placeholder="e.g. DIWALI10" onkeydown="if(event.key==='Enter')redeemCode('promoIn')">
+        <button class="btn primary" onclick="redeemCode('promoIn')">Apply</button></div>
+      <div class="xs muted2 mt6">A friend's SnapPro ID works here too.</div></div>
+    ${avail.length ? `<div class="sec-title mt20">Offers for you</div><div class="stack gap10">${avail.map(o => rewardCard(o, false)).join("")}</div>` : ""}
+    <div class="sec-title mt20">Your rewards</div>
+    ${act.length ? `<div class="stack gap10">${act.map(b => rewardCard(b, true)).join("")}</div>
+      <div class="xs muted2 mt8">${isPg() ? "Rewards apply automatically — lower commission on your next bookings, extra storage straight away." : "Rewards apply automatically when you pay the advance for your next booking."}</div>`
+      : `<div class="card soft sm muted">No rewards yet. Claim an offer above, or invite friends to earn some.</div>`}
+    ${R.referral && R.referral.enabled ? `<button class="card tap invite-card mt20" onclick="push('invite')">${icon("send",20,"var(--accent)")}<div class="grow"><div class="bold sm">Invite friends, you both get rewarded</div>
+      <div class="xs muted">${R.referral.my_reward ? "You get: " + esc(R.referral.my_reward.title || rewardLine(R.referral.my_reward)) : "Share your SnapPro ID"}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>` : ""}
+  </div>`;
+}
+function inviteLink(){ return "https://snappro.in/app.html?ref=" + encodeURIComponent((S.rewards && S.rewards.public_id) || "") + "#signup"; }
+async function shareInvite(){
+  const R = S.rewards || {}, url = inviteLink();
+  const text = "I use SnapPro to book photographers. Join with my code " + (R.public_id || "") + ": " + url;
+  try{ if(navigator.share){ await navigator.share({ title: "SnapPro", text, url }); return; } }catch(e){ return; }
+  try{ await navigator.clipboard.writeText(text); toast("Invite copied", "Paste it in WhatsApp or anywhere", "check"); }
+  catch(e){ prompt("Copy this invite:", text); }
+}
+function vInvite(){
+  if(!S.rewards){ loadRewards().then(softRender); return `${topbar("Invite friends")}<div class="pad"><div class="skeleton"></div></div>`; }
+  const R = S.rewards, F = R.referral || {}, when = F.when === "signup" ? "as soon as they sign up" : "after their first completed shoot";
+  const friend = isPg() ? F.friend_reward_photographer : F.friend_reward_customer;
+  return `${topbar("Invite friends")}
+  <div class="pad">
+    <div class="invite-hero">
+      <div class="xs">Your SnapPro ID</div>
+      <div class="invite-code">${esc(R.public_id || "")}</div>
+      <button class="btn primary block mt12" onclick="shareInvite()">${icon("send",16,"var(--on-text)")} Share invite link</button>
+    </div>
+    ${F.enabled ? `<div class="card mt16">
+      ${F.my_reward ? `<div class="kv"><span>You get</span><span class="bold right">${esc(F.my_reward.title || rewardLine(F.my_reward))}</span></div>` : ""}
+      ${friend ? `<div class="kv"><span>Your friend gets</span><span class="bold right">${esc(friend.title || rewardLine(friend))}</span></div>` : ""}
+      <div class="xs muted2 mt8">Rewards are added ${when}. Friends can join as customers or photographers.</div></div>`
+      : `<div class="card soft mt16 sm muted">Referral rewards aren't running right now, but you can still share SnapPro with friends.</div>`}
+    <div class="grid2 mt16">
+      <div class="stat"><div class="s-v">${num0(F.invited)}</div><div class="s-l">Friends joined</div></div>
+      <div class="stat"><div class="s-v">${num0(F.rewarded)}</div><div class="s-l">Rewards earned</div></div>
+    </div>
+    ${F.can_add_code ? `<div class="card mt16"><div class="sm bold">Did a friend invite you?</div>
+      <div class="row gap8 mt8"><input id="refIn" class="input" autocapitalize="characters" placeholder="Their SnapPro ID, e.g. SPC100123"><button class="btn" onclick="redeemCode('refIn')">Add</button></div></div>` : ""}
+  </div>`;
+}
+const isFeatured = pg => pg && pg.featured_until && toMs(pg.featured_until) > Date.now() ? 1 : 0;
+const myCommission = () => S.rewards && S.rewards.commission_pct != null ? Number(S.rewards.commission_pct) : S.commission;
+const num0 = n => Number(n || 0).toLocaleString("en-IN");
+
+/* best booking reward a customer has (preview only — the server applies the real one) */
+function bestDiscountFor(price){
+  const list = ((S.rewards && S.rewards.benefits) || []).filter(b => (b.kind === "booking_flat" || b.kind === "booking_pct") && (!b.min_booking || price >= b.min_booking));
+  let best = null, amt = 0;
+  list.forEach(b => { const d = b.kind === "booking_flat" ? Math.round(b.amount) : Math.min(Math.round(price * b.amount / 100), b.max_amount ? Math.round(b.max_amount) : 1e9);
+                      if(d > amt){ amt = d; best = b; } });
+  const cap = Math.round(price * S.commission / 100);
+  return best ? { amount: Math.min(amt, cap, advFor(price) - 1), title: best.title } : null;
+}
+function storageDiscountPct(){
+  const b = ((S.rewards && S.rewards.benefits) || []).filter(x => x.kind === "storage_discount").sort((a, b) => b.amount - a.amount)[0];
+  return b ? Number(b.amount) : 0;
 }
 
 /* ============================================================
@@ -3258,6 +3427,7 @@ function customerActions(){
         title: b.status === "enroute" ? `${pgn} is on the way` : `${pgn} has arrived`, sub: esc(catById(b.category).name) + " · " + whenStr(b.start_at),
         btn: "Message", go: `push('chat',{id:'${b.id}'})`, open: `push('booking',{id:'${b.id}'})` });
   });
+  rewardTodo(out);
   S.d.requests.forEach(r => {
     const n = (S.d.offers[r.id] || []).length;
     const booked = S.d.bookings.some(b => b.request_id === r.id && b.status !== "cancelled");
@@ -3288,6 +3458,7 @@ function photographerActions(){
     out.push({ key: "ch" + o.id, ic: "check", tone: "green",
       title: "A customer picked your quote", sub: `${inr(o.price)} — it becomes a shoot as soon as they pay the advance`,
       btn: "View", go: `S.prefs.reqMode='quoted';savePrefs();go('requests')` }));
+  rewardTodo(out);
   if(S.payout === undefined && !S.loading.payout){
     S.loading.payout = true;
     api.payoutDetails().then(r => { S.payout = r || {}; S.loading.payout = false; softRender(); }).catch(() => { S.loading.payout = false; });
@@ -3315,6 +3486,11 @@ function photographerActions(){
   return out;
 }
 
+function rewardTodo(out){
+  const n = S.rewards ? (S.rewards.offers || []).length : 0;
+  if(n) out.push({ key: "offers", ic: "star", tone: "green", title: n === 1 ? "You have an offer to claim" : "You have " + n + " offers to claim",
+    sub: esc((S.rewards.offers[0] || {}).title || ""), btn: "View", go: `push('rewards')` });
+}
 function actionsHtml(list){
   if(!list.length) return "";
   const shown = S.showAllActions ? list : list.slice(0, 3);
@@ -3445,7 +3621,7 @@ const STACK_VIEWS = { pg: vPgProfile, photo: vPhoto, newRequest: vNewRequest, re
                       booking: vBooking, rate: vRate, chat: vChat, editName: vEditName, editLoc: vEditLoc,
                       quote: vQuote, job: vJob, portfolio: vPortfolio, editPg: vEditPg,
                       payResult: vPayResult, editPayout: vEditPayout,
-                      pgEarnings: vPgEarnings, pgDone: vPgDone, pgReviews: vPgReviews, how: vHow, storage: vStorage };
+                      pgEarnings: vPgEarnings, pgDone: vPgDone, pgReviews: vPgReviews, how: vHow, storage: vStorage, rewards: vRewards, invite: vInvite };
 const CUST_TABS = [ ["home","Home","home",vCustHome], ["explore","Explore","search",vExplore], ["activity","Shoots","calendar",vActivity], ["profile","Profile","user",vProfile] ];
 const PG_TABS   = [ ["home","Home","home",vPgHome], ["requests","Requests","bolt",vPgRequests], ["jobs","Shoots","calendar",vJobs], ["profile","Profile","user",vProfile] ];
 const tabsFor = () => isPg() ? PG_TABS : CUST_TABS;

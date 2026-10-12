@@ -139,6 +139,23 @@ button.stat:active{transform:scale(.985)}
 td{white-space:nowrap}
 .miniclick tr{cursor:pointer}.miniclick tr:hover td{background:var(--surface-2)}
 @media (max-width:640px){.fstep{grid-template-columns:1fr 80px}.fbar{grid-column:1/-1;grid-row:2}}
+/* offers tab */
+.presets{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}
+.preset{text-align:left;padding:16px;border-radius:14px;color:#fff;position:relative;min-height:128px;background:linear-gradient(135deg,#ff5a1f,#ff8a3d);box-shadow:0 10px 26px -14px rgba(255,90,31,.7);transition:transform .15s}
+.preset:hover{transform:translateY(-2px)}
+.preset.k-booking_pct{background:linear-gradient(135deg,#e2426b,#ff7a59)}
+.preset.k-storage_bonus{background:linear-gradient(135deg,#2f6fe0,#5aa2ff)}
+.preset.k-commission_cut{background:linear-gradient(135deg,#169b5a,#3fd18a)}
+.preset.k-featured{background:linear-gradient(135deg,#b07d11,#f2c14e)}
+.preset.k-storage_discount{background:linear-gradient(135deg,#7a4fd6,#a67cff)}
+.preset .pb{font-size:10px;font-weight:900;letter-spacing:1px;background:rgba(255,255,255,.95);color:#111;border-radius:6px;padding:3px 7px}
+.preset .pt{font-weight:800;font-size:15px;margin-top:10px;line-height:1.3}
+.preset .pd{font-size:11.5px;opacity:.9;margin-top:6px;line-height:1.4}
+.ofg{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
+.ofl{display:block;font-size:11.5px;font-weight:700;color:var(--muted)}
+.ofl .input{margin-top:5px;padding:9px 11px}
+.offer-row.dim{opacity:.6}
+.refbox{border:1px solid var(--border-soft);border-radius:12px;padding:14px}
 </style>
 </head>
 <body>
@@ -277,6 +294,7 @@ function openTab(k){
   if(k === 'users') loadUsers(!!S.users);
   if(k === 'pros'){ loadData(); if(S.me.role !== 'manager') loadUsers(true); }
   if(k === 'payments') loadPayments(!!S.pay);
+  if(k === 'offers'){ loadOffers(); if(!S.pay) loadPayments(true); }
 }
 function go(view, patch){ Object.assign(S, patch||{}, { view, err:"" }); render(); }
 
@@ -403,7 +421,7 @@ async function loadData(){
   const [bk, rq, pg, st, inv, ready, est] = await Promise.all([
     sb.from('bookings').select('id,request_id,customer_name,photographer_name,category,start_at,city,pincode,price,status,payment_status,balance_status,created_at').order('created_at',{ascending:false}).limit(1000),
     sb.from('requests').select('id,customer_name,category,city,pincode,budget,status,start_at,created_at').order('created_at',{ascending:false}).limit(1000),
-    sb.from('photographers').select('id,display_name,city,state,pincode,bio,categories,years_exp,rating,review_count,jobs_done,is_online,is_verified,portfolio,created_at,approval_status,review_note,submitted_at,approved_at').order('created_at',{ascending:false}).limit(500),
+    sb.from('photographers').select('id,display_name,city,state,pincode,bio,categories,years_exp,rating,review_count,jobs_done,is_online,is_verified,portfolio,created_at,approval_status,review_note,submitted_at,approved_at,commission_pct,featured_until').order('created_at',{ascending:false}).limit(500),
     sb.from('staff').select('id,email,name,role,status,created_at').order('created_at'),
     isSuper ? sb.from('staff_invites').select('id,email,role,created_at,accepted_at,email_request,email_sent_at').order('created_at',{ascending:false}) : null,
     isSuper ? sb.rpc('invite_email_ready') : null,
@@ -729,7 +747,7 @@ function userMatches(u){
   if(f === "staff" && !u.is_staff) return false;
   const q = (S.usersQ || "").trim().toLowerCase();
   if(!q) return true;
-  return [u.name, u.email, u.phone, u.city, u.state, u.pincode].some(v => v && String(v).toLowerCase().includes(q));
+  return [u.public_id, u.name, u.email, u.phone, u.city, u.state, u.pincode].some(v => v && String(v).toLowerCase().includes(q));
 }
 const ago = d => { if(!d) return "Never"; const s = (Date.now() - Date.parse(d)) / 1000;
   if(s < 3600) return Math.max(1, Math.floor(s/60)) + " min ago"; if(s < 86400) return Math.floor(s/3600) + " h ago";
@@ -738,7 +756,7 @@ function userRowsHtml(){
   const list = (S.users || []).filter(userMatches);
   if(!list.length) return `<tr><td colspan="7"><div class="empty">No one matches.</div></td></tr>`;
   return list.map(u => `<tr>
-    <td><div style="font-weight:600">${esc(u.name || "—")}</div><div class="xs muted2">${esc(u.email || "")}</div>${u.phone ? `<div class="xs muted2">${esc(u.phone)}</div>` : ""}</td>
+    <td><div style="font-weight:600">${esc(u.name || "—")}</div>${u.public_id ? `<div class="xs" style="color:var(--accent);font-weight:700">${esc(u.public_id)}</div>` : ""}<div class="xs muted2">${esc(u.email || "")}</div>${u.phone ? `<div class="xs muted2">${esc(u.phone)}</div>` : ""}</td>
     <td>${u.is_staff ? `<span class="chip super">Staff</span>` : u.role === "photographer" ? `<span class="chip manager">Photographer</span>${u.approval_status === "pending" ? `<div class="mt8"><span class="chip amber">In review</span></div>` : u.approval_status === "rejected" ? `<div class="mt8"><span class="chip red">Not approved</span></div>` : ""}` : `<span class="chip admin">Customer</span>`}</td>
     <td>${u.city ? esc(u.city) + `<div class="xs muted2">${esc([u.state, u.pincode].filter(Boolean).join(" · "))}</div>` : `<span class="chip amber">Not finished</span>`}</td>
     <td class="muted">${fmt(u.joined)}</td>
@@ -752,7 +770,7 @@ function userRowsHtml(){
 function usersSearch(v){ S.usersQ = v; setHtml("usersBody", userRowsHtml()); setHtml("usersCount", usersCountText()); }
 function usersCountText(){ const n = (S.users || []).filter(userMatches).length; return n + (n === 1 ? " person" : " people"); }
 function exportUsers(){
-  const cols = ["name","email","phone","role","city","state","pincode","joined","last_sign_in","confirmed","requests","bookings","jobs_done","rating","review_count","is_verified"];
+  const cols = ["public_id","name","email","phone","role","city","state","pincode","joined","last_sign_in","confirmed","requests","bookings","jobs_done","rating","review_count","is_verified"];
   const q = v => { v = v == null ? "" : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
   const rows = (S.users || []).filter(userMatches).map(u => cols.map(c => q(c === "role" && u.is_staff ? "staff" : u[c])).join(","));
   const blob = new Blob([cols.join(",") + "\n" + rows.join("\n")], { type: "text/csv" });
@@ -771,7 +789,7 @@ function vUsers(){
     </div>
     <div class="between mt16" style="flex-wrap:wrap;gap:10px">
       <div class="tabs" style="width:fit-content;flex-wrap:wrap">${USER_FILTERS.map(([k, l]) => `<button class="tab ${S.usersFilter===k?'on':''}" onclick="S.usersFilter='${k}';render()">${l}</button>`).join("")}</div>
-      <div class="row"><input id="usersQ" class="input" style="width:240px;padding:9px 12px" placeholder="Search name, email, city, phone" value="${esc(S.usersQ)}" oninput="usersSearch(this.value)">
+      <div class="row"><input id="usersQ" class="input" style="width:240px;padding:9px 12px" placeholder="Search ID, name, email, city, phone" value="${esc(S.usersQ)}" oninput="usersSearch(this.value)">
         <button class="btn sm" onclick="exportUsers()">Download CSV</button></div>
     </div>
     <div class="xs muted2 mt8" id="usersCount">${usersCountText()}</div>
@@ -1130,6 +1148,7 @@ function vConsole(){
   if(canUsers){ const rd = S.pay ? S.pay.payments.filter(p => ["refund_due","refund_failed"].includes(p.refund_status)).length : 0;
                 tabs.push(["payments", rd ? `Payments <span class="count">${rd}</span>` : "Payments"]); }
   tabs.push(["requests","Requests"],["pros", waiting ? `Photographers <span class="count">${waiting}</span>` : "Photographers"]);
+  if(canUsers) tabs.push(["offers","Offers"]);
   if(isSuper) tabs.push(["team","Team"]);
 
   return `<div class="wrap">
@@ -1159,6 +1178,7 @@ function vConsole(){
       S.tab==='payments' ? vPayments() :
       S.tab==='requests' ? vRequests() :
       S.tab==='pros'     ? vPros()     :
+      S.tab==='offers'   ? vOffers()   :
       S.tab==='team'     ? vTeam()     : ''
     }</div>
   </div>`;
@@ -1226,6 +1246,7 @@ function vRequests(){
 
 const CAT_NAMES = {portrait:"Portrait",event:"Party / Event",wedding:"Wedding",birthday:"Birthday",product:"Product",food:"Food",maternity:"Maternity",corporate:"Corporate",realestate:"Real estate",fashion:"Fashion",pet:"Pet",street:"Candid / Street"};
 const emailOf = id => { const u = (S.users || []).find(x => x.id === id); return u ? u.email : ""; };
+const idOf = id => { const u = (S.users || []).find(x => x.id === id); return u && u.public_id ? u.public_id : ""; };
 async function decide(id, status){
   const p = S.photographers.find(x => x.id === id); if(!p) return;
   S.err = ""; S.note = "";
@@ -1288,15 +1309,17 @@ function vPros(){
 
   <div class="sec mt24">Approved (${live.length})</div>
   ${!live.length ? `<div class="card"><div class="empty">No approved photographers yet.</div></div>` : `<div class="card tblwrap"><table>
-    <thead><tr><th>Name</th><th>City</th><th>Rating</th><th>Shoots</th><th>Photos</th><th>Status</th><th>Verified</th></tr></thead>
+    <thead><tr><th>Name</th><th>City</th><th>Rating</th><th>Shoots</th><th>Photos</th><th>Status</th><th>Verified</th>${canDecide ? "<th>Commission</th>" : ""}</tr></thead>
     <tbody>${live.map(p=>`<tr>
-      <td style="font-weight:600">${esc(p.display_name||'—')}<div class="xs muted2">${emailOf(p.id) ? esc(emailOf(p.id)) + " · " : ""}approved ${fmt(p.approved_at || p.created_at)}</div></td>
+      <td style="font-weight:600">${esc(p.display_name||'—')}${p.featured_until && Date.parse(p.featured_until) > Date.now() ? ' <span class="chip amber">★ Featured</span>' : ""}<div class="xs" style="color:var(--accent)">${esc(idOf(p.id))}</div><div class="xs muted2">${emailOf(p.id) ? esc(emailOf(p.id)) + " · " : ""}approved ${fmt(p.approved_at || p.created_at)}</div></td>
       <td class="muted">${esc(p.city||'—')}${p.state?', '+esc(p.state):''}</td>
       <td>${p.review_count ? Number(p.rating).toFixed(1)+'★ <span class="muted2">('+p.review_count+')</span>' : '<span class="muted2">No reviews</span>'}</td>
       <td>${p.jobs_done||0}</td><td>${(p.portfolio||[]).length}</td>
       <td><span class="chip ${p.is_online?'green':''}">${p.is_online?'Available':'Away'}</span></td>
       <td>${canDecide ? `<label class="sw"><input type="checkbox" ${p.is_verified?'checked':''} onchange="setVerified('${p.id}',this.checked)">${p.is_verified?'Verified':'No'}</label>`
                       : (p.is_verified?'<span class="chip admin">Verified</span>':'<span class="muted2">No</span>')}</td>
+      ${canDecide ? `<td>${p.commission_pct != null ? `<b>${Number(p.commission_pct)}%</b> <span class="xs muted2">own rate</span>` : `<span class="muted2">${S.pay ? S.pay.commission : 20}% standard</span>`}
+        <button class="linkbtn" style="margin-left:6px" onclick="setPgCommission('${p.id}')">Change</button></td>` : ""}
     </tr>`).join('')}</tbody></table></div>
   ${canDecide ? `<div class="xs muted2 mt12">Approved means they can work on SnapPro. "Verified" is an extra badge for photographers whose identity and work you've checked in person.</div>` : ''}`}`;
 }
@@ -1368,6 +1391,204 @@ function vTeam(){
   </div>`:''}`;
 }
 
+/* =========================== offers =========================== */
+const OFFER_KINDS = {
+  customer: [
+    ["booking_flat", "₹ off a booking", "Rupees off the customer's advance"],
+    ["booking_pct", "% off a booking", "Percent off, with an optional maximum"]
+  ],
+  photographer: [
+    ["storage_bonus", "Free extra storage", "GB added to their portfolio space"],
+    ["commission_cut", "Lower commission", "Their commission on the next few bookings"],
+    ["featured", "Featured badge", "Shown first in search with a ★ Featured badge"],
+    ["storage_discount", "% off storage plans", "Discount on Plus / Pro"]
+  ]
+};
+const OFFER_PRESETS = {
+  customer: [
+    { badge: "WELCOME", title: "₹200 off your first booking", kind: "booking_flat", amount: 200, uses: 1, days: 60, new_users_only: true, description: "New to SnapPro? Your first shoot costs less." },
+    { badge: "FESTIVE", title: "10% off — up to ₹1,000", kind: "booking_pct", amount: 10, max_amount: 1000, uses: 1, days: 30, code: "FESTIVE10", is_public: false, description: "Festive season special on any shoot." },
+    { badge: "WEEKEND", title: "Weekend special — ₹300 off", kind: "booking_flat", amount: 300, uses: 1, days: 3, min_booking: 3000, description: "Book a weekend shoot of ₹3,000 or more." },
+    { badge: "COMEBACK", title: "We miss you — 15% off", kind: "booking_pct", amount: 15, max_amount: 1500, uses: 1, days: 21, description: "Come back for another shoot." },
+    { badge: "BIG SHOOT", title: "₹1,000 off shoots over ₹15,000", kind: "booking_flat", amount: 1000, uses: 1, days: 45, min_booking: 15000, description: "Weddings, events and long sessions." }
+  ],
+  photographer: [
+    { badge: "FREE", title: "1 GB free storage for a year", kind: "storage_bonus", amount: 1, days: 365, description: "Show more of your work — on us." },
+    { badge: "0%", title: "0% commission on your next 3 bookings", kind: "commission_cut", amount: 0, uses: 3, days: 90, description: "Keep everything you earn." },
+    { badge: "SPOTLIGHT", title: "Featured for 7 days", kind: "featured", amount: 0, days: 7, description: "Appear first in search with a ★ Featured badge." },
+    { badge: "HALF PRICE", title: "50% off any storage plan", kind: "storage_discount", amount: 50, uses: 1, days: 30, code: "HALFSTORE", is_public: false, description: "Upgrade to Plus or Pro for half the price." },
+    { badge: "STARTER", title: "10% commission on your first 5 bookings", kind: "commission_cut", amount: 10, uses: 5, days: 120, new_users_only: true, description: "A welcome deal for new photographers." }
+  ]
+};
+async function loadOffers(){
+  const { data, error } = await sb.rpc("admin_offers_overview");
+  if(error){ S.offErr = /admin_offers_overview|function/i.test(error.message) ? "Offers need the latest database update — run supabase/snappro.sql in the Supabase SQL Editor." : error.message; }
+  else { S.off = data; S.offErr = ""; }
+  render();
+}
+function offerSummary(o){
+  const a = Number(o.amount);
+  return ({ booking_flat: inr(a) + " off", booking_pct: a + "% off" + (o.max_amount ? " (max " + inr(o.max_amount) + ")" : ""),
+            storage_bonus: a + " GB extra storage", commission_cut: a + "% commission", featured: "Featured badge",
+            storage_discount: a + "% off storage plans" })[o.kind] || o.kind;
+}
+function offerForm(){
+  const f = S.offForm; if(!f) return "";
+  const kinds = OFFER_KINDS[f.audience];
+  const k = f.kind, amtLabel = { booking_flat: "₹ off", booking_pct: "% off", storage_bonus: "GB", commission_cut: "Commission %", storage_discount: "% off" }[k];
+  const inp = (id, label, val, type, extra) => `<label class="ofl">${label}<input id="of_${id}" class="input" ${type ? `type="${type}"` : ""} value="${esc(val == null ? "" : val)}" ${extra || ""}></label>`;
+  return `<div class="card mt16 offer-form">
+    <div class="between"><div class="h2">${f.id ? "Edit offer" : "New offer for " + (f.audience === "customer" ? "customers" : "photographers")}</div><button class="btn sm" onclick="S.offForm=null;render()">Close</button></div>
+    <div class="ofg mt12">
+      <label class="ofl">What it gives<select id="of_kind" class="input" onchange="offSync();S.offForm.kind=this.value;render()" ${f.id ? "disabled" : ""}>${kinds.map(([v, l]) => `<option value="${v}" ${k === v ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+      ${inp("title", "Title (what people see)", f.title)}
+      ${inp("badge", "Badge (optional, e.g. HOT)", f.badge)}
+      ${k !== "featured" ? inp("amount", amtLabel, f.amount, "number", 'min="0" step="any"') : ""}
+      ${k === "booking_pct" ? inp("max_amount", "Maximum ₹ (optional)", f.max_amount, "number") : ""}
+      ${f.audience === "customer" ? inp("min_booking", "Minimum booking ₹ (optional)", f.min_booking, "number") : ""}
+      ${["booking_flat","booking_pct","commission_cut","storage_discount"].includes(k) ? inp("uses", "Number of uses (blank = unlimited)", f.uses, "number", 'min="1"') : ""}
+      ${inp("days", "Lasts (days after it's added)", f.days, "number", 'min="1"')}
+      ${inp("code", "Promo code (optional)", f.code, "", 'style="text-transform:uppercase"')}
+      ${inp("max_claims", "Max people (blank = no limit)", f.max_claims, "number", 'min="1"')}
+      ${inp("starts_at", "Starts", (f.starts_at || "").slice(0, 10), "date")}
+      ${inp("ends_at", "Ends", (f.ends_at || "").slice(0, 10), "date")}
+    </div>
+    <label class="ofl mt8">Description (optional)<input id="of_description" class="input" value="${esc(f.description || "")}"></label>
+    <div class="row mt12" style="flex-wrap:wrap;gap:16px">
+      <label class="sw"><input id="of_is_public" type="checkbox" ${f.is_public !== false ? "checked" : ""}> Show in the app's Offers list</label>
+      <label class="sw"><input id="of_new_users_only" type="checkbox" ${f.new_users_only ? "checked" : ""}> New members only</label>
+      <label class="sw"><input id="of_active" type="checkbox" ${f.active !== false ? "checked" : ""}> Active</label>
+    </div>
+    <div class="xs muted2 mt8">${f.audience === "customer" ? "Booking discounts come off the advance and are paid from SnapPro's commission on that booking (never more than the commission)." : "Rewards apply automatically: storage right away, commission on their next bookings, featured badge for the days you set."}
+      With a promo code, people type it in the app; without one, it appears under Offers to claim (if shown) — or you can give it directly below.</div>
+    <div class="row mt12"><button class="btn primary" onclick="saveOffer()">${f.id ? "Save changes" : "Create offer"}</button></div>
+  </div>`;
+}
+function offSync(){
+  const f = S.offForm; if(!f) return;
+  ["title","badge","amount","max_amount","min_booking","uses","days","code","max_claims","starts_at","ends_at","description"].forEach(k => { const n = el("of_" + k); if(n) f[k] = n.value; });
+  ["is_public","new_users_only","active"].forEach(k => { const n = el("of_" + k); if(n) f[k] = n.checked; });
+}
+async function saveOffer(){
+  offSync();
+  const f = S.offForm, toTs = d => d ? new Date(d + "T00:00:00+05:30").toISOString() : "";
+  const body = { ...f, starts_at: toTs((f.starts_at || "").slice(0, 10)), ends_at: f.ends_at ? new Date((f.ends_at).slice(0, 10) + "T23:59:59+05:30").toISOString() : "" };
+  S.err = ""; S.note = "";
+  const { error } = await sb.rpc("admin_offer_save", { p: body });
+  if(error){ S.err = error.message; render(); return; }
+  S.note = f.id ? "Offer saved." : "Offer created."; S.offForm = null; await loadOffers();
+}
+function newOffer(aud, preset){ S.offForm = Object.assign({ audience: aud, kind: OFFER_KINDS[aud][0][0], is_public: true, active: true }, preset || {}); render(); setTimeout(() => { const n = document.querySelector(".offer-form"); if(n && n.scrollIntoView) n.scrollIntoView({ behavior: "smooth" }); }, 0); }
+function editOffer(id){ const o = S.off.offers.find(x => x.id === id); if(o){ S.offForm = { ...o }; render(); } }
+async function toggleOffer(id){
+  const o = S.off.offers.find(x => x.id === id); if(!o) return;
+  const { error } = await sb.rpc("admin_offer_save", { p: { ...o, active: !o.active } });
+  if(error){ S.err = error.message; render(); return; }
+  S.note = o.active ? "Offer paused." : "Offer is live again."; await loadOffers();
+}
+async function grantOffer(id, all){
+  const o = S.off.offers.find(x => x.id === id); if(!o) return;
+  let pid = null;
+  if(!all){ pid = prompt("Give “" + o.title + "” to which " + o.audience + "? Enter their SnapPro ID (e.g. " + (o.audience === "customer" ? "SPC100123" : "SPP100123") + "):"); if(!pid) return; }
+  else if(!confirm("Give “" + o.title + "” to every " + o.audience + "? People who already have it are skipped.")) return;
+  S.err = ""; S.note = "";
+  const { data, error } = await sb.rpc("admin_offer_grant", { p_offer: id, p_public_id: pid });
+  if(error){ S.err = error.message; render(); return; }
+  S.note = "Given to " + data + " " + o.audience + (data === 1 ? "" : "s") + "."; await loadOffers();
+}
+/* referral program editor (super admin) */
+function refRewardInputs(aud, who, r){
+  r = r || {};
+  const id = aud + "_" + who;
+  return `<div class="ofg">
+    <label class="ofl">Reward<select id="rf_${id}_kind" class="input"><option value="none" ${!r.kind || r.kind === "none" ? "selected" : ""}>No reward</option>${OFFER_KINDS[aud].map(([v, l]) => `<option value="${v}" ${r.kind === v ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+    <label class="ofl">Title<input id="rf_${id}_title" class="input" value="${esc(r.title || "")}"></label>
+    <label class="ofl">Amount (₹ / % / GB)<input id="rf_${id}_amount" class="input" type="number" step="any" value="${esc(r.amount == null ? "" : r.amount)}"></label>
+    <label class="ofl">Uses<input id="rf_${id}_uses" class="input" type="number" value="${esc(r.uses == null ? "" : r.uses)}"></label>
+    <label class="ofl">Lasts (days)<input id="rf_${id}_days" class="input" type="number" value="${esc(r.days == null ? "" : r.days)}"></label>
+  </div>`;
+}
+function refRead(aud, who){
+  const g = k => { const n = el("rf_" + aud + "_" + who + "_" + k); return n ? n.value : ""; };
+  if(g("kind") === "none") return null;
+  return { kind: g("kind"), title: g("title"), amount: g("amount") === "" ? 0 : Number(g("amount")), uses: g("uses") === "" ? null : Number(g("uses")), days: g("days") === "" ? null : Number(g("days")) };
+}
+async function saveReferral(){
+  const P = { enabled: el("rf_enabled").checked };
+  ["customer","photographer"].forEach(a => { P[a] = { when: el("rf_" + a + "_when").value, new_user_reward: refRead(a, "new"), referrer_reward: refRead(a, "referrer") }; });
+  S.err = ""; S.note = "";
+  const { error } = await sb.rpc("admin_referral_save", { p: P });
+  if(error){ S.err = error.message; render(); return; }
+  S.note = "Referral program saved."; await loadOffers();
+}
+function vOffers(){
+  if(S.offErr) return `<div class="warn">${esc(S.offErr)}</div>`;
+  if(!S.off){ loadOffers(); return `<div class="empty">Loading…</div>`; }
+  const O = S.off, aud = S.offAud || "customer", list = (O.offers || []).filter(o => o.audience === aud);
+  const live = (O.offers || []).filter(o => o.active && (!o.ends_at || Date.parse(o.ends_at) > Date.now()));
+  const isSuper = S.me.role === "super_admin", P = O.referral_program || {};
+  const totalActive = (O.benefit_totals || []).filter(x => x.status === "active").reduce((t, x) => t + Number(x.n), 0);
+  return `<div class="grid">
+      <div class="stat hl"><div class="v">${num(live.length)}</div><div class="l">Live offers</div></div>
+      <div class="stat"><div class="v">${num((O.offers || []).reduce((t, o) => t + Number(o.claims || 0), 0))}</div><div class="l">Times claimed / given</div></div>
+      <div class="stat"><div class="v">${num(totalActive)}</div><div class="l">Rewards waiting to be used</div></div>
+      <div class="stat"><div class="v">${inr(O.discounts_given)}</div><div class="l">Booking discounts given</div></div>
+      <div class="stat"><div class="v">${num(O.referrals && O.referrals.total)}</div><div class="l">Referred sign-ups (${num(O.referrals && O.referrals.rewarded)} rewarded)</div></div>
+    </div>
+    <div class="between mt24" style="flex-wrap:wrap;gap:10px">
+      <div class="tabs" style="width:fit-content">${[["customer","For customers"],["photographer","For photographers"]].map(([k, l]) => `<button class="tab ${aud===k?'on':''}" onclick="S.offAud='${k}';S.offForm=null;render()">${l}</button>`).join("")}</div>
+      <button class="btn sm primary" onclick="newOffer('${aud}')">+ New offer</button></div>
+    <div class="sec mt16">Quick start — tap one to customise</div>
+    <div class="presets">${OFFER_PRESETS[aud].map((p, i) => `<button class="preset k-${p.kind}" onclick="newOffer('${aud}', OFFER_PRESETS['${aud}'][${i}])">
+      <span class="pb">${esc(p.badge)}</span><div class="pt">${esc(p.title)}</div><div class="pd">${esc(p.description)}</div></button>`).join("")}</div>
+    ${offerForm()}
+    <div class="sec mt24">${aud === "customer" ? "Customer" : "Photographer"} offers (${list.length})</div>
+    ${list.length ? `<div class="stackc">${list.map(o => { const ended = o.ends_at && Date.parse(o.ends_at) < Date.now();
+      return `<div class="card offer-row ${o.active && !ended ? "" : "dim"}">
+        <div class="between" style="flex-wrap:wrap;gap:10px;align-items:flex-start">
+          <div><div class="row">${o.badge ? `<span class="chip super">${esc(o.badge)}</span>` : ""}<span class="h2">${esc(o.title)}</span></div>
+            <div class="xs muted mt8">${esc(offerSummary(o))}${o.uses ? " · " + o.uses + " use" + (o.uses === 1 ? "" : "s") : ""}${o.days ? " · lasts " + o.days + " days" : ""}${o.min_booking ? " · min " + inr(o.min_booking) : ""}${o.new_users_only ? " · new members only" : ""}</div>
+            <div class="xs muted2 mt8">${o.code ? `Code <b style="color:var(--text)">${esc(o.code)}</b> · ` : (o.is_public ? "Shown in app to claim · " : "Hidden — give it directly · ")}${o.starts_at ? "from " + fmt(o.starts_at) + " " : ""}${o.ends_at ? "until " + fmt(o.ends_at) : "no end date"}</div></div>
+          <div style="text-align:right"><span class="chip ${o.active && !ended ? "green" : ""}">${ended ? "Ended" : o.active ? "Live" : "Paused"}</span>
+            <div class="xs muted2 mt8">${num(o.claims)} claimed${o.max_claims ? " of " + num(o.max_claims) : ""} · ${num(o.used)} used up</div></div>
+        </div>
+        <div class="row mt12" style="flex-wrap:wrap">
+          <button class="btn sm" onclick="editOffer('${o.id}')">Edit</button>
+          <button class="btn sm" onclick="toggleOffer('${o.id}')">${o.active ? "Pause" : "Make live"}</button>
+          <button class="btn sm" onclick="grantOffer('${o.id}', false)">Give to one ${o.audience}…</button>
+          <button class="btn sm" onclick="grantOffer('${o.id}', true)">Give to all ${o.audience}s</button>
+        </div></div>`; }).join("")}</div>`
+      : `<div class="card"><div class="xs muted2">No ${aud} offers yet — start with one of the cards above.</div></div>`}
+
+    <div class="sec mt24">Referral program</div>
+    <div class="card">
+      ${isSuper ? `<label class="sw"><input id="rf_enabled" type="checkbox" ${P.enabled ? "checked" : ""}> Referral rewards are ON</label>
+      <div class="xs muted2 mt8">Everyone's SnapPro ID is their referral code. Friends add it when they join (or open the invite link). You decide what each side gets.</div>
+      ${["customer","photographer"].map(a => { const C = P[a] || {}; return `<div class="refbox mt16"><div class="h2">${a === "customer" ? "Customers" : "Photographers"}</div>
+        <label class="ofl mt8" style="max-width:340px">When a new ${a} joins with a code, reward both after<select id="rf_${a}_when" class="input"><option value="first_booking" ${C.when !== "signup" ? "selected" : ""}>their first completed shoot</option><option value="signup" ${C.when === "signup" ? "selected" : ""}>they sign up</option></select></label>
+        <div class="xs muted mt12" style="font-weight:700">A new ${a} who joined with a code gets</div>${refRewardInputs(a, "new", C.new_user_reward)}
+        <div class="xs muted mt12" style="font-weight:700">A ${a} who invited someone gets</div>${refRewardInputs(a, "referrer", C.referrer_reward)}</div>`; }).join("")}
+      <div class="row mt16"><button class="btn primary" onclick="saveReferral()">Save referral program</button></div>
+      <div class="xs muted2 mt8">Customers can only get booking discounts; photographers get storage, commission, featured or storage-discount rewards.</div>`
+      : `<div class="sm">${P.enabled ? "Referral rewards are ON." : "Referral rewards are OFF."} Only a super admin can change them.</div>`}
+      ${(O.referrals && O.referrals.top || []).length ? `<div class="sec mt16">Top referrers</div><div class="tblwrap"><table><thead><tr><th>SnapPro ID</th><th>Name</th><th>Type</th><th>Invited</th><th>Rewarded</th></tr></thead><tbody>
+        ${O.referrals.top.map(t => `<tr><td>${esc(t.public_id)}</td><td>${esc(t.name || "—")}</td><td>${esc(t.role)}</td><td>${num(t.invited)}</td><td>${num(t.rewarded)}</td></tr>`).join("")}</tbody></table></div>` : ""}
+    </div>
+    ${(O.commission_overrides || []).length ? `<div class="sec mt24">Photographers with their own commission</div><div class="card tblwrap"><table><thead><tr><th>Photographer</th><th>Commission</th><th></th></tr></thead><tbody>
+      ${O.commission_overrides.map(c => `<tr><td>${esc(c.name)}</td><td>${Number(c.pct)}%</td><td style="text-align:right"><button class="btn sm" onclick="setPgCommission('${c.id}')">Change</button></td></tr>`).join("")}</tbody></table></div>` : ""}`;
+}
+async function setPgCommission(id){
+  const p = (S.photographers || []).find(x => x.id === id) || {};
+  const cur = p.commission_pct != null ? Number(p.commission_pct) : "";
+  const v = prompt("Commission for " + (p.display_name || "this photographer") + " in %.\nLeave empty to use the standard rate for everyone.", cur);
+  if(v === null) return;
+  S.err = ""; S.note = "";
+  const { error } = await sb.rpc("admin_set_pg_commission", { p_pg: id, p_pct: v.trim() === "" ? null : Number(v) });
+  if(error){ S.err = error.message; render(); return; }
+  S.note = v.trim() === "" ? "Back to the standard commission." : "Commission set to " + Number(v) + "% for new bookings.";
+  await loadData(); if(S.off) loadOffers();
+}
+
 /* ===================== drill-downs & reports ===================== */
 /* Every number opens the rows behind it. */
 const BOOKING_KINDS = new Set(['bookings','completed','cancelled','booking_value','upcoming_shoots','balances_due','payouts_due','payouts_paid','status']);
@@ -1399,7 +1620,7 @@ const COL_LABEL = { shoot_time:"Shoot time", booked_at:"Booked", posted:"Posted"
   first_at:"First visit", last_at:"Last visit", photographer_share:"Photographer share", first_quote_min:"First quote (min)", minutes_after_post:"Min after post",
   booked_price:"Booked price", lowest_quote:"Lowest quote", pay_to_upi:"Pay to (UPI)", razorpay_id:"Razorpay ID", razorpay_refund:"Razorpay refund",
   signed_in_as:"Signed in as", email_confirmed:"Email confirmed", paid_online:"Paid online", quotes_sent:"Quotes sent", shoot_types:"Shoot types",
-  approved_at:"Approved", last_message:"Last message", from_customer:"From customer", from_photographer:"From photographer", cancelled_by:"Cancelled by",
+  approved_at:"Approved", last_message:"Last message", snappro_id:"SnapPro ID", commission_pct:"Commission %", from_customer:"From customer", from_photographer:"From photographer", cancelled_by:"Cancelled by",
   cancelled_from:"Cancelled at stage", started_by:"Started by", first_day:"First day", last_day:"Last day", order_id:"Our ref" };
 const MONEY_COLS = /^(price|amount|commission|photographer_share|budget|booked_price|lowest_quote|earnings|paid_online|refunded|spent|value|earned)$/;
 const HIDE_COLS = new Set(["id","booking_id"]);
@@ -1420,7 +1641,7 @@ function drillRows(){
   return (d.rows || []).filter(r => !q || Object.values(r).some(v => v != null && String(v).toLowerCase().includes(q)));
 }
 /* the database returns rows as JSON objects (no column order), so order them here */
-const COL_ORDER = ["shoot_time","booked_at","posted","sent","at","requested","done","day","first_at","last_at","first_day","last_day","joined",
+const COL_ORDER = ["snappro_id","shoot_time","booked_at","posted","sent","at","requested","done","day","first_at","last_at","first_day","last_day","joined",
   "name","customer","photographer","signed_in_as","role","email","phone","category","shoot_types","city","state","pincode","hours","stage",
   "status","approval","outcome","available","verified","budget","price","lowest_quote","booked_price","amount","commission","photographer_share",
   "refunded","method","payment","balance","payout","pay_to_upi","payout_ref","paid_out_at","refund","quotes","quotes_sent","first_quote_min",
@@ -1484,14 +1705,14 @@ function vBooking(){
         ${b.status === "cancelled" ? kv("Cancelled", esc((b.cancelled_by || "—") + " · at " + (b.cancelled_from || "—"))) : ""}
         ${kv("Messages", esc(d.messages) + (d.last_message ? " · last " + when(d.last_message) : ""))}</div>
       <div class="card"><div class="sec">People</div>
-        ${kv("Customer", esc(d.customer && d.customer.name))}${kv("Customer email", esc(d.customer && d.customer.email))}${kv("Customer phone", esc(d.customer && d.customer.phone))}
-        ${kv("Photographer", esc(d.photographer && d.photographer.name))}${kv("Photographer email", esc(d.photographer && d.photographer.email))}
+        ${kv("Customer", esc(d.customer && d.customer.name) + (d.customer && d.customer.id ? ` <span class="xs" style="color:var(--accent)">${esc(d.customer.id)}</span>` : ""))}${kv("Customer email", esc(d.customer && d.customer.email))}${kv("Customer phone", esc(d.customer && d.customer.phone))}
+        ${kv("Photographer", esc(d.photographer && d.photographer.name) + (d.photographer && d.photographer.id ? ` <span class="xs" style="color:var(--accent)">${esc(d.photographer.id)}</span>` : ""))}${kv("Photographer email", esc(d.photographer && d.photographer.email))}
         ${kv("Payout UPI", esc(d.photographer && d.photographer.upi))}
         ${kv("Review", d.review ? esc(d.review.stars + "★ " + (d.review.comment || "")) : "Not rated yet")}</div>
     </div>
     ${money ? `<div class="card mt12"><div class="sec">Money</div>
       <div class="grid">${[["Price", inr(b.price)], ["Advance", inr(b.advance_amount)], ["Balance", inr(b.balance_amount) + " · " + esc(b.balance_status || "—")],
-        ["Commission", inr(b.commission_amount)], ["Photographer share", inr(b.photographer_amount)], ["Payout", esc(b.payout_status) + (b.payout_ref ? " · " + esc(b.payout_ref) : "")]]
+        ["Commission", inr(b.commission_amount) + (b.commission_pct != null ? " (" + Number(b.commission_pct) + "%)" : "")], ["Reward discount", b.discount_amount ? "− " + inr(b.discount_amount) : "—"], ["Photographer share", inr(b.photographer_amount)], ["Payout", esc(b.payout_status) + (b.payout_ref ? " · " + esc(b.payout_ref) : "")]]
         .map(([l, v]) => `<div><div class="xs muted2">${l}</div><div class="sm" style="font-weight:700">${v}</div></div>`).join("")}</div>
       ${(d.payments || []).length ? `<div class="tblwrap mt12"><table><thead><tr><th>Part</th><th>Amount</th><th>Status</th><th>Method</th><th>When</th><th>Razorpay ID</th><th>Refund</th></tr></thead><tbody>
         ${d.payments.map(p => `<tr><td>${esc(p.stage)}</td><td>${inr(p.amount)}</td><td>${statusChip(p.status)}</td><td>${esc(methodName(p.method))}</td><td>${when(p.at)}</td><td class="xs">${esc(p.razorpay_id || "—")}</td><td>${esc(p.refund)}${Number(p.refunded) ? " · " + inr(p.refunded) : ""}</td></tr>`).join("")}

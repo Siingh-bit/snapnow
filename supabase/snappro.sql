@@ -343,7 +343,9 @@ begin
     if not can_verify then new.is_verified := false; end if;
     new.approval_status := 'pending'; new.approved_at := null; new.approved_by := null;
     new.review_note := null; new.submitted_at := now();
+    new.commission_pct := null; new.featured_until := null;
   else
+    new.commission_pct := old.commission_pct; new.featured_until := old.featured_until;
     new.rating := old.rating; new.review_count := old.review_count;
     new.jobs_done := old.jobs_done; new.earnings := old.earnings;
     if not can_verify then new.is_verified := old.is_verified; end if;
@@ -442,7 +444,8 @@ begin
   -- confirmed only once the payment is verified on the server
   new.status            := 'pending_payment';
   new.payment_status    := 'unpaid';
-  new.commission_pct    := public.commission_pct();
+  -- this photographer's commission (their own rate, or a reward that lowers it)
+  select c.pct, c.benefit_id into new.commission_pct, new.commission_benefit_id from public.commission_for(o.photographer_id) c;
   new.commission_amount := round(o.price * new.commission_pct / 100.0);
   new.photographer_amount := o.price - new.commission_amount;
   new.payout_amount     := new.photographer_amount;
@@ -453,6 +456,16 @@ begin
   new.balance_amount    := o.price - new.advance_amount;
   new.balance_status    := case when new.balance_amount > 0 then 'pending' else 'not_required' end;
   new.balance_paid_at   := null;
+  -- a customer reward (offer / referral) comes off the advance; SnapPro pays for it out of its commission
+  new.discount_amount := 0; new.discount_benefit_id := null;
+  select least(d.amount, new.advance_amount - 1, new.commission_amount), d.benefit_id
+    into new.discount_amount, new.discount_benefit_id from public.discount_for(r.customer_id, o.price, new.commission_amount) d;
+  new.discount_amount := greatest(coalesce(new.discount_amount, 0), 0);
+  if new.discount_amount > 0 then
+    new.advance_amount    := new.advance_amount - new.discount_amount;
+    new.commission_amount := new.commission_amount - new.discount_amount;
+    new.total_amount      := o.price - new.discount_amount;
+  else new.discount_benefit_id := null; end if;
   new.paid_at := null; new.payout_ref := null; new.payout_at := null; new.payout_by := null;
   new.cancelled_from := null; new.cancelled_by := null;
   new.created_at        := now();
@@ -468,6 +481,8 @@ returns trigger language plpgsql security definer set search_path = public
 as $$
 begin
   update public.requests set status = 'matched' where id = new.request_id;
+  if new.commission_benefit_id is not null then perform public._use_benefit(new.commission_benefit_id, 1); end if;
+  if new.discount_benefit_id is not null then perform public._use_benefit(new.discount_benefit_id, 1); end if;
   return new;
 end $$;
 drop trigger if exists booking_after_insert on public.bookings;
@@ -542,10 +557,16 @@ begin
        set jobs_done = jobs_done + 1, earnings = earnings + coalesce(new.photographer_amount, new.price, 0)
      where id = new.photographer_id;
     perform set_config('snappro.system', '', true);
+    -- referral rewards that wait for the first completed shoot
+    perform public.referral_check(new.customer_id);
+    perform public.referral_check(new.photographer_id);
   end if;
   if new.status = 'cancelled' and old.status is distinct from 'cancelled' then
     -- let the customer pick another quote
     update public.requests set status = 'awaiting' where id = new.request_id and status = 'matched';
+    -- rewards used on this booking can be used again
+    if new.commission_benefit_id is not null then perform public._use_benefit(new.commission_benefit_id, -1); end if;
+    if new.discount_benefit_id is not null then perform public._use_benefit(new.discount_benefit_id, -1); end if;
     if new.payment_status = 'refund_due' then
       update public.payments set refund_status = 'refund_due', updated_at = now()
        where booking_id = new.id and status = 'paid' and refund_status = 'none';
@@ -1656,6 +1677,7 @@ create table if not exists public.storage_orders (
   created_at         timestamptz not null default now(),
   updated_at         timestamptz not null default now()
 );
+alter table public.storage_orders add column if not exists discount_benefit_id uuid;
 create index if not exists idx_storage_orders_pg on public.storage_orders(photographer_id);
 
 alter table public.portfolio_media      enable row level security;
@@ -1675,10 +1697,13 @@ create or replace function public.storage_free_bytes()
 returns bigint language sql stable security definer set search_path = public
 as $$ select (coalesce((select (value->>'free_mb')::numeric from public.platform_settings where key = 'storage_plans'), 250) * 1024 * 1024)::bigint $$;
 create or replace function public.storage_quota(p_pg uuid)
-returns bigint language sql stable security definer set search_path = public
-as $$ select greatest(public.storage_free_bytes(),
+returns bigint language plpgsql stable security definer set search_path = public
+as $$ begin return (select greatest(public.storage_free_bytes(),
           coalesce((select s.quota_bytes from public.photographer_storage s
-                     where s.id = p_pg and s.plan <> 'free' and s.expires_at > now()), 0)) $$;
+                     where s.id = p_pg and s.plan <> 'free' and s.expires_at > now()), 0))
+        + coalesce((select sum(b.amount * 1073741824)::bigint from public.user_benefits b
+                     where b.user_id = p_pg and b.kind = 'storage_bonus' and b.status = 'active'
+                       and (b.expires_at is null or b.expires_at > now())), 0)); end $$;
 create or replace function public.storage_used(p_pg uuid)
 returns bigint language sql stable security definer set search_path = public
 as $$ select coalesce(sum(bytes), 0)::bigint from public.portfolio_media
@@ -1802,9 +1827,11 @@ as $$
 declare me uuid := auth.uid(); s record;
 begin
   if me is null or not exists (select 1 from public.photographers where id = me) then return null; end if;
-  -- a plan that ended since the last daily check: apply it now
-  if exists (select 1 from public.photographer_storage where id = me and plan <> 'free' and expires_at <= now()) then
-    update public.photographer_storage set plan = 'free', quota_bytes = null, updated_at = now() where id = me;
+  -- a plan or a free-storage reward that ended since the last daily check: apply it now
+  if exists (select 1 from public.photographer_storage where id = me and plan <> 'free' and expires_at <= now())
+     or exists (select 1 from public.user_benefits where user_id = me and kind = 'storage_bonus' and status = 'active' and expires_at <= now()) then
+    update public.photographer_storage set plan = 'free', quota_bytes = null, updated_at = now() where id = me and plan <> 'free' and expires_at <= now();
+    update public.user_benefits set status = 'expired' where user_id = me and kind = 'storage_bonus' and status = 'active' and expires_at <= now();
     perform public.media_sync(me);
   end if;
   select * into s from public.photographer_storage where id = me;
@@ -1825,18 +1852,25 @@ end $$;
 create or replace function public.storage_begin(p_user uuid, p_plan text)
 returns jsonb language plpgsql security definer set search_path = public
 as $$
-declare pl jsonb; u record; pr record; open_o jsonb;
+declare pl jsonb; u record; pr record; open_o jsonb; disc record; amt numeric;
 begin
   if not exists (select 1 from public.photographers where id = p_user) then raise exception 'Only photographers can buy storage'; end if;
   select x into pl from public.platform_settings s, jsonb_array_elements(s.value->'plans') x where s.key = 'storage_plans' and x->>'id' = p_plan;
   if pl is null then raise exception 'Unknown plan'; end if;
   select email into u from auth.users where id = p_user;
   select name, phone into pr from public.profiles where id = p_user;
+  -- best "storage_discount" reward (percent off)
+  select id, amount into disc from public.user_benefits
+   where user_id = p_user and kind = 'storage_discount' and status = 'active'
+     and (expires_at is null or expires_at > now()) and (uses_left is null or uses_left > 0)
+   order by amount desc limit 1;
+  amt := greatest(1, round((pl->>'price')::numeric * (100 - coalesce(disc.amount, 0)) / 100.0));
   select coalesce(jsonb_agg(jsonb_build_object('order_id', order_id, 'gateway_order_id', gateway_order_id, 'environment', environment)
                             order by created_at desc), '[]') into open_o
-    from public.storage_orders where photographer_id = p_user and plan = p_plan and amount = (pl->>'price')::numeric
+    from public.storage_orders where photographer_id = p_user and plan = p_plan and amount = amt
      and status in ('created','active','failed') and created_at > now() - interval '1 day';
-  return jsonb_build_object('plan', p_plan, 'name', pl->>'name', 'amount', (pl->>'price')::numeric,
+  return jsonb_build_object('plan', p_plan, 'name', pl->>'name', 'amount', amt,
+    'list_price', (pl->>'price')::numeric, 'discount_pct', disc.amount, 'discount_benefit_id', disc.id,
     'quota_bytes', ((pl->>'gb')::numeric * 1024 * 1024 * 1024)::bigint, 'gb', pl->'gb',
     'customer_email', u.email, 'customer_name', pr.name, 'customer_phone', pr.phone, 'open_orders', open_o);
 end $$;
@@ -1846,8 +1880,8 @@ as $$
 declare b jsonb := public.storage_begin(p_user, p_plan); oid uuid;
 begin
   if p_order_id !~ '^[A-Za-z0-9_-]{3,40}$' then raise exception 'Bad order id'; end if;
-  insert into public.storage_orders (order_id, photographer_id, plan, plan_name, quota_bytes, amount, environment)
-  values (p_order_id, p_user, p_plan, b->>'name', (b->>'quota_bytes')::bigint, (b->>'amount')::numeric, p_env)
+  insert into public.storage_orders (order_id, photographer_id, plan, plan_name, quota_bytes, amount, environment, discount_benefit_id)
+  values (p_order_id, p_user, p_plan, b->>'name', (b->>'quota_bytes')::bigint, (b->>'amount')::numeric, p_env, nullif(b->>'discount_benefit_id','')::uuid)
   returning id into oid;
   return oid;
 end $$;
@@ -1895,6 +1929,7 @@ begin
                                  reminded_at = null, updated_at = now();
   update public.storage_orders set status = 'paid', gateway_payment_id = p_payment_ref, payment_group = p_group,
          paid_at = now(), period_start = start_at, period_end = ends, updated_at = now() where id = o.id;
+  if o.discount_benefit_id is not null then perform public._use_benefit(o.discount_benefit_id, 1); end if;
   perform public.media_sync(o.photographer_id);
   return jsonb_build_object('result','paid','status','paid','plan',o.plan,'period_end',ends);
 end $$;
@@ -1908,6 +1943,10 @@ begin
   for r in select * from public.photographer_storage where plan <> 'free' and expires_at <= now() loop
     update public.photographer_storage set plan = 'free', quota_bytes = null, updated_at = now() where id = r.id;
     perform public.media_sync(r.id); n := n + 1;
+  end loop;
+  -- rewards that ran out (free storage, featured, discounts)
+  for r in update public.user_benefits set status = 'expired' where status = 'active' and expires_at <= now() returning user_id, kind loop
+    if r.kind = 'storage_bonus' then perform public.media_sync(r.user_id); end if;
   end loop;
   for r in select s.id, u.email, g.display_name, s.expires_at from public.photographer_storage s
              join auth.users u on u.id = s.id join public.photographers g on g.id = s.id
@@ -1989,6 +2028,449 @@ revoke all on function public.my_storage() from public, anon;
 grant execute on function public.my_storage() to authenticated;
 revoke all on function public.admin_set_storage_plans(jsonb) from public, anon;
 grant execute on function public.admin_set_storage_plans(jsonb) to authenticated;
+
+-- =====================================================================
+-- 7e. MEMBER IDS, PER-PHOTOGRAPHER COMMISSION, OFFERS & REFERRALS
+--     Every account gets a SnapPro ID (SPC… customers, SPP… photographers)
+--     that also works as their referral code. Admins can give one
+--     photographer a different commission, create offers for customers
+--     and photographers, and set referral rewards. Rewards become
+--     "benefits" on the person's account and are applied by the server
+--     (booking discounts, lower commission, extra storage, featured badge,
+--     storage discounts) — never by the browser.
+-- =====================================================================
+
+-- ---------- SnapPro IDs ----------
+create sequence if not exists public.member_no_seq start 100001;
+grant usage on sequence public.member_no_seq to authenticated, service_role;
+alter table public.profiles
+  add column if not exists member_no            bigint,
+  add column if not exists public_id            text,
+  add column if not exists referred_by          uuid,
+  add column if not exists referral_at          timestamptz,
+  add column if not exists referral_rewarded_at timestamptz;
+create unique index if not exists uniq_profiles_member_no on public.profiles(member_no);
+create unique index if not exists uniq_profiles_public_id on public.profiles(public_id);
+
+create or replace function public.profile_ids()
+returns trigger language plpgsql
+as $$
+begin
+  if not public.snappro_system() then
+    if tg_op = 'UPDATE' then
+      new.member_no := old.member_no; new.referred_by := old.referred_by;
+      new.referral_at := old.referral_at; new.referral_rewarded_at := old.referral_rewarded_at;
+    else
+      new.member_no := null; new.referred_by := null; new.referral_at := null; new.referral_rewarded_at := null;
+    end if;
+  end if;
+  if new.member_no is null then new.member_no := nextval('public.member_no_seq'); end if;
+  new.public_id := case when new.role = 'photographer' then 'SPP' else 'SPC' end || new.member_no;
+  return new;
+end $$;
+drop trigger if exists profile_ids on public.profiles;
+create trigger profile_ids before insert or update on public.profiles
+  for each row execute function public.profile_ids();
+-- give existing accounts an ID, oldest first
+do $$ declare r record;
+begin
+  perform set_config('snappro.system', 'on', true);
+  for r in select id from public.profiles where member_no is null order by created_at, id loop
+    update public.profiles set member_no = nextval('public.member_no_seq') where id = r.id;
+  end loop;
+  update public.profiles set role = role where public_id is null;
+  perform set_config('snappro.system', '', true);
+end $$;
+
+-- ---------- per-photographer commission + featured badge ----------
+alter table public.photographers
+  add column if not exists commission_pct numeric(5,2),
+  add column if not exists featured_until timestamptz;
+alter table public.bookings
+  add column if not exists commission_benefit_id uuid,
+  add column if not exists discount_benefit_id   uuid,
+  add column if not exists discount_amount       integer not null default 0;
+
+create or replace function public.admin_set_pg_commission(p_pg uuid, p_pct numeric)
+returns numeric language plpgsql security definer set search_path = public
+as $$
+begin
+  if coalesce(public.staff_role() in ('super_admin','admin'), false) is not true then raise exception 'Only admins can change commission'; end if;
+  if p_pct is not null and (p_pct < 0 or p_pct > 50) then raise exception 'Commission must be between 0 and 50%%'; end if;
+  perform set_config('snappro.system', 'on', true);
+  update public.photographers set commission_pct = round(p_pct, 2) where id = p_pg;
+  perform set_config('snappro.system', '', true);
+  if not found then raise exception 'Photographer not found'; end if;
+  return p_pct;
+end $$;
+
+-- ---------- offers and the benefits they create ----------
+create table if not exists public.promo_offers (
+  id             uuid primary key default gen_random_uuid(),
+  audience       text not null check (audience in ('customer','photographer')),
+  kind           text not null check (kind in ('booking_flat','booking_pct','storage_bonus','commission_cut','featured','storage_discount')),
+  title          text not null,
+  description    text,
+  badge          text,
+  amount         numeric(12,2) not null default 0,     -- ₹ off / % off / GB / commission %
+  max_amount     numeric(12,2),                        -- cap for % discounts
+  min_booking    numeric(12,2),                        -- customer offers: minimum booking price
+  uses           integer,                              -- how many bookings / purchases it applies to (null = unlimited)
+  days           integer,                              -- how long it lasts once someone has it
+  code           text unique,                          -- promo code (null = shown in the app to claim)
+  is_public      boolean not null default true,        -- show in the app's "Offers" list
+  new_users_only boolean not null default false,
+  starts_at      timestamptz,
+  ends_at        timestamptz,
+  max_claims     integer,
+  claims         integer not null default 0,
+  active         boolean not null default true,
+  created_by     uuid,
+  created_at     timestamptz not null default now(),
+  updated_at     timestamptz not null default now()
+);
+create table if not exists public.user_benefits (
+  id          uuid primary key default gen_random_uuid(),
+  user_id     uuid not null references public.profiles(id) on delete cascade,
+  offer_id    uuid references public.promo_offers(id) on delete set null,
+  source      text not null default 'offer' check (source in ('offer','code','admin','referral')),
+  kind        text not null,
+  title       text,
+  amount      numeric(12,2) not null default 0,
+  max_amount  numeric(12,2),
+  min_booking numeric(12,2),
+  uses_left   integer,
+  expires_at  timestamptz,
+  status      text not null default 'active' check (status in ('active','used','expired','revoked')),
+  created_at  timestamptz not null default now(),
+  used_at     timestamptz
+);
+create unique index if not exists uniq_benefit_per_offer on public.user_benefits(user_id, offer_id) where offer_id is not null;
+create index if not exists idx_benefits_user on public.user_benefits(user_id, status);
+alter table public.promo_offers        enable row level security;
+alter table public.user_benefits enable row level security;
+drop policy if exists promo_offers_staff_read on public.promo_offers;
+create policy promo_offers_staff_read on public.promo_offers for select to authenticated using (public.is_staff());
+drop policy if exists benefits_read on public.user_benefits;
+create policy benefits_read on public.user_benefits for select to authenticated using (user_id = auth.uid() or public.is_staff());
+revoke insert, update, delete on public.promo_offers, public.user_benefits from anon, authenticated;
+
+insert into public.platform_settings (key, value) values ('referral_program', '{
+  "enabled": false,
+  "customer":     {"when": "first_booking",
+                   "new_user_reward": {"kind": "booking_flat", "amount": 100, "uses": 1, "days": 90, "title": "₹100 off your first booking"},
+                   "referrer_reward": {"kind": "booking_flat", "amount": 100, "uses": 1, "days": 90, "title": "₹100 off — thanks for inviting a friend"}},
+  "photographer": {"when": "first_booking",
+                   "new_user_reward": {"kind": "storage_bonus", "amount": 1, "days": 90, "title": "1 GB extra storage for 3 months"},
+                   "referrer_reward": {"kind": "commission_cut", "amount": 10, "uses": 2, "days": 180, "title": "10% commission on your next 2 bookings"}}
+}') on conflict (key) do nothing;
+
+create or replace function public._kind_audience(k text)
+returns text language sql immutable as $$
+  select case when k in ('booking_flat','booking_pct') then 'customer'
+              when k in ('storage_bonus','commission_cut','featured','storage_discount') then 'photographer' end $$;
+
+-- Put a reward on someone's account (server only).
+create or replace function public._grant_benefit(p_user uuid, p jsonb, p_source text, p_offer uuid, p_ends timestamptz default null)
+returns uuid language plpgsql security definer set search_path = public
+as $$
+declare k text := p->>'kind'; d int := nullif(p->>'days','')::int; bid uuid; role_ text; exp timestamptz;
+begin
+  if k is null or k = 'none' then return null; end if;
+  select role into role_ from public.profiles where id = p_user;
+  if public._kind_audience(k) is distinct from (case when role_ = 'photographer' then 'photographer' else 'customer' end) then return null; end if;
+  if k in ('storage_bonus','featured','commission_cut','storage_discount') and not exists (select 1 from public.photographers where id = p_user) then return null; end if;
+  exp := case when d is not null then now() + make_interval(days => d) else p_ends end;
+  insert into public.user_benefits (user_id, offer_id, source, kind, title, amount, max_amount, min_booking, uses_left, expires_at)
+  values (p_user, p_offer, p_source, k, left(coalesce(p->>'title', k), 120), coalesce((p->>'amount')::numeric, 0),
+          nullif(p->>'max_amount','')::numeric, nullif(p->>'min_booking','')::numeric,
+          case when k in ('storage_bonus','featured') then null else nullif(p->>'uses','')::int end, exp)
+  on conflict do nothing
+  returning id into bid;
+  if bid is null then return null; end if;
+  if k = 'featured' then
+    perform set_config('snappro.system', 'on', true);
+    update public.photographers set featured_until = greatest(coalesce(featured_until, now()), now()) + make_interval(days => coalesce(d, 7)) where id = p_user;
+    perform set_config('snappro.system', '', true);
+  elsif k = 'storage_bonus' then
+    perform public.media_sync(p_user);
+  end if;
+  return bid;
+end $$;
+
+-- Best commission for a photographer right now: an active "commission_cut" reward,
+-- else their own rate set by an admin, else the platform rate.
+create or replace function public.commission_for(p_pg uuid)
+returns table(pct numeric, benefit_id uuid) language plpgsql stable security definer set search_path = public
+as $$
+declare base numeric; b record;
+begin
+  select coalesce(g.commission_pct, public.commission_pct()) into base from public.photographers g where g.id = p_pg;
+  base := coalesce(base, public.commission_pct());
+  select id, amount into b from public.user_benefits
+   where user_id = p_pg and kind = 'commission_cut' and status = 'active'
+     and (expires_at is null or expires_at > now()) and (uses_left is null or uses_left > 0)
+   order by amount asc limit 1;
+  if b.id is not null and b.amount < base then return query select b.amount, b.id;
+  else return query select base, null::uuid; end if;
+end $$;
+
+-- Best booking discount a customer has for this price (capped at SnapPro's commission).
+create or replace function public.discount_for(p_customer uuid, p_price numeric, p_cap numeric)
+returns table(amount integer, benefit_id uuid) language plpgsql stable security definer set search_path = public
+as $$
+declare b record; best int := 0; bid uuid; d int;
+begin
+  for b in select * from public.user_benefits
+            where user_id = p_customer and kind in ('booking_flat','booking_pct') and status = 'active'
+              and (expires_at is null or expires_at > now()) and (uses_left is null or uses_left > 0)
+              and (min_booking is null or p_price >= min_booking) loop
+    d := case when b.kind = 'booking_flat' then round(b.amount)
+              else least(round(p_price * b.amount / 100.0), coalesce(round(b.max_amount), 1000000)) end;
+    d := least(d, greatest(0, floor(p_cap)));
+    if d > best then best := d; bid := b.id; end if;
+  end loop;
+  return query select best, bid;
+end $$;
+
+create or replace function public._use_benefit(p_id uuid, p_delta int)
+returns void language sql security definer set search_path = public
+as $$ update public.user_benefits
+         set uses_left = case when uses_left is null then null else greatest(0, uses_left - p_delta) end,
+             status = case when uses_left is not null and uses_left - p_delta <= 0 then 'used'
+                           when status = 'used' and p_delta < 0 and (expires_at is null or expires_at > now()) then 'active'
+                           else status end,
+             used_at = case when p_delta > 0 then now() else used_at end
+       where id = p_id $$;
+
+-- Claim an offer: by promo code, or by tapping "Claim" on a public offer.
+create or replace function public.claim_offer(p_code text default null, p_offer uuid default null)
+returns jsonb language plpgsql security definer set search_path = public
+as $$
+declare me uuid := auth.uid(); o record; pr record; aud text; bid uuid;
+begin
+  if me is null then raise exception 'Please log in again'; end if;
+  select * into pr from public.profiles where id = me;
+  aud := case when pr.role = 'photographer' then 'photographer' else 'customer' end;
+  if p_code is not null and trim(p_code) <> '' then
+    select * into o from public.promo_offers where code = upper(trim(p_code)) for update;
+    if not found then
+      -- not a promo code? maybe it's a friend's SnapPro ID
+      if exists (select 1 from public.profiles where public_id = upper(trim(p_code))) then return public.apply_referral(p_code); end if;
+      raise exception 'That code isn''t valid';
+    end if;
+  else
+    select * into o from public.promo_offers where id = p_offer and is_public and code is null for update;
+    if not found then raise exception 'Offer not found'; end if;
+  end if;
+  if not o.active or (o.starts_at is not null and o.starts_at > now()) or (o.ends_at is not null and o.ends_at < now()) then raise exception 'This offer has ended'; end if;
+  if o.audience <> aud then raise exception 'This offer is for %s only', case when o.audience = 'photographer' then 'photographer' else 'customer' end; end if;
+  if o.max_claims is not null and o.claims >= o.max_claims then raise exception 'This offer has been fully claimed'; end if;
+  if exists (select 1 from public.user_benefits where user_id = me and offer_id = o.id) then raise exception 'You already have this offer'; end if;
+  if o.new_users_only and (pr.created_at < now() - interval '30 days'
+       or exists (select 1 from public.bookings b where (b.customer_id = me or b.photographer_id = me) and b.status <> 'cancelled')) then
+    raise exception 'This offer is for new members only';
+  end if;
+  bid := public._grant_benefit(me, to_jsonb(o), case when p_code is not null then 'code' else 'offer' end, o.id, o.ends_at);
+  if bid is null then raise exception 'This offer can''t be added to your account'; end if;
+  update public.promo_offers set claims = claims + 1, updated_at = now() where id = o.id;
+  return jsonb_build_object('result','claimed','title', o.title, 'kind', o.kind);
+end $$;
+
+-- ---------- referrals ----------
+create or replace function public.referral_check(p_user uuid)
+returns boolean language plpgsql security definer set search_path = public
+as $$
+declare prog jsonb := (select value from public.platform_settings where key = 'referral_program');
+        me record; ref record; mine jsonb; theirs jsonb; ok boolean;
+begin
+  if prog is null or coalesce((prog->>'enabled')::boolean, false) is not true then return false; end if;
+  select * into me from public.profiles where id = p_user;
+  if me.referred_by is null or me.referral_rewarded_at is not null then return false; end if;
+  select * into ref from public.profiles where id = me.referred_by;
+  if not found then return false; end if;
+  mine := prog->(case when me.role = 'photographer' then 'photographer' else 'customer' end);
+  theirs := prog->(case when ref.role = 'photographer' then 'photographer' else 'customer' end);
+  ok := case coalesce(mine->>'when','first_booking')
+          when 'signup' then true
+          else exists (select 1 from public.bookings b where b.status = 'completed'
+                        and (b.customer_id = p_user or b.photographer_id = p_user)) end;
+  if not ok then return false; end if;
+  perform public._grant_benefit(p_user, mine->'new_user_reward', 'referral', null);
+  perform public._grant_benefit(ref.id, theirs->'referrer_reward', 'referral', null);
+  perform set_config('snappro.system', 'on', true);
+  update public.profiles set referral_rewarded_at = now() where id = p_user;
+  perform set_config('snappro.system', '', true);
+  return true;
+end $$;
+
+create or replace function public.apply_referral(p_code text)
+returns jsonb language plpgsql security definer set search_path = public
+as $$
+declare me uuid := auth.uid(); pr record; ref record;
+begin
+  if me is null then raise exception 'Please log in again'; end if;
+  select * into pr from public.profiles where id = me;
+  if pr.referred_by is not null then raise exception 'You''ve already added a referral code'; end if;
+  if pr.created_at < now() - interval '14 days' then raise exception 'Referral codes can only be added in your first 14 days'; end if;
+  select * into ref from public.profiles where public_id = upper(trim(coalesce(p_code,'')));
+  if not found then raise exception 'That code isn''t valid'; end if;
+  if ref.id = me then raise exception 'You can''t use your own code'; end if;
+  perform set_config('snappro.system', 'on', true);
+  update public.profiles set referred_by = ref.id, referral_at = now() where id = me;
+  perform set_config('snappro.system', '', true);
+  perform public.referral_check(me);
+  return jsonb_build_object('result','referred','by', split_part(coalesce(ref.name,'a friend'),' ',1));
+end $$;
+
+-- What the app shows on "Offers & rewards" and "Invite friends".
+create or replace function public.my_rewards()
+returns jsonb language plpgsql security definer set search_path = public
+as $$
+declare me uuid := auth.uid(); pr record; aud text; prog jsonb := (select value from public.platform_settings where key = 'referral_program');
+begin
+  if me is null then return null; end if;
+  update public.user_benefits set status = 'expired' where user_id = me and status = 'active' and expires_at <= now();
+  select * into pr from public.profiles where id = me;
+  aud := case when pr.role = 'photographer' then 'photographer' else 'customer' end;
+  return jsonb_build_object(
+    'public_id', pr.public_id,
+    'benefits', (select coalesce(jsonb_agg(jsonb_build_object('id', id, 'kind', kind, 'title', title, 'amount', amount, 'max_amount', max_amount,
+                   'min_booking', min_booking, 'uses_left', uses_left, 'expires_at', expires_at, 'source', source) order by created_at desc), '[]')
+                 from public.user_benefits where user_id = me and status = 'active'),
+    'offers', (select coalesce(jsonb_agg(jsonb_build_object('id', o.id, 'kind', o.kind, 'title', o.title, 'description', o.description, 'badge', o.badge,
+                 'amount', o.amount, 'max_amount', o.max_amount, 'min_booking', o.min_booking, 'uses', o.uses, 'days', o.days, 'ends_at', o.ends_at,
+                 'new_users_only', o.new_users_only) order by o.created_at desc), '[]')
+               from public.promo_offers o
+              where o.active and o.is_public and o.code is null and o.audience = aud
+                and (o.starts_at is null or o.starts_at <= now()) and (o.ends_at is null or o.ends_at > now())
+                and (o.max_claims is null or o.claims < o.max_claims)
+                and not exists (select 1 from public.user_benefits b where b.user_id = me and b.offer_id = o.id)),
+    'commission_pct', case when aud = 'photographer' then (select pct from public.commission_for(me)) end,
+    'featured_until', (select featured_until from public.photographers where id = me and featured_until > now()),
+    'referral', jsonb_build_object(
+       'enabled', coalesce((prog->>'enabled')::boolean, false),
+       'my_reward', prog->aud->'referrer_reward', 'friend_reward_customer', prog->'customer'->'new_user_reward',
+       'friend_reward_photographer', prog->'photographer'->'new_user_reward', 'when', prog->aud->>'when',
+       'can_add_code', pr.referred_by is null and pr.created_at > now() - interval '14 days',
+       'invited', (select count(*) from public.profiles x where x.referred_by = me),
+       'rewarded', (select count(*) from public.profiles x where x.referred_by = me and x.referral_rewarded_at is not null)));
+end $$;
+
+-- ---------- admin ----------
+create or replace function public.admin_offer_save(p jsonb)
+returns uuid language plpgsql security definer set search_path = public
+as $$
+declare oid uuid := nullif(p->>'id','')::uuid; k text := p->>'kind'; c text := nullif(upper(trim(coalesce(p->>'code',''))), '');
+begin
+  if coalesce(public.staff_role() in ('super_admin','admin'), false) is not true then raise exception 'Only admins can manage offers'; end if;
+  if public._kind_audience(k) is null then raise exception 'Choose what the offer gives'; end if;
+  if public._kind_audience(k) <> p->>'audience' then raise exception 'That kind of offer is for %s', public._kind_audience(k); end if;
+  if coalesce(trim(p->>'title'),'') = '' then raise exception 'Give the offer a title'; end if;
+  if c is not null and c !~ '^[A-Z0-9_-]{3,20}$' then raise exception 'Promo codes: 3–20 letters or numbers'; end if;
+  if c is not null and exists (select 1 from public.profiles where public_id = c) then raise exception 'That code is someone''s SnapPro ID — pick another'; end if;
+  if k in ('booking_pct','storage_discount') and ((p->>'amount')::numeric <= 0 or (p->>'amount')::numeric > 100) then raise exception 'Percent must be between 1 and 100'; end if;
+  if k = 'commission_cut' and ((p->>'amount')::numeric < 0 or (p->>'amount')::numeric > 50) then raise exception 'Commission must be between 0 and 50%%'; end if;
+  if k in ('featured','storage_bonus') and coalesce(nullif(p->>'days','')::int, 0) <= 0 then raise exception 'Say how many days it lasts'; end if;
+  if k in ('booking_flat','storage_bonus') and (p->>'amount')::numeric <= 0 then raise exception 'Enter an amount'; end if;
+  if oid is null then
+    insert into public.promo_offers (audience, kind, title, description, badge, amount, max_amount, min_booking, uses, days, code, is_public,
+                               new_users_only, starts_at, ends_at, max_claims, active, created_by)
+    values (p->>'audience', k, left(p->>'title',120), left(p->>'description',300), left(nullif(p->>'badge',''),24), coalesce((p->>'amount')::numeric,0),
+            nullif(p->>'max_amount','')::numeric, nullif(p->>'min_booking','')::numeric, nullif(p->>'uses','')::int, nullif(p->>'days','')::int,
+            c, coalesce((p->>'is_public')::boolean, true), coalesce((p->>'new_users_only')::boolean, false),
+            nullif(p->>'starts_at','')::timestamptz, nullif(p->>'ends_at','')::timestamptz, nullif(p->>'max_claims','')::int,
+            coalesce((p->>'active')::boolean, true), auth.uid())
+    returning id into oid;
+  else
+    update public.promo_offers set title = left(p->>'title',120), description = left(p->>'description',300), badge = left(nullif(p->>'badge',''),24),
+           amount = coalesce((p->>'amount')::numeric,0), max_amount = nullif(p->>'max_amount','')::numeric, min_booking = nullif(p->>'min_booking','')::numeric,
+           uses = nullif(p->>'uses','')::int, days = nullif(p->>'days','')::int, code = c, is_public = coalesce((p->>'is_public')::boolean, true),
+           new_users_only = coalesce((p->>'new_users_only')::boolean, false), starts_at = nullif(p->>'starts_at','')::timestamptz,
+           ends_at = nullif(p->>'ends_at','')::timestamptz, max_claims = nullif(p->>'max_claims','')::int,
+           active = coalesce((p->>'active')::boolean, true), updated_at = now()
+     where id = oid;
+  end if;
+  return oid;
+end $$;
+
+-- Give an offer to everyone in its audience, or to one person by SnapPro ID.
+create or replace function public.admin_offer_grant(p_offer uuid, p_public_id text default null)
+returns int language plpgsql security definer set search_path = public
+as $$
+declare o record; u record; n int := 0;
+begin
+  if coalesce(public.staff_role() in ('super_admin','admin'), false) is not true then raise exception 'Only admins can give offers'; end if;
+  select * into o from public.promo_offers where id = p_offer;
+  if not found then raise exception 'Offer not found'; end if;
+  for u in select pr.id from public.profiles pr
+            where (p_public_id is null or pr.public_id = upper(trim(p_public_id)))
+              and (case when pr.role = 'photographer' then 'photographer' else 'customer' end) = o.audience
+              and not exists (select 1 from public.staff s where s.id = pr.id) loop
+    if public._grant_benefit(u.id, to_jsonb(o), 'admin', o.id, o.ends_at) is not null then n := n + 1; end if;
+  end loop;
+  if p_public_id is not null and n = 0 then raise exception 'No % with that ID, or they already have it', o.audience; end if;
+  update public.promo_offers set claims = claims + n, updated_at = now() where id = o.id;
+  return n;
+end $$;
+
+create or replace function public.admin_referral_save(p jsonb)
+returns jsonb language plpgsql security definer set search_path = public
+as $$
+begin
+  if not public.is_super() then raise exception 'Only a super admin can change the referral program'; end if;
+  insert into public.platform_settings (key, value, updated_at) values ('referral_program', p, now())
+  on conflict (key) do update set value = excluded.value, updated_at = now();
+  return p;
+end $$;
+
+-- Everything an admin needs on the Offers tab
+create or replace function public.admin_offers_overview()
+returns jsonb language plpgsql stable security definer set search_path = public
+as $$
+begin
+  if not public.is_staff() then return null; end if;
+  return jsonb_build_object(
+    'offers', (select coalesce(jsonb_agg(to_jsonb(o) || jsonb_build_object(
+                 'active_benefits', (select count(*) from public.user_benefits b where b.offer_id = o.id and b.status = 'active'),
+                 'used', (select count(*) from public.user_benefits b where b.offer_id = o.id and b.status = 'used'))
+               order by o.created_at desc), '[]') from public.promo_offers o),
+    'referral_program', (select value from public.platform_settings where key = 'referral_program'),
+    'referrals', jsonb_build_object(
+       'total', (select count(*) from public.profiles where referred_by is not null),
+       'rewarded', (select count(*) from public.profiles where referral_rewarded_at is not null),
+       'top', (select coalesce(jsonb_agg(z order by z.invited desc), '[]') from (
+                 select r.public_id, r.name, r.role, count(*) invited, count(p.referral_rewarded_at) rewarded
+                   from public.profiles p join public.profiles r on r.id = p.referred_by group by r.id, r.public_id, r.name, r.role
+                  order by count(*) desc limit 20) z)),
+    'benefit_totals', (select coalesce(jsonb_agg(z), '[]') from (select kind, source, status, count(*) n from public.user_benefits group by 1,2,3) z),
+    'discounts_given', (select coalesce(sum(discount_amount),0) from public.bookings where status <> 'cancelled'),
+    'commission_overrides', (select coalesce(jsonb_agg(jsonb_build_object('id', g.id, 'name', g.display_name, 'pct', g.commission_pct)), '[]')
+                               from public.photographers g where g.commission_pct is not null)
+  );
+end $$;
+
+revoke all on function public._grant_benefit(uuid, jsonb, text, uuid, timestamptz) from public, anon, authenticated;
+revoke all on function public._use_benefit(uuid, int)                              from public, anon, authenticated;
+revoke all on function public.referral_check(uuid)                                 from public, anon, authenticated;
+revoke all on function public.commission_for(uuid)                                 from public, anon, authenticated;
+revoke all on function public.discount_for(uuid, numeric, numeric)                 from public, anon, authenticated;
+revoke all on function public.claim_offer(text, uuid)         from public, anon;
+revoke all on function public.apply_referral(text)            from public, anon;
+revoke all on function public.my_rewards()                    from public, anon;
+revoke all on function public.admin_set_pg_commission(uuid, numeric) from public, anon;
+revoke all on function public.admin_offer_save(jsonb)         from public, anon;
+revoke all on function public.admin_offer_grant(uuid, text)   from public, anon;
+revoke all on function public.admin_referral_save(jsonb)      from public, anon;
+revoke all on function public.admin_offers_overview()         from public, anon;
+grant execute on function public.claim_offer(text, uuid)         to authenticated;
+grant execute on function public.apply_referral(text)            to authenticated;
+grant execute on function public.my_rewards()                    to authenticated;
+grant execute on function public.admin_set_pg_commission(uuid, numeric) to authenticated;
+grant execute on function public.admin_offer_save(jsonb)         to authenticated;
+grant execute on function public.admin_offer_grant(uuid, text)   to authenticated;
+grant execute on function public.admin_referral_save(jsonb)      to authenticated;
+grant execute on function public.admin_offers_overview()         to authenticated;
 
 -- =====================================================================
 -- 8. FUNCTION PERMISSIONS
@@ -2177,7 +2659,7 @@ create or replace function public.admin_users()
 returns table(id uuid, name text, email text, phone text, role text, city text, state text, pincode text,
               joined timestamptz, last_sign_in timestamptz, confirmed boolean, is_staff boolean,
               requests int, bookings int, jobs_done int, rating numeric, review_count int,
-              is_verified boolean, is_online boolean, photos int, approval_status text)
+              is_verified boolean, is_online boolean, photos int, approval_status text, public_id text, commission_pct numeric)
 language plpgsql stable security definer set search_path = public
 as $$
 begin
@@ -2190,7 +2672,7 @@ begin
          (select count(*)::int from public.requests q where q.customer_id = u.id),
          (select count(*)::int from public.bookings b where (b.customer_id = u.id or b.photographer_id = u.id) and b.status <> 'cancelled'),
          g.jobs_done, g.rating, g.review_count, g.is_verified, g.is_online,
-         coalesce(array_length(g.portfolio,1), 0), g.approval_status
+         coalesce(array_length(g.portfolio,1), 0), g.approval_status, p.public_id, g.commission_pct
     from auth.users u
     left join public.profiles p on p.id = u.id
     left join public.photographers g on g.id = u.id
@@ -2250,9 +2732,10 @@ begin
 
   elsif p_kind in ('available_pgs','photographers','pending_pgs','pgs_with_photos','pgs_verified','pgs_city') then
     select coalesce(jsonb_agg(to_jsonb(z) order by z.jobs_done desc, z.name), '[]') into res from (
-      select g.id, g.display_name as name, case when money then u.email end as email, case when money then pr.phone end as phone,
+      select g.id, pr.public_id as snappro_id, g.display_name as name, case when money then u.email end as email, case when money then pr.phone end as phone,
              g.city, g.state, array_to_string(g.categories, ', ') as shoot_types, g.approval_status as approval,
              g.is_online as available, g.is_verified as verified, g.jobs_done, g.rating, g.review_count as reviews,
+             coalesce(g.commission_pct, public.commission_pct()) as commission_pct,
              coalesce(array_length(g.portfolio,1),0) as photos, case when money then g.earnings end as earnings,
              (select count(*) from public.offers o where o.photographer_id = g.id)::int as quotes_sent,
              g.created_at as joined, g.approved_at
@@ -2345,7 +2828,7 @@ begin
 
   elsif p_kind in ('signups','signups_customers','signups_photographers','customers','repeat_customers','setup_incomplete','top_customers') then
     select coalesce(jsonb_agg(to_jsonb(z) order by z.joined desc), '[]') into res from (
-      select pr.name, u.email, coalesce(pr.phone, u.phone) as phone, pr.role, pr.city, pr.state, pr.pincode,
+      select pr.public_id as snappro_id, pr.name, u.email, coalesce(pr.phone, u.phone) as phone, pr.role, pr.city, pr.state, pr.pincode,
              coalesce(pr.created_at, u.created_at) as joined, u.last_sign_in_at as last_sign_in, (u.email_confirmed_at is not null) as email_confirmed,
              (select count(*) from public.requests q where q.customer_id = pr.id)::int as requests,
              (select count(*) from public.bookings b where b.customer_id = pr.id and b.status <> 'cancelled')::int as bookings,
@@ -2402,9 +2885,9 @@ begin
     'messages', (select count(*) from public.messages m where m.booking_id = b.id),
     'last_message', (select max(created_at) from public.messages m where m.booking_id = b.id),
     'review', (select jsonb_build_object('stars', v.stars, 'comment', v.body, 'posted', v.created_at) from public.reviews v where v.booking_id = b.id),
-    'customer', (select jsonb_build_object('name', pr.name, 'email', case when money then pr.email end, 'phone', case when money then pr.phone end)
+    'customer', (select jsonb_build_object('name', pr.name, 'id', pr.public_id, 'email', case when money then pr.email end, 'phone', case when money then pr.phone end)
                    from public.profiles pr where pr.id = b.customer_id),
-    'photographer', (select jsonb_build_object('name', g.display_name, 'email', case when money then u.email end,
+    'photographer', (select jsonb_build_object('name', g.display_name, 'id', (select public_id from public.profiles where id = g.id), 'email', case when money then u.email end,
                        'upi', case when money then x.upi_id end, 'rating', g.rating, 'jobs', g.jobs_done)
                    from public.photographers g left join auth.users u on u.id = g.id left join public.photographer_payout x on x.id = g.id where g.id = b.photographer_id),
     'payments', case when money then (select coalesce(jsonb_agg(jsonb_build_object('stage', p.stage, 'amount', p.amount, 'status', p.status,
@@ -2595,4 +3078,6 @@ select
          or exists (select 1 from public.staff_invites where lower(email) = 'prathmeshsingh99@gmail.com'
                    and role = 'super_admin' and accepted_at is null))                     as owner_locked,
   exists (select 1 from pg_proc where proname = 'media_begin')
-    and exists (select 1 from public.platform_settings where key = 'storage_plans')      as media_storage_ready;
+    and exists (select 1 from public.platform_settings where key = 'storage_plans')      as media_storage_ready,
+  exists (select 1 from pg_proc where proname = 'claim_offer')
+    and not exists (select 1 from public.profiles where public_id is null)               as offers_and_ids_ready;
