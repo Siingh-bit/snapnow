@@ -1208,6 +1208,7 @@ async function refresh(fromPoll){
   refreshing = true;
   const before = signature();
   tryPendingRef();
+  try{ tryPendingShoot(); }catch(e){}
   sb.rpc("my_status").then(r => { const st = r && r.data; const blocked = !!(st && st.status && st.status !== "active"); if(blocked !== !!S.blocked){ S.blocked = blocked ? st : null; render(); } }).catch(() => {});
   if(isPg() && S.kyc === undefined && !S.loading.kycl){ S.loading.kycl = true; loadKyc().then(() => { S.loading.kycl = false; softRender(); }); }
   if(S.rewards === undefined && !S.loading.rewards){ S.loading.rewards = true; loadRewards().then(() => { S.loading.rewards = false; softRender(); }); }
@@ -3341,6 +3342,23 @@ async function buyStorage(plan){
 /* remember a friend's code from a shared link (snappro.in/app.html?ref=SPC100245) */
 (function(){ try{ const r = new URLSearchParams(location.search).get("ref");
   if(r && /^SP[CP]\d{4,}$/i.test(r)){ S.prefs.pendingRef = r.toUpperCase(); savePrefs(); } }catch(e){} })();
+
+/* arrived from a "wedding photographers in Delhi" style page (app.html?shoot=wedding):
+   open "Post a shoot" with that type already picked, once the customer is signed in */
+(function(){ try{
+  const q = new URLSearchParams(location.search), sh = q.get("shoot");
+  if(sh && CATEGORIES.some(c => c.id === sh)){ S.prefs.pendingShoot = sh; savePrefs(); }
+  if(q.has("shoot") || q.has("src")){ q.delete("shoot"); q.delete("src");
+    const rest = q.toString(); history.replaceState(null, "", location.pathname + (rest ? "?" + rest : "") + location.hash); }
+}catch(e){} })();
+function tryPendingShoot(){
+  const cat = S.prefs.pendingShoot;
+  if(!cat || !S.me) return;
+  if(!isCustomer()){ delete S.prefs.pendingShoot; savePrefs(); return; }   // photographers/admins: ignore
+  if(!S.me.city || S.blocked || S.stack.length) return;          // wait until set up and on the home screen
+  delete S.prefs.pendingShoot; savePrefs();
+  startRequest(null, cat);
+}
 
 async function loadRewards(){
   try{ const { data, error } = await sb.rpc("my_rewards"); if(!error && data) S.rewards = data; }catch(e){}

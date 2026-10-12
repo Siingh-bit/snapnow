@@ -1,0 +1,116 @@
+# SnapPro
+
+> SnapPro (snappro.in) is an Indian online marketplace for booking verified professional photographers. A customer posts a shoot (type, date, time, duration, city and budget); verified photographers in that city send their own quotes; the customer compares portfolios, ratings and prices and books online. Payment is through Razorpay: 25% advance to confirm, balance in the app once the shoot starts. There is no booking fee for customers.
+
+Key facts:
+- Works across India, including Mumbai, Delhi, Bengaluru, Hyderabad, Chennai, Kolkata, Pune, Ahmedabad, Jaipur, Gurugram, Noida, Chandigarh, Lucknow, Kochi, Goa, Udaipur and more.
+- Shoot types: Wedding, Pre-wedding, Birthday, Corporate, Event, Maternity, Product, Food, Fashion, Real estate, Portrait, Pet, Candid.
+- Guide prices for a 2-hour shoot (photographers quote their own price): Wedding ₹12,000; Pre-wedding ₹12,000; Birthday ₹3,500; Corporate ₹7,000; Event ₹4,000; Maternity ₹6,000; Product ₹5,000; Food ₹4,500; Fashion ₹8,000; Real estate ₹5,500; Portrait ₹2,500; Pet ₹2,800; Candid ₹2,200. Same-day bookings cost more.
+- Photographers are approved by the SnapPro team after a portfolio review and verify their identity with a government ID and face photo. Ratings come only from completed bookings.
+- Cancellation: full advance refunded if the customer cancels before the photographer sets off; 50% of the advance after.
+- Photographers join free, quote their own prices, and receive their share by UPI after the shoot.
+- Contact: snappro.support@gmail.com
+
+## Book a photographer
+- [Find photographers by type and city](https://snappro.in/photographers/)
+- [Photography prices in India](https://snappro.in/photography-prices/)
+- [How SnapPro works](https://snappro.in/how-it-works/)
+- [FAQ](https://snappro.in/faq/)
+
+## Photographers by type
+- [Wedding photographers](https://snappro.in/wedding-photographers/): ceremonies, rituals, family portraits and candid moments from haldi and mehendi to the pheras and reception
+- [Pre-wedding photographers](https://snappro.in/pre-wedding-photographers/): couple shoots before the wedding — at a favourite spot in your city, at golden hour or with a theme
+- [Birthday photographers](https://snappro.in/birthday-photographers/): kids' parties, milestone birthdays and surprise celebrations — candids, cake-cutting and family photos
+- [Corporate photographers](https://snappro.in/corporate-photographers/): headshots, team photos, office shoots, conferences, product launches and company events
+- [Event photographers](https://snappro.in/event-photographers/): parties, anniversaries, engagements, poojas, college fests, launches and get-togethers
+- [Maternity photographers](https://snappro.in/maternity-photographers/): pregnancy portraits at home, in a studio or outdoors — solo, with your partner or with family
+- [Product photographers](https://snappro.in/product-photographers/): e-commerce listings, catalogue photos, Amazon and Flipkart images, lifestyle and social media shots
+- [Food photographers](https://snappro.in/food-photographers/): restaurant menus, Zomato and Swiggy listings, cafés, cloud kitchens and food brands
+- [Fashion photographers](https://snappro.in/fashion-photographers/): model portfolios, lookbooks, clothing brands, designer collections and influencer shoots
+- [Real estate photographers](https://snappro.in/real-estate-photographers/): flats, villas, offices, hotels, homestays and Airbnb listings — bright, wide interior and exterior photos
+- [Portrait photographers](https://snappro.in/portrait-photographers/): personal portraits, profile photos, family portraits, couple portraits and portfolio shoots
+- [Pet photographers](https://snappro.in/pet-photographers/): dogs, cats and other pets — at home, in a park or with the family
+- [Candid photographers](https://snappro.in/candid-photographers/): natural, unposed photos — outings, trips, small celebrations and everyday moments
+
+## Photographers by city
+- [Photographers in Mumbai](https://snappro.in/photographers-in-mumbai/)
+- [Photographers in Delhi](https://snappro.in/photographers-in-delhi/)
+- [Photographers in Bengaluru](https://snappro.in/photographers-in-bengaluru/)
+- [Photographers in Hyderabad](https://snappro.in/photographers-in-hyderabad/)
+- [Photographers in Chennai](https://snappro.in/photographers-in-chennai/)
+- [Photographers in Kolkata](https://snappro.in/photographers-in-kolkata/)
+- [Photographers in Pune](https://snappro.in/photographers-in-pune/)
+- [Photographers in Ahmedabad](https://snappro.in/photographers-in-ahmedabad/)
+- [Photographers in Jaipur](https://snappro.in/photographers-in-jaipur/)
+- [Photographers in Gurugram](https://snappro.in/photographers-in-gurugram/)
+- [Photographers in Noida](https://snappro.in/photographers-in-noida/)
+- [Photographers in Chandigarh](https://snappro.in/photographers-in-chandigarh/)
+- [Photographers in Lucknow](https://snappro.in/photographers-in-lucknow/)
+- [Photographers in Kochi](https://snappro.in/photographers-in-kochi/)
+- [Photographers in Goa](https://snappro.in/photographers-in-goa/)
+- [Photographers in Udaipur](https://snappro.in/photographers-in-udaipur/)
+- [Photographers in Thane](https://snappro.in/photographers-in-thane/)
+- [Photographers in Navi Mumbai](https://snappro.in/photographers-in-navi-mumbai/)
+- [Photographers in Surat](https://snappro.in/photographers-in-surat/)
+- [Photographers in Vadodara](https://snappro.in/photographers-in-vadodara/)
+- [Photographers in Indore](https://snappro.in/photographers-in-indore/)
+- [Photographers in Bhopal](https://snappro.in/photographers-in-bhopal/)
+- [Photographers in Nagpur](https://snappro.in/photographers-in-nagpur/)
+- [Photographers in Nashik](https://snappro.in/photographers-in-nashik/)
+- [Photographers in Mysuru](https://snappro.in/photographers-in-mysuru/)
+- [Photographers in Visakhapatnam](https://snappro.in/photographers-in-visakhapatnam/)
+- [Photographers in Thiruvananthapuram](https://snappro.in/photographers-in-thiruvananthapuram/)
+- [Photographers in Madurai](https://snappro.in/photographers-in-madurai/)
+- [Photographers in Amritsar](https://snappro.in/photographers-in-amritsar/)
+- [Photographers in Ludhiana](https://snappro.in/photographers-in-ludhiana/)
+- [Photographers in Varanasi](https://snappro.in/photographers-in-varanasi/)
+- [Photographers in Agra](https://snappro.in/photographers-in-agra/)
+- [Photographers in Dehradun](https://snappro.in/photographers-in-dehradun/)
+- [Photographers in Rishikesh](https://snappro.in/photographers-in-rishikesh/)
+- [Photographers in Shimla](https://snappro.in/photographers-in-shimla/)
+- [Photographers in Guwahati](https://snappro.in/photographers-in-guwahati/)
+- [Photographers in Bhubaneswar](https://snappro.in/photographers-in-bhubaneswar/)
+- [Photographers in Patna](https://snappro.in/photographers-in-patna/)
+- [Photographers in Ranchi](https://snappro.in/photographers-in-ranchi/)
+
+## Guides
+- [How to Choose a Wedding Photographer in India](https://snappro.in/guides/how-to-choose-a-wedding-photographer/)
+- [Pre-Wedding Shoot Ideas and Planning Tips for Indian Couples](https://snappro.in/guides/pre-wedding-shoot-ideas/)
+- [Questions to Ask a Photographer Before You Book](https://snappro.in/guides/questions-to-ask-a-photographer/)
+- [Corporate Event Photography](https://snappro.in/guides/corporate-event-photography-guide/)
+
+## For photographers
+- [Join SnapPro as a photographer](https://snappro.in/for-photographers/)
+
+## Policies
+- [Terms](https://snappro.in/terms.html) · [Privacy](https://snappro.in/privacy.html) · [Cancellation & refunds](https://snappro.in/refunds.html) · [Contact](https://snappro.in/contact.html)
+
+## Frequently asked questions
+
+### What is SnapPro?
+SnapPro (snappro.in) is an online marketplace in India for booking professional photographers. You post what you need — the type of shoot, date, time, city and budget — and verified photographers in your city send you their own price. You compare their portfolios, ratings and quotes, book the one you like and pay securely online.
+
+### How do I book a photographer on SnapPro?
+Sign up at snappro.in, post your shoot (it takes about a minute), and photographers who shoot that kind of work in your city send quotes. Compare them, tap Book, and pay a 25% advance to confirm. The rest is paid in the app once the shoot starts.
+
+### How much does it cost to book a photographer on SnapPro?
+Each photographer sets their own price in their quote, and there is no booking fee for customers. As a starting guide, a 2-hour shoot on SnapPro is suggested at about ₹2,200 for candid, ₹2,500 for portraits, ₹3,500 for birthdays, ₹4,000 for events, ₹7,000 for corporate and ₹12,000 for weddings — longer shoots and same-day bookings cost more.
+
+### Are photographers on SnapPro verified?
+Yes. Every photographer is reviewed by the SnapPro team before they can quote, and photographers verify their identity with a government ID and a face photo. Ratings come only from customers who completed a booking.
+
+### How does payment work?
+You pay online through Razorpay — UPI, Google Pay, PhonePe, cards or net banking. You pay a 25% advance to confirm the booking and the balance in the app once the shoot starts. SnapPro pays the photographer after the shoot.
+
+### Can I cancel a booking?
+Yes. If you cancel before your photographer sets off, your advance is refunded in full. If you cancel after they've set off, half of the advance is refunded. See the cancellation and refund policy for details.
+
+### Which cities does SnapPro cover?
+SnapPro works anywhere in India. Photographers choose the city they work in, so you'll get quotes from photographers in your city — including Mumbai, Delhi, Bengaluru, Hyderabad, Chennai, Kolkata, Pune, Ahmedabad, Jaipur and many more.
+
+### Can I book a photographer at short notice?
+Yes. When you post a shoot you can choose right now, in 1 hour, in 3 hours, later today, tomorrow, or pick a date. Short-notice shoots usually cost a little more.
+
+### I'm a photographer. How do I get clients on SnapPro?
+Join free at snappro.in, add your portfolio and verify your ID. Once approved you'll see shoot requests from customers in your city and can send your own price. Customers pay online and SnapPro sends your share to your UPI ID after the shoot.
+
