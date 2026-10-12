@@ -3104,7 +3104,7 @@ function payBox(price, pgFirst){
    size against the photographer's storage plan before it shows.
    ============================================================ */
 const isVideoUrl = u => /\.(mp4|mov|webm)(\?|$)/i.test(String(u || ""));
-const fmtBytes = n => { n = Number(n) || 0; return n >= 1024*1024*1024 ? (n / 1073741824).toFixed(n % 1073741824 ? 1 : 0) + " GB"
+const fmtBytes = n => { n = Number(n) || 0; if(!n) return "0 MB"; return n >= 1024*1024*1024 ? (n / 1073741824).toFixed(n % 1073741824 ? 1 : 0) + " GB"
   : n >= 1024*1024 ? Math.round(n / 1048576) + " MB" : Math.max(1, Math.round(n / 1024)) + " KB"; };
 /* a thumbnail for a photo or a video (videos show their first frame and a play badge) */
 function mediaThumb(u, cls){
