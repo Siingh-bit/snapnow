@@ -156,6 +156,18 @@ td{white-space:nowrap}
 .ofl .input{margin-top:5px;padding:9px 11px}
 .offer-row.dim{opacity:.6}
 .refbox{border:1px solid var(--border-soft);border-radius:12px;padding:14px}
+.kycbox{border:1px solid rgba(77,141,255,.35);background:rgba(77,141,255,.06);border-radius:12px;padding:12px;font-size:13px}
+.kycbox.none{border-color:var(--border-soft);background:none;color:var(--muted)}
+.kimgs{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.kimg{position:relative;display:block;border-radius:8px;overflow:hidden;background:var(--surface-2);aspect-ratio:4/3;text-decoration:none}
+.kimg img{width:100%;height:100%;object-fit:cover;display:block}
+.kimg span{display:grid;place-items:center;height:100%;color:var(--muted-2);font-size:12px}
+.kimg i{position:absolute;left:6px;bottom:6px;font-style:normal;font-size:11px;font-weight:700;background:rgba(0,0,0,.65);color:#fff;border-radius:5px;padding:2px 6px}
+.chatlog{display:flex;flex-direction:column;gap:8px;max-height:60vh;overflow-y:auto;padding:4px}
+.cl{max-width:78%;padding:9px 12px;border-radius:12px;background:var(--surface-2)}
+.cl.photographer{align-self:flex-end;background:rgba(255,90,31,.14)}
+.cl-who{font-size:11px;color:var(--muted-2);font-weight:700;margin-bottom:3px}
+.cl-text{font-size:13.5px;white-space:pre-wrap;word-break:break-word}
 </style>
 </head>
 <body>
@@ -292,9 +304,10 @@ function openTab(k){
   render();
   if(k === 'overview') loadInsights(!!S.insights);
   if(k === 'users') loadUsers(!!S.users);
-  if(k === 'pros'){ loadData(); if(S.me.role !== 'manager') loadUsers(true); }
+  if(k === 'pros'){ loadData(); if(S.me.role !== 'manager'){ loadUsers(true); loadKycAll(); } }
   if(k === 'payments') loadPayments(!!S.pay);
   if(k === 'offers'){ loadOffers(); if(!S.pay) loadPayments(true); }
+  if(k === 'activity') loadAudit();
 }
 function go(view, patch){ Object.assign(S, patch||{}, { view, err:"" }); render(); }
 
@@ -738,13 +751,14 @@ async function loadUsers(quiet){
   S.users = next; S.usersErr = "";
   if(!quiet || changed) render();
 }
-const USER_FILTERS = [["all","Everyone"],["customer","Customers"],["photographer","Photographers"],["incomplete","Sign-up not finished"],["staff","Staff"]];
+const USER_FILTERS = [["all","Everyone"],["customer","Customers"],["photographer","Photographers"],["incomplete","Sign-up not finished"],["suspended","Suspended / blocked"],["staff","Staff"]];
 function userMatches(u){
   const f = S.usersFilter;
   if(f === "customer" && (u.role !== "customer" || u.is_staff)) return false;
   if(f === "photographer" && u.role !== "photographer") return false;
   if(f === "incomplete" && (u.city && u.pincode)) return false;
   if(f === "staff" && !u.is_staff) return false;
+  if(f === "suspended" && (!u.account_status || u.account_status === "active")) return false;
   const q = (S.usersQ || "").trim().toLowerCase();
   if(!q) return true;
   return [u.public_id, u.name, u.email, u.phone, u.city, u.state, u.pincode].some(v => v && String(v).toLowerCase().includes(q));
@@ -754,7 +768,7 @@ const ago = d => { if(!d) return "Never"; const s = (Date.now() - Date.parse(d))
   if(s < 86400*30) return Math.floor(s/86400) + " d ago"; return fmt(d); };
 function userRowsHtml(){
   const list = (S.users || []).filter(userMatches);
-  if(!list.length) return `<tr><td colspan="7"><div class="empty">No one matches.</div></td></tr>`;
+  if(!list.length) return `<tr><td colspan="8"><div class="empty">No one matches.</div></td></tr>`;
   return list.map(u => `<tr>
     <td><div style="font-weight:600">${esc(u.name || "—")}</div>${u.public_id ? `<div class="xs" style="color:var(--accent);font-weight:700">${esc(u.public_id)}</div>` : ""}<div class="xs muted2">${esc(u.email || "")}</div>${u.phone ? `<div class="xs muted2">${esc(u.phone)}</div>` : ""}</td>
     <td>${u.is_staff ? `<span class="chip super">Staff</span>` : u.role === "photographer" ? `<span class="chip manager">Photographer</span>${u.approval_status === "pending" ? `<div class="mt8"><span class="chip amber">In review</span></div>` : u.approval_status === "rejected" ? `<div class="mt8"><span class="chip red">Not approved</span></div>` : ""}` : `<span class="chip admin">Customer</span>`}</td>
@@ -764,7 +778,8 @@ function userRowsHtml(){
     <td class="sm">${u.role === "photographer"
         ? `${num(u.jobs_done || 0)} shoots · ${u.review_count ? Number(u.rating).toFixed(1) + "★" : "no reviews"}<div class="xs muted2">${num(u.photos)} photos${u.is_verified ? " · verified" : ""}${u.is_online ? " · available" : ""}</div>`
         : `${num(u.requests)} requests · ${num(u.bookings)} bookings`}</td>
-    <td>${u.confirmed ? `<span class="chip green">Email confirmed</span>` : `<span class="chip amber">Not confirmed</span>`}</td>
+    <td>${u.confirmed ? `<span class="chip green">Email confirmed</span>` : `<span class="chip amber">Not confirmed</span>`}${u.role === "photographer" ? `<div class="mt8">${({verified:'<span class="chip green">ID verified</span>',submitted:'<span class="chip amber">ID to check</span>',rejected:'<span class="chip red">ID re-do</span>'})[u.kyc_status] || '<span class="chip">No ID yet</span>'}</div>` : ""}</td>
+    <td>${statusCell(u)}</td>
   </tr>`).join("");
 }
 function usersSearch(v){ S.usersQ = v; setHtml("usersBody", userRowsHtml()); setHtml("usersCount", usersCountText()); }
@@ -794,7 +809,7 @@ function vUsers(){
     </div>
     <div class="xs muted2 mt8" id="usersCount">${usersCountText()}</div>
     <div class="card tblwrap mt8"><table>
-      <thead><tr><th>Person</th><th>Type</th><th>Location</th><th>Joined</th><th>Last sign-in</th><th>Activity</th><th>Email</th></tr></thead>
+      <thead><tr><th>Person</th><th>Type</th><th>Location</th><th>Joined</th><th>Last sign-in</th><th>Activity</th><th>Checks</th><th>Account</th></tr></thead>
       <tbody id="usersBody">${userRowsHtml()}</tbody></table></div>`;
 }
 
@@ -1148,7 +1163,7 @@ function vConsole(){
   if(canUsers){ const rd = S.pay ? S.pay.payments.filter(p => ["refund_due","refund_failed"].includes(p.refund_status)).length : 0;
                 tabs.push(["payments", rd ? `Payments <span class="count">${rd}</span>` : "Payments"]); }
   tabs.push(["requests","Requests"],["pros", waiting ? `Photographers <span class="count">${waiting}</span>` : "Photographers"]);
-  if(canUsers) tabs.push(["offers","Offers"]);
+  if(canUsers) tabs.push(["offers","Offers"],["activity","Activity"]);
   if(isSuper) tabs.push(["team","Team"]);
 
   return `<div class="wrap">
@@ -1179,6 +1194,7 @@ function vConsole(){
       S.tab==='requests' ? vRequests() :
       S.tab==='pros'     ? vPros()     :
       S.tab==='offers'   ? vOffers()   :
+      S.tab==='activity' ? vActivity() :
       S.tab==='team'     ? vTeam()     : ''
     }</div>
   </div>`;
@@ -1254,7 +1270,11 @@ async function decide(id, status){
   if(status === "rejected"){
     const box = el("rejWhy-" + id); note = box ? box.value.trim() : "";
     if(note.length < 5){ S.err = "Write a short reason so " + (p.display_name || "they") + " knows what to fix."; render(); return; }
-  } else if(!confirm("Approve " + (p.display_name || "this photographer") + "? Customers will be able to see and book them straight away.")) return;
+  } else {
+    const k = (S.kycAll || {})[id];
+    const warn = !k || k.status === "not_submitted" ? "\n\n⚠ They haven't submitted their ID and face photo yet." : k.status !== "verified" ? "\n\n⚠ You haven't marked their ID as genuine yet." : "";
+    if(!confirm("Approve " + (p.display_name || "this photographer") + "? Customers will be able to see and book them straight away." + warn)) return;
+  }
   S.busyId = id; render();
   const { error } = await sb.rpc("set_photographer_approval", { p_id: id, p_status: status, p_note: note });
   S.busyId = null;
@@ -1284,6 +1304,7 @@ function pendingCard(p, canDecide){
     ${p.bio ? `<p class="sm muted mt12" style="white-space:pre-wrap;margin-bottom:0">${esc(p.bio)}</p>` : ""}
     ${photos.length ? `<div class="thumbs mt12">${photos.slice(0, 12).map(u => `<a href="${esc(u)}" target="_blank" rel="noopener">${/\.(mp4|mov|webm)(\?|$)/i.test(u) ? `<video src="${esc(u)}#t=0.1" muted preload="metadata"></video>` : `<img src="${esc(u)}" alt="" loading="lazy">`}</a>`).join("")}</div>` : ""}
     ${flags.length ? `<div class="xs mt12" style="color:#ffd88a">Worth checking: ${flags.map(esc).join(" · ")}</div>` : ""}
+    ${S.me.role !== "manager" ? kycBox(p, canDecide) : ""}
     ${canDecide ? (S.rejecting === p.id ? `
       <div class="mt12"><textarea id="rejWhy-${p.id}" class="input" rows="2" maxlength="500" placeholder="What should they fix? e.g. Please add at least 6 photos of your own work."></textarea>
         <div class="row mt8"><button class="btn sm danger" ${S.busyId===p.id?'disabled':''} onclick="decide('${p.id}','rejected')">Send and don't approve</button>
@@ -1389,6 +1410,140 @@ function vTeam(){
     </tr>`).join('')}</tbody></table></div>
     <div class="xs muted2 mt12">The email links to a set-up page with their address filled in. When they create their account with this email, their role activates automatically. Not arrived? Ask them to check spam, then press Resend.</div>
   </div>`:''}`;
+}
+
+/* ======================= trust & safety ======================= */
+/* --- suspend / block --- */
+async function setUserStatus(id, status){
+  const u = (S.users || []).find(x => x.id === id) || {};
+  const who = (u.public_id ? u.public_id + " · " : "") + (u.name || u.email || "this account");
+  let reason = null, days = null;
+  if(status !== "active"){
+    reason = prompt((status === "blocked" ? "Block " : "Suspend ") + who + "?\nReason (they'll see this):", "");
+    if(reason === null) return;
+    if(status === "suspended"){ const d = prompt("For how many days? Leave empty until you restore it.", "7"); if(d === null) return; days = d.trim() === "" ? null : Math.max(1, parseInt(d, 10) || 0) || null; }
+  } else if(!confirm("Restore " + who + "? They can use SnapPro normally again.")) return;
+  S.err = ""; S.note = "";
+  const { error } = await sb.rpc("admin_set_user_status", { p_user: id, p_status: status, p_reason: reason, p_days: days });
+  if(error){ S.err = error.message; render(); return; }
+  S.note = status === "active" ? "Account restored." : status === "blocked" ? "Account blocked." : "Account suspended" + (days ? " for " + days + " days." : ".");
+  await loadUsers(); if(S.tab === "pros") loadData();
+}
+function statusCell(u){
+  if(u.is_staff) return "";
+  const st = u.account_status || "active";
+  return `${st !== "active" ? `<div><span class="chip red">${st === "blocked" ? "Blocked" : "Suspended"}</span></div><div class="xs muted2 mt8" style="max-width:200px">${esc(u.status_reason || "")}${u.status_until ? " · until " + fmt(u.status_until) : ""}</div>` : ""}
+    <div class="row mt8" style="gap:6px;flex-wrap:wrap">${st === "active"
+      ? `<button class="btn sm" onclick="setUserStatus('${u.id}','suspended')">Suspend</button><button class="btn sm danger" onclick="setUserStatus('${u.id}','blocked')">Block</button>`
+      : `<button class="btn sm" onclick="setUserStatus('${u.id}','active')">Restore</button>`}</div>`;
+}
+
+/* --- reading a booking's chat --- */
+async function openChat(bookingId){
+  S.chatView = { id: bookingId, data: null, err: "" }; render();
+  const { data, error } = await sb.rpc("admin_chat", { p_booking: bookingId });
+  if(!S.chatView || S.chatView.id !== bookingId) return;
+  if(error) S.chatView.err = error.message; else S.chatView.data = data;
+  render();
+}
+function vChatView(){
+  const c = S.chatView; if(!c) return "";
+  const d = c.data;
+  return `<div class="sheet-bg top" style="z-index:70" onclick="if(event.target===this){S.chatView=null;render()}"><div class="sheet narrow" role="dialog" aria-label="Chat">
+    <div class="between"><div><div class="h2">Chat · ${payRef(c.id)}</div>${d ? `<div class="xs muted2 mt8">${esc(d.customer || "Customer")} (customer) ↔ ${esc(d.photographer || "Photographer")} (photographer)</div>` : ""}</div>
+      <div class="row"><button class="btn sm" onclick="exportChat()">Download</button><button class="btn sm" onclick="S.chatView=null;render()">Close</button></div></div>
+    <div class="warn mt12">Opening this chat was recorded in the Activity log. Use it only to resolve disputes or investigate fraud.</div>
+    ${c.err ? `<div class="err mt12">${esc(c.err)}</div>` : !d ? `<div class="empty">Loading…</div>` : !d.messages.length ? `<div class="empty">No messages on this booking.</div>`
+      : `<div class="chatlog mt12">${d.messages.map(m => `<div class="cl ${m.from}"><div class="cl-who">${m.from === "customer" ? esc(d.customer || "Customer") : m.from === "photographer" ? esc(d.photographer || "Photographer") : "Other"} · ${when(m.at)}</div><div class="cl-text">${esc(m.text)}</div></div>`).join("")}</div>`}
+  </div></div>`;
+}
+function exportChat(){
+  const c = S.chatView; if(!c || !c.data) return;
+  const lines = c.data.messages.map(m => "[" + new Date(m.at).toLocaleString("en-IN") + "] " + (m.from === "customer" ? c.data.customer : c.data.photographer) + " (" + m.from + "): " + m.text);
+  const blob = new Blob(["SnapPro chat — booking " + payRef(c.id) + "\n\n" + lines.join("\n")], { type: "text/plain" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "snappro-chat-" + payRef(c.id) + ".txt";
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+}
+
+/* --- photographer ID check --- */
+const ID_NAMES = { aadhaar: "Aadhaar card", pan: "PAN card", driving_licence: "Driving licence", passport: "Passport" };
+async function loadKycAll(){
+  const { data, error } = await sb.from("photographer_kyc").select("*");
+  if(error){ S.kycErr = /photographer_kyc|does not exist|schema cache/i.test(error.message) ? "ID checks need the latest database update." : error.message; S.kycAll = {}; render(); return; }
+  S.kycAll = {}; (data || []).forEach(k => S.kycAll[k.id] = k);
+  // short-lived private links to the photos (admins only)
+  const paths = []; (data || []).forEach(k => [k.front_path, k.back_path, k.selfie_path].forEach(p => p && paths.push(p)));
+  S.kycUrls = S.kycUrls || {};
+  const need = paths.filter(p => !S.kycUrls[p]);
+  if(need.length){
+    try{ const r = await sb.storage.from("kyc").createSignedUrls(need, 3600); (r.data || []).forEach(x => { if(x && x.path && x.signedUrl) S.kycUrls[x.path] = x.signedUrl; }); }catch(e){}
+  }
+  render();
+}
+function kycBox(p, canDecide){
+  const k = (S.kycAll || {})[p.id];
+  if(!S.kycAll) return `<div class="xs muted2 mt12">Loading ID check…</div>`;
+  if(!k || k.status === "not_submitted") return `<div class="kycbox mt12 none"><b>ID check:</b> not submitted yet. They'll see a "Verify your identity" step in the app.</div>`;
+  const img = (path, label) => path ? `<a class="kimg" href="${esc((S.kycUrls || {})[path] || "#")}" target="_blank" rel="noopener">${(S.kycUrls || {})[path] ? `<img src="${esc(S.kycUrls[path])}" alt="${label}">` : `<span>loading…</span>`}<i>${label}</i></a>` : "";
+  const chip = { submitted: '<span class="chip amber">Waiting for check</span>', verified: '<span class="chip green">ID verified</span>', rejected: '<span class="chip red">Asked to re-do</span>' }[k.status] || "";
+  return `<div class="kycbox mt12">
+    <div class="between" style="flex-wrap:wrap;gap:8px"><div><b>ID check</b> · ${esc(ID_NAMES[k.id_type] || k.id_type)}${k.id_last4 ? " · ends " + esc(k.id_last4) : ""} · sent ${ago(k.submitted_at)}</div>${chip}</div>
+    <div class="kimgs mt8">${img(k.selfie_path, "Face photo")}${img(k.front_path, k.id_type === "passport" ? "Photo page" : "ID front")}${img(k.back_path, k.id_type === "passport" ? "Address page" : "ID back")}</div>
+    <div class="xs muted2 mt8">Check: the face matches the ID photo, the name matches "${esc(p.display_name || "")}", the ID isn't expired or edited, and the photo is clear.</div>
+    ${k.note && k.status === "rejected" ? `<div class="xs mt8" style="color:#ff8f9b">Asked: ${esc(k.note)}</div>` : ""}
+    ${canDecide && k.status !== "verified" ? `<div class="row mt12" style="flex-wrap:wrap">
+      <button class="btn sm primary" onclick="reviewKyc('${p.id}','verified')">ID looks genuine</button>
+      <button class="btn sm danger" onclick="reviewKyc('${p.id}','rejected')">Ask for new photos…</button></div>` : ""}
+  </div>`;
+}
+async function reviewKyc(id, status){
+  let note = null;
+  if(status === "rejected"){ note = prompt("What should they re-do? (they'll get this by email)", "The photo is blurry — please retake it in good light."); if(!note) return; }
+  S.err = ""; S.note = "";
+  const { error } = await sb.rpc("kyc_review", { p_pg: id, p_status: status, p_note: note });
+  if(error){ S.err = error.message; render(); return; }
+  S.note = status === "verified" ? "ID marked as verified." : "Asked them for new ID photos (emailed).";
+  await loadKycAll();
+}
+
+/* --- activity log --- */
+async function loadAudit(){
+  const r = periodRange();
+  const { data, error } = await sb.rpc("admin_audit_log", { p_from: S.auditAll ? null : r.from, p_to: S.auditAll ? null : r.to, p_limit: 5000 });
+  if(error){ S.auditErr = /admin_audit_log|function/i.test(error.message) ? "The activity log needs the latest database update — run supabase/snappro.sql." : error.message; }
+  else { S.audit = Array.isArray(data) ? data : []; S.auditErr = ""; }
+  render();
+}
+function auditRows(){
+  const q = (S.auditQ || "").trim().toLowerCase();
+  return (S.audit || []).filter(a => !q || [a.action, a.staff_email, a.target_name, a.target_id, JSON.stringify(a.details || "")].some(v => v && String(v).toLowerCase().includes(q)));
+}
+function auditDetails(d){
+  if(!d) return "";
+  return Object.keys(d).filter(k => d[k] != null && d[k] !== "").map(k => `<span class="muted2">${esc(k)}:</span> ${esc(typeof d[k] === "object" ? JSON.stringify(d[k]) : d[k])}`).join(" · ");
+}
+function auditBodyHtml(){
+  const rows = auditRows();
+  if(!rows.length) return `<tr><td colspan="4"><div class="empty">Nothing recorded${S.auditQ ? " that matches" : " in this period"}.</div></td></tr>`;
+  return rows.slice(0, 1000).map(a => `<tr>
+    <td class="muted">${when(a.at)}</td>
+    <td><div style="font-weight:600">${esc(a.staff_email || "—")}</div><div class="xs muted2">${esc(roleLabel(a.staff_role || ""))}</div></td>
+    <td><div style="font-weight:600">${esc(a.action)}</div>${a.target_name ? `<div class="xs muted2">${esc(a.target_name)}</div>` : ""}</td>
+    <td class="xs" style="white-space:normal;max-width:420px">${auditDetails(a.details)}${a.target_type === "booking" && a.target_id ? ` <button class="linkbtn" onclick="openBooking('${esc(a.target_id)}')">booking ›</button>` : ""}</td></tr>`).join("");
+}
+function exportAudit(){ csvOf("activity", ["at","staff_email","staff_role","action","target_type","target_id","target_name","details"], auditRows().map(a => ({ ...a, details: JSON.stringify(a.details || {}) }))); }
+function vActivity(){
+  if(S.auditErr) return `<div class="warn">${esc(S.auditErr)}</div>`;
+  if(!S.audit){ loadAudit(); return `<div class="empty">Loading…</div>`; }
+  const r = periodRange(), rows = S.audit;
+  const by = {}; rows.forEach(a => by[a.staff_email || "—"] = (by[a.staff_email || "—"] || 0) + 1);
+  return `<div class="between" style="flex-wrap:wrap;gap:10px">
+      <div class="tabs" style="width:fit-content">${[["period", r.label], ["all", "All time"]].map(([k, l]) => `<button class="tab ${(S.auditAll ? "all" : "period") === k ? "on" : ""}" onclick="S.auditAll=${k === "all"};S.audit=null;render()">${esc(l)}</button>`).join("")}</div>
+      <div class="row"><input id="auditQ" class="input" style="width:260px;padding:9px 12px" placeholder="Search action, staff, person, ID…" value="${esc(S.auditQ || "")}" oninput="S.auditQ=this.value;setHtml('auditBody',auditBodyHtml())">
+        <button class="btn sm" onclick="exportAudit()">Download CSV</button></div></div>
+    <div class="xs muted2 mt8">Every approval, refund, payout, commission change, offer, suspension, ID check and chat opened by staff. Entries can't be edited or deleted. Change the period on the Overview tab.</div>
+    <div class="grid mt12">${Object.keys(by).slice(0, 6).map(e => `<div class="stat"><div class="v">${num(by[e])}</div><div class="l">${esc(e)}</div></div>`).join("")}</div>
+    <div class="card tblwrap mt12"><table><thead><tr><th>When</th><th>Who</th><th>What</th><th>Details</th></tr></thead><tbody id="auditBody">${auditBodyHtml()}</tbody></table></div>`;
 }
 
 /* =========================== offers =========================== */
@@ -1703,7 +1858,7 @@ function vBooking(){
         ${kv("Type", esc(CAT_NAMES[b.category] || b.category))}${kv("When", when(b.start_at))}${kv("Hours", esc(b.duration_hrs))}
         ${kv("Where", esc([b.address, b.city, b.pincode].filter(Boolean).join(", ")))}${kv("Booked", when(b.created_at))}
         ${b.status === "cancelled" ? kv("Cancelled", esc((b.cancelled_by || "—") + " · at " + (b.cancelled_from || "—"))) : ""}
-        ${kv("Messages", esc(d.messages) + (d.last_message ? " · last " + when(d.last_message) : ""))}</div>
+        ${kv("Messages", esc(d.messages) + (d.last_message ? " · last " + when(d.last_message) : "") + (money ? ` <button class="linkbtn" onclick="openChat('${x.id}')">Read chat ›</button>` : ""))}</div>
       <div class="card"><div class="sec">People</div>
         ${kv("Customer", esc(d.customer && d.customer.name) + (d.customer && d.customer.id ? ` <span class="xs" style="color:var(--accent)">${esc(d.customer.id)}</span>` : ""))}${kv("Customer email", esc(d.customer && d.customer.email))}${kv("Customer phone", esc(d.customer && d.customer.phone))}
         ${kv("Photographer", esc(d.photographer && d.photographer.name) + (d.photographer && d.photographer.id ? ` <span class="xs" style="color:var(--accent)">${esc(d.photographer.id)}</span>` : ""))}${kv("Photographer email", esc(d.photographer && d.photographer.email))}
@@ -1856,7 +2011,7 @@ function render(){
     S.view==="newpw"   ? vNewPw()   :
     S.view==="code"    ? vCode()    :
     S.view==="denied"  ? vDenied()  :
-    S.view==="console" ? vConsole() + vDrill() + vBooking() : vLogin();
+    S.view==="console" ? vConsole() + vDrill() + vBooking() + vChatView() : vLogin();
 
   try{ drawCharts(); }catch(e){ console.warn('charts', e); }
   try{ drawReportCharts(); }catch(e){ console.warn('report charts', e); }

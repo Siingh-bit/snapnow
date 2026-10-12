@@ -2473,6 +2473,386 @@ grant execute on function public.admin_referral_save(jsonb)      to authenticate
 grant execute on function public.admin_offers_overview()         to authenticated;
 
 -- =====================================================================
+-- 7f. TRUST & SAFETY
+--     • Activity log of everything staff do (approvals, refunds, payouts,
+--       commission, offers, suspensions, ID checks, chats opened…)
+--     • Suspend / block customers and photographers
+--     • Staff can read a booking's chat (every opening is logged)
+--     • Photographer ID check: government ID front + back and a face photo,
+--       stored in a PRIVATE bucket only staff can open
+--     • In-app voice calls: each booking has a secret call channel
+-- =====================================================================
+
+-- ---------- activity log ----------
+create table if not exists public.admin_audit (
+  id          bigserial primary key,
+  at          timestamptz not null default now(),
+  staff_id    uuid,
+  staff_email text,
+  staff_role  text,
+  action      text not null,
+  target_type text,
+  target_id   text,
+  target_name text,
+  details     jsonb
+);
+create index if not exists idx_audit_at on public.admin_audit(at desc);
+alter table public.admin_audit enable row level security;
+drop policy if exists audit_read on public.admin_audit;
+create policy audit_read on public.admin_audit for select to authenticated
+  using (coalesce(public.staff_role() in ('super_admin','admin'), false));
+revoke insert, update, delete on public.admin_audit from anon, authenticated;
+
+-- record one staff action (does nothing for non-staff, e.g. a photographer editing their own profile)
+create or replace function public._audit(p_action text, p_type text, p_id text, p_name text, p_details jsonb, p_staff uuid default null)
+returns void language plpgsql security definer set search_path = public
+as $$
+declare s record;
+begin
+  select id, email, role into s from public.staff where id = coalesce(p_staff, auth.uid());
+  if not found then return; end if;
+  insert into public.admin_audit (staff_id, staff_email, staff_role, action, target_type, target_id, target_name, details)
+  values (s.id, s.email, s.role, p_action, p_type, p_id, p_name, p_details);
+end $$;
+revoke all on function public._audit(text, text, text, text, jsonb, uuid) from public, anon, authenticated;
+
+create or replace function public.audit_photographers()
+returns trigger language plpgsql security definer set search_path = public
+as $$
+begin
+  if new.approval_status is distinct from old.approval_status then
+    perform public._audit(case new.approval_status when 'approved' then 'Approved photographer' when 'rejected' then 'Did not approve photographer' else 'Photographer back to review' end,
+      'photographer', new.id::text, new.display_name, jsonb_build_object('note', new.review_note));
+  end if;
+  if new.is_verified is distinct from old.is_verified then
+    perform public._audit(case when new.is_verified then 'Gave Verified badge' else 'Removed Verified badge' end, 'photographer', new.id::text, new.display_name, null);
+  end if;
+  if new.commission_pct is distinct from old.commission_pct then
+    perform public._audit('Changed photographer commission', 'photographer', new.id::text, new.display_name,
+      jsonb_build_object('from', old.commission_pct, 'to', new.commission_pct));
+  end if;
+  return new;
+end $$;
+drop trigger if exists audit_photographers on public.photographers;
+create trigger audit_photographers after update on public.photographers for each row execute function public.audit_photographers();
+
+create or replace function public.audit_settings()
+returns trigger language plpgsql security definer set search_path = public
+as $$
+begin
+  perform public._audit('Changed setting: ' || new.key, 'setting', new.key, new.key,
+    jsonb_build_object('from', case when tg_op = 'UPDATE' then old.value end, 'to', new.value));
+  return new;
+end $$;
+drop trigger if exists audit_settings on public.platform_settings;
+create trigger audit_settings after insert or update on public.platform_settings for each row execute function public.audit_settings();
+
+create or replace function public.audit_offers()
+returns trigger language plpgsql security definer set search_path = public
+as $$
+begin
+  perform public._audit(case when tg_op = 'INSERT' then 'Created offer' when new.active is distinct from old.active then (case when new.active then 'Made offer live' else 'Paused offer' end) else 'Edited offer' end,
+    'offer', new.id::text, new.title, jsonb_build_object('kind', new.kind, 'amount', new.amount, 'code', new.code, 'audience', new.audience));
+  return new;
+end $$;
+drop trigger if exists audit_offers on public.promo_offers;
+create trigger audit_offers after insert or update on public.promo_offers for each row execute function public.audit_offers();
+
+create or replace function public.audit_benefits()
+returns trigger language plpgsql security definer set search_path = public
+as $$
+begin
+  if new.source = 'admin' then
+    perform public._audit('Gave reward', 'user', new.user_id::text, (select coalesce(public_id || ' ', '') || coalesce(name,'') from public.profiles where id = new.user_id),
+      jsonb_build_object('title', new.title, 'kind', new.kind, 'amount', new.amount));
+  end if;
+  return new;
+end $$;
+drop trigger if exists audit_benefits on public.user_benefits;
+create trigger audit_benefits after insert on public.user_benefits for each row execute function public.audit_benefits();
+
+create or replace function public.audit_bookings()
+returns trigger language plpgsql security definer set search_path = public
+as $$
+begin
+  if new.payout_status = 'paid' and old.payout_status is distinct from 'paid' then
+    perform public._audit('Recorded payout', 'booking', new.id::text, 'SP-' || upper(left(new.id::text, 8)) || ' · ' || coalesce(new.photographer_name,''),
+      jsonb_build_object('amount', new.photographer_amount, 'reference', new.payout_ref));
+  end if;
+  return new;
+end $$;
+drop trigger if exists audit_bookings on public.bookings;
+create trigger audit_bookings after update on public.bookings for each row execute function public.audit_bookings();
+
+create or replace function public.audit_refunds()
+returns trigger language plpgsql security definer set search_path = public
+as $$
+begin
+  perform public._audit('Started refund', 'payment', new.payment_id::text, new.order_id,
+    jsonb_build_object('amount', new.amount, 'reason', new.reason), new.requested_by);
+  return new;
+end $$;
+drop trigger if exists audit_refunds on public.refunds;
+create trigger audit_refunds after insert on public.refunds for each row execute function public.audit_refunds();
+
+create or replace function public.audit_staff()
+returns trigger language plpgsql security definer set search_path = public
+as $$
+begin
+  if tg_table_name = 'staff' then
+    if tg_op = 'DELETE' then perform public._audit('Removed staff member', 'staff', old.id::text, old.email, jsonb_build_object('role', old.role)); return old; end if;
+    if tg_op = 'UPDATE' and (new.role is distinct from old.role or new.status is distinct from old.status) then
+      perform public._audit(case when new.status is distinct from old.status then (case when new.status = 'suspended' then 'Suspended staff member' else 'Restored staff member' end) else 'Changed staff role' end,
+        'staff', new.id::text, new.email, jsonb_build_object('from', old.role, 'to', new.role, 'status', new.status));
+    end if;
+    return new;
+  else
+    if tg_op = 'DELETE' then perform public._audit('Cancelled staff invite', 'invite', old.id::text, old.email, null); return old; end if;
+    if tg_op = 'INSERT' then perform public._audit('Invited staff member', 'invite', new.id::text, new.email, jsonb_build_object('role', new.role)); end if;
+    return new;
+  end if;
+end $$;
+drop trigger if exists audit_staff on public.staff;
+create trigger audit_staff after update or delete on public.staff for each row execute function public.audit_staff();
+drop trigger if exists audit_invites on public.staff_invites;
+create trigger audit_invites after insert or delete on public.staff_invites for each row execute function public.audit_staff();
+
+create or replace function public.admin_audit_log(p_from date default null, p_to date default null, p_limit int default 2000)
+returns setof public.admin_audit language plpgsql stable security definer set search_path = public
+as $$ begin
+  return query select * from public.admin_audit
+       where coalesce(public.staff_role() in ('super_admin','admin'), false)
+         and (p_from is null or (at at time zone 'Asia/Kolkata')::date >= p_from) and (p_to is null or (at at time zone 'Asia/Kolkata')::date <= p_to)
+       order by at desc limit greatest(1, least(p_limit, 10000));
+end $$;
+
+-- ---------- suspend / block accounts ----------
+alter table public.profiles
+  add column if not exists status        text not null default 'active',
+  add column if not exists status_reason text,
+  add column if not exists status_until  timestamptz,
+  add column if not exists status_by     uuid,
+  add column if not exists status_at     timestamptz;
+do $$ begin
+  alter table public.profiles add constraint profiles_status_check check (status in ('active','suspended','blocked'));
+exception when duplicate_object then null; end $$;
+
+-- people can't change their own status (extends the SnapPro ID guard)
+create or replace function public.profile_status_guard()
+returns trigger language plpgsql
+as $$
+begin
+  if public.snappro_system() then return new; end if;
+  if tg_op = 'INSERT' then new.status := 'active'; new.status_reason := null; new.status_until := null; new.status_by := null; new.status_at := null;
+  else new.status := old.status; new.status_reason := old.status_reason; new.status_until := old.status_until; new.status_by := old.status_by; new.status_at := old.status_at; end if;
+  return new;
+end $$;
+drop trigger if exists profile_status_guard on public.profiles;
+create trigger profile_status_guard before insert or update on public.profiles for each row execute function public.profile_status_guard();
+
+create or replace function public.is_blocked(p_user uuid)
+returns boolean language sql stable security definer set search_path = public
+as $$ select exists (select 1 from public.profiles where id = p_user and status in ('suspended','blocked')
+                       and (status = 'blocked' or status_until is null or status_until > now())) $$;
+create or replace function public._check_not_blocked()
+returns void language plpgsql stable security definer set search_path = public
+as $$ begin
+  if public.is_blocked(auth.uid()) then raise exception 'Your account is suspended. Contact snappro.support@gmail.com if you think this is a mistake.'; end if;
+end $$;
+
+-- every way of acting on SnapPro checks the account first
+create or replace function public.block_guard()
+returns trigger language plpgsql security definer set search_path = public
+as $$ begin
+  perform public._check_not_blocked();
+  if tg_table_name = 'bookings' then
+    if public.is_blocked((select photographer_id from public.offers where id = (to_jsonb(new)->>'offer_id')::uuid)) then
+      raise exception 'This photographer isn''t available any more. Please pick another quote.';
+    end if;
+  end if;
+  return new;
+end $$;
+drop trigger if exists block_guard on public.requests;
+create trigger block_guard before insert on public.requests for each row execute function public.block_guard();
+drop trigger if exists block_guard on public.offers;
+create trigger block_guard before insert on public.offers for each row execute function public.block_guard();
+drop trigger if exists block_guard on public.bookings;
+create trigger block_guard before insert on public.bookings for each row execute function public.block_guard();
+drop trigger if exists block_guard on public.messages;
+create trigger block_guard before insert on public.messages for each row execute function public.block_guard();
+drop trigger if exists block_guard on public.reviews;
+create trigger block_guard before insert on public.reviews for each row execute function public.block_guard();
+
+-- suspended photographers disappear from search
+drop policy if exists photographers_select_all on public.photographers;
+create policy photographers_select_all on public.photographers for select
+  using ((approval_status = 'approved' and not public.is_blocked(id)) or id = auth.uid() or public.is_staff());
+
+create or replace function public.admin_set_user_status(p_user uuid, p_status text, p_reason text default null, p_days int default null)
+returns text language plpgsql security definer set search_path = public
+as $$
+declare nm text;
+begin
+  if coalesce(public.staff_role() in ('super_admin','admin'), false) is not true then raise exception 'Only admins can suspend accounts'; end if;
+  if p_status not in ('active','suspended','blocked') then raise exception 'Unknown status'; end if;
+  if exists (select 1 from public.staff where id = p_user) then raise exception 'Use the Team tab for staff accounts'; end if;
+  if p_status <> 'active' and coalesce(trim(p_reason),'') = '' then raise exception 'Add a reason'; end if;
+  perform set_config('snappro.system', 'on', true);
+  update public.profiles set status = p_status, status_reason = case when p_status = 'active' then null else left(trim(p_reason), 300) end,
+         status_until = case when p_status = 'suspended' and p_days is not null then now() + make_interval(days => p_days) end,
+         status_by = auth.uid(), status_at = now()
+   where id = p_user returning coalesce(public_id || ' ', '') || coalesce(name, '') into nm;
+  perform set_config('snappro.system', '', true);
+  if nm is null then raise exception 'Account not found'; end if;
+  perform public._audit(case p_status when 'active' then 'Restored account' when 'blocked' then 'Blocked account' else 'Suspended account' end,
+    'user', p_user::text, nm, jsonb_build_object('reason', p_reason, 'days', p_days));
+  return p_status;
+end $$;
+
+-- the app asks this at start-up to show a "suspended" screen
+create or replace function public.my_status()
+returns jsonb language sql stable security definer set search_path = public
+as $$ select jsonb_build_object('status', case when public.is_blocked(id) then status else 'active' end,
+                                'reason', status_reason, 'until', status_until)
+       from public.profiles where id = auth.uid() $$;
+
+-- ---------- staff reading a booking's chat (for disputes / fraud) ----------
+create or replace function public.admin_chat(p_booking uuid)
+returns jsonb language plpgsql security definer set search_path = public
+as $$
+declare b record;
+begin
+  if coalesce(public.staff_role() in ('super_admin','admin'), false) is not true then raise exception 'Only admins can read chats'; end if;
+  select * into b from public.bookings where id = p_booking;
+  if not found then raise exception 'Booking not found'; end if;
+  perform public._audit('Opened chat', 'booking', b.id::text, 'SP-' || upper(left(b.id::text, 8)) || ' · ' || coalesce(b.customer_name,'') || ' ↔ ' || coalesce(b.photographer_name,''), null);
+  return jsonb_build_object('customer_id', b.customer_id, 'photographer_id', b.photographer_id,
+    'customer', b.customer_name, 'photographer', b.photographer_name,
+    'messages', (select coalesce(jsonb_agg(jsonb_build_object('at', m.created_at, 'from',
+                   case when m.sender_id = b.customer_id then 'customer' when m.sender_id = b.photographer_id then 'photographer' else 'other' end,
+                   'text', m.content) order by m.created_at), '[]') from public.messages m where m.booking_id = b.id));
+end $$;
+
+-- ---------- photographer ID check (government ID + face photo) ----------
+create table if not exists public.photographer_kyc (
+  id           uuid primary key references public.photographers(id) on delete cascade,
+  id_type      text check (id_type in ('aadhaar','pan','driving_licence','passport')),
+  id_last4     text,
+  front_path   text,
+  back_path    text,
+  selfie_path  text,
+  status       text not null default 'not_submitted' check (status in ('not_submitted','submitted','verified','rejected')),
+  note         text,
+  submitted_at timestamptz,
+  reviewed_by  uuid,
+  reviewed_at  timestamptz
+);
+alter table public.photographer_kyc enable row level security;
+drop policy if exists kyc_own_read on public.photographer_kyc;
+create policy kyc_own_read on public.photographer_kyc for select to authenticated
+  using (id = auth.uid() or coalesce(public.staff_role() in ('super_admin','admin'), false));
+revoke insert, update, delete on public.photographer_kyc from anon, authenticated;
+
+-- private bucket: photographers upload into their own folder; only admins can open the files
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('kyc', 'kyc', false, 5242880, array['image/jpeg','image/png','image/webp'])
+on conflict (id) do update set public = false, file_size_limit = 5242880, allowed_mime_types = array['image/jpeg','image/png','image/webp'];
+drop policy if exists "snappro kyc upload own" on storage.objects;
+create policy "snappro kyc upload own" on storage.objects for insert to authenticated
+  with check (bucket_id = 'kyc' and (storage.foldername(name))[1] = auth.uid()::text);
+drop policy if exists "snappro kyc admin read" on storage.objects;
+create policy "snappro kyc admin read" on storage.objects for select to authenticated
+  using (bucket_id = 'kyc' and coalesce(public.staff_role() in ('super_admin','admin'), false));
+
+create or replace function public.submit_kyc(p_type text, p_last4 text, p_front text, p_back text, p_selfie text)
+returns text language plpgsql security definer set search_path = public
+as $$
+declare me uuid := auth.uid(); pre text := me::text || '/';
+begin
+  if not exists (select 1 from public.photographers where id = me) then raise exception 'Only photographers verify their ID'; end if;
+  perform public._check_not_blocked();
+  if p_type not in ('aadhaar','pan','driving_licence','passport') then raise exception 'Choose your ID type'; end if;
+  if p_front is null or left(p_front, length(pre)) <> pre or p_selfie is null or left(p_selfie, length(pre)) <> pre then raise exception 'Add the ID photo and your face photo'; end if;
+  if p_type <> 'pan' and (p_back is null or left(p_back, length(pre)) <> pre) then raise exception 'Add the back of your ID too'; end if;
+  if p_last4 is not null and p_last4 !~ '^[A-Za-z0-9]{4}$' then raise exception 'Enter the last 4 characters of the ID number'; end if;
+  insert into public.photographer_kyc (id, id_type, id_last4, front_path, back_path, selfie_path, status, note, submitted_at, reviewed_by, reviewed_at)
+  values (me, p_type, upper(p_last4), p_front, p_back, p_selfie, 'submitted', null, now(), null, null)
+  on conflict (id) do update set id_type = excluded.id_type, id_last4 = excluded.id_last4, front_path = excluded.front_path,
+     back_path = excluded.back_path, selfie_path = excluded.selfie_path, status = 'submitted', note = null,
+     submitted_at = now(), reviewed_by = null, reviewed_at = null;
+  return 'submitted';
+end $$;
+
+create or replace function public.kyc_review(p_pg uuid, p_status text, p_note text default null)
+returns text language plpgsql security definer set search_path = public
+as $$
+declare k record; nm text; em text;
+begin
+  if coalesce(public.staff_role() in ('super_admin','admin'), false) is not true then raise exception 'Only admins can review IDs'; end if;
+  if p_status not in ('verified','rejected') then raise exception 'Unknown status'; end if;
+  if p_status = 'rejected' and coalesce(trim(p_note),'') = '' then raise exception 'Say what needs re-doing (e.g. the photo is blurry)'; end if;
+  update public.photographer_kyc set status = p_status, note = case when p_status = 'rejected' then left(trim(p_note), 300) end,
+         reviewed_by = auth.uid(), reviewed_at = now() where id = p_pg returning * into k;
+  if not found then raise exception 'No ID submitted yet'; end if;
+  select display_name into nm from public.photographers where id = p_pg;
+  perform public._audit(case when p_status = 'verified' then 'Verified photographer ID' else 'Asked for new ID photos' end, 'photographer', p_pg::text, nm,
+    jsonb_build_object('id_type', k.id_type, 'note', p_note));
+  if p_status = 'rejected' then
+    select email into em from auth.users where id = p_pg;
+    begin
+      perform public._send_email(em, 'Please re-do your SnapPro ID check',
+        public._email_shell('One more step, ' || public._esc(split_part(coalesce(nm,''),' ',1)) || '.',
+          'We couldn''t verify your ID: ' || public._esc(p_note) || ' Please open SnapPro and capture your ID and face photo again.',
+          'Open SnapPro', 'https://snappro.in/app.html#login'));
+    exception when others then null; end;
+  end if;
+  return p_status;
+end $$;
+
+-- ---------- in-app voice calls ----------
+-- each booking gets a secret channel name; only the two people on it can read it
+alter table public.bookings add column if not exists call_token uuid not null default gen_random_uuid();
+insert into public.platform_settings (key, value) values ('call_ice_servers',
+  '[{"urls":["stun:stun.l.google.com:19302","stun:stun1.l.google.com:19302"]}]') on conflict (key) do nothing;
+-- ICE servers (STUN/TURN) for people with a live booking — not public
+create or replace function public.call_config()
+returns jsonb language sql stable security definer set search_path = public
+as $$ select case when exists (select 1 from public.bookings b where (b.customer_id = auth.uid() or b.photographer_id = auth.uid())
+                                  and b.status in ('confirmed','enroute','arrived','shooting','completed'))
+                  then (select value from public.platform_settings where key = 'call_ice_servers') end $$;
+-- keep TURN passwords out of the public settings read
+drop policy if exists settings_read on public.platform_settings;
+create policy settings_read on public.platform_settings for select using (key <> 'call_ice_servers');
+drop policy if exists settings_staff_read on public.platform_settings;
+create policy settings_staff_read on public.platform_settings for select to authenticated using (public.is_staff());
+-- private Realtime channels "call:<token>": only the booking's two people may join (if Realtime is available)
+do $$ begin
+  execute 'drop policy if exists "snappro call parties read" on realtime.messages';
+  execute 'create policy "snappro call parties read" on realtime.messages for select to authenticated using (
+             exists (select 1 from public.bookings b where ''call:'' || b.call_token::text = realtime.topic()
+                      and (b.customer_id = auth.uid() or b.photographer_id = auth.uid())))';
+  execute 'drop policy if exists "snappro call parties send" on realtime.messages';
+  execute 'create policy "snappro call parties send" on realtime.messages for insert to authenticated with check (
+             exists (select 1 from public.bookings b where ''call:'' || b.call_token::text = realtime.topic()
+                      and (b.customer_id = auth.uid() or b.photographer_id = auth.uid())))';
+exception when others then raise notice 'Realtime policies skipped: %', sqlerrm; end $$;
+
+revoke all on function public.admin_audit_log(date, date, int)   from public, anon;
+revoke all on function public.admin_set_user_status(uuid, text, text, int) from public, anon;
+revoke all on function public.my_status()                        from public, anon;
+revoke all on function public.admin_chat(uuid)                   from public, anon;
+revoke all on function public.submit_kyc(text, text, text, text, text) from public, anon;
+revoke all on function public.kyc_review(uuid, text, text)       from public, anon;
+revoke all on function public.call_config()                      from public, anon;
+grant execute on function public.admin_audit_log(date, date, int)   to authenticated;
+grant execute on function public.admin_set_user_status(uuid, text, text, int) to authenticated;
+grant execute on function public.my_status()                        to authenticated;
+grant execute on function public.admin_chat(uuid)                   to authenticated;
+grant execute on function public.submit_kyc(text, text, text, text, text) to authenticated;
+grant execute on function public.kyc_review(uuid, text, text)       to authenticated;
+grant execute on function public.call_config()                      to authenticated;
+
+-- =====================================================================
 -- 8. FUNCTION PERMISSIONS
 --    Supabase lets browsers call any public function by default. The
 --    email sender is locked away; the rest check the caller themselves.
@@ -2659,7 +3039,8 @@ create or replace function public.admin_users()
 returns table(id uuid, name text, email text, phone text, role text, city text, state text, pincode text,
               joined timestamptz, last_sign_in timestamptz, confirmed boolean, is_staff boolean,
               requests int, bookings int, jobs_done int, rating numeric, review_count int,
-              is_verified boolean, is_online boolean, photos int, approval_status text, public_id text, commission_pct numeric)
+              is_verified boolean, is_online boolean, photos int, approval_status text, public_id text, commission_pct numeric,
+              account_status text, status_reason text, status_until timestamptz, kyc_status text)
 language plpgsql stable security definer set search_path = public
 as $$
 begin
@@ -2672,7 +3053,9 @@ begin
          (select count(*)::int from public.requests q where q.customer_id = u.id),
          (select count(*)::int from public.bookings b where (b.customer_id = u.id or b.photographer_id = u.id) and b.status <> 'cancelled'),
          g.jobs_done, g.rating, g.review_count, g.is_verified, g.is_online,
-         coalesce(array_length(g.portfolio,1), 0), g.approval_status, p.public_id, g.commission_pct
+         coalesce(array_length(g.portfolio,1), 0), g.approval_status, p.public_id, g.commission_pct,
+         case when public.is_blocked(u.id) then p.status else 'active' end, p.status_reason, p.status_until,
+         (select k.status from public.photographer_kyc k where k.id = u.id)
     from auth.users u
     left join public.profiles p on p.id = u.id
     left join public.photographers g on g.id = u.id
@@ -3080,4 +3463,6 @@ select
   exists (select 1 from pg_proc where proname = 'media_begin')
     and exists (select 1 from public.platform_settings where key = 'storage_plans')      as media_storage_ready,
   exists (select 1 from pg_proc where proname = 'claim_offer')
-    and not exists (select 1 from public.profiles where public_id is null)               as offers_and_ids_ready;
+    and not exists (select 1 from public.profiles where public_id is null)               as offers_and_ids_ready,
+  exists (select 1 from pg_proc where proname = 'submit_kyc')
+    and exists (select 1 from storage.buckets where id = 'kyc' and not public)           as safety_ready;
