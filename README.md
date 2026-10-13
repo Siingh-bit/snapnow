@@ -17,7 +17,9 @@ commission and pays the photographer their share after the shoot. See [PAYMENTS.
 | `admin.html` | Staff console at snappro.in/admin.html (super admin, admin, manager) |
 | `supabase/snappro.sql` | Complete database set-up: tables, security rules, triggers, storage, invite emails, payments. Safe to run again. |
 | `supabase/functions/` | Server functions (Supabase Edge Functions) for Razorpay payments and webhooks |
-| `terms.html`, `privacy.html`, `refunds.html`, `delivery.html`, `contact.html` | Policy pages |
+| `terms.html`, `privacy.html`, `refunds.html`, `delivery.html`, `contact.html`, `delete-account.html` | Policy pages (delete-account is the account-deletion page Google Play links to) |
+| `site.webmanifest`, `sw.js`, `offline.html`, `icon-*.png` | Makes the app installable; the service worker only shows the offline page and never caches the app |
+| `.well-known/assetlinks.json` | (added after the first Play upload) proves the Android app `in.snappro.app` belongs to snappro.in |
 | `.github/workflows/deploy.yml` | Uploads the site to Hostinger on every push to `main` |
 
 ## How it works

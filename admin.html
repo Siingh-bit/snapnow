@@ -2635,6 +2635,8 @@ function vTrust(){
     ${m ? dtable("trDup", "Duplicate payments", [["paid_at","Paid","dt"],["order_id","Order"],["amount","Amount","inr"],["refund_status","Refund"],["booking_id","Booking", r => bkLink(r.booking_id)]], T.duplicate_payments, { search: false, empty: "None." }) : ""}
     ${dtable("trRef", "Invites held for review", [["name","Friend", r => userLink(r.id, r.name, r.public_id)],["ref_name","Invited by", r => esc(r.ref_name || "") + " " + esc(r.ref_id || "")],["referral_flag","Why"],
         ["a","", r => m ? `<button class="btn sm" onclick="event.stopPropagation();refAction('${r.id}','reward')">Reward</button> <button class="btn sm" onclick="event.stopPropagation();refAction('${r.id}','remove')">Remove</button>` : ""]], T.referral_flags, { search: false, empty: "None." })}
+    ${m ? dtable("trDel", "Deleted accounts", [["deleted_at","Deleted","dt"],["public_id","SnapPro ID"],["role","Type","chip"],["via","How", r => r.via === "admin" ? "By staff (email request)" : "By the person, in the app"],["reason","Reason"],
+        ["login_closed","Login", r => r.login_closed ? '<span class="chip green">Closed</span>' : '<span class="chip red">Remove in Supabase → Authentication → Users</span>'],["user_id","Timeline", r => `<a class="lnk" onclick="S.tlR='30d';S.tlG='';S.tlQ='';S.tl=null;openTab('timeline')">view</a>`]], T.deletions, { span: true, empty: "No accounts deleted yet." }) : ""}
     ${dtable("trStaff", "Staff activity — last 30 days", [["staff","Staff"],["n","Actions","n"],["last_at","Last action","ago"]], T.staff_actions, { search: false, click: () => "openTab('activity')" })}
   </div>`;
 }
@@ -2799,6 +2801,7 @@ function vUser360(){
         ["City", esc([p.city, p.state, p.pincode].filter(Boolean).join(", "))], ["Member no.", num(p.member_no)], ["Account", esc(p.status) + (p.status_reason ? " — " + esc(p.status_reason) : "") + (p.status_until ? " until " + dt(p.status_until) : "")],
         ["Invited by", p.referred_by ? userLink(p.referred_by.id, p.referred_by.name, p.referred_by.public_id) + (p.referral_at ? " · " + fmt(p.referral_at) : "") : ""], ["Invite rewarded", p.referral_rewarded_at ? dt(p.referral_rewarded_at) : ""]])}
         ${m ? `<div class="row mt12" style="flex-wrap:wrap">${p.status === "active" ? `<button class="btn sm danger" onclick="setUserStatus('${p.id}','suspended').then(()=>openUser('${p.id}'))">Suspend</button><button class="btn sm danger" onclick="setUserStatus('${p.id}','blocked').then(()=>openUser('${p.id}'))">Block</button>` : `<button class="btn sm" onclick="setUserStatus('${p.id}','active').then(()=>openUser('${p.id}'))">Restore account</button>`}
+          ${p.name !== "Deleted user" ? `<button class="btn sm danger" onclick="adminDeleteAccount('${p.id}')">Delete account…</button>` : ""}
           ${p.phone ? `<a class="btn sm" href="https://wa.me/${esc(String(p.phone).replace(/\D/g, "").replace(/^(\d{10})$/, "91$1"))}" target="_blank" rel="noopener">WhatsApp</a>` : ""}</div>` : ""}</div>
       <div class="card"><div class="sec">How they found SnapPro</div>
         <div class="xs muted2">First visit</div>${touchHtml(a.first)}
@@ -2823,6 +2826,20 @@ function vUser360(){
       ${(D.reviews_given || []).length || (D.reviews_received || []).length ? sec("Reviews", mini([["created_at","When","dt"],["stars","Stars", r => "★".repeat(r.stars)],["customer_name","From"],["body","Review"]], (D.reviews_received || []).concat(D.reviews_given || []), r => `openBooking('${r.booking_id}')`)) : ""}
       ${m && (D.admin_actions || []).length ? sec("Staff actions on this account (" + num(D.admin_actions.length) + ")", mini([["at","When","dt"],["staff_email","Staff"],["action","Action"],["details","Details", r => r.details ? `<span class="xs mono">${esc(JSON.stringify(r.details)).slice(0, 200)}</span>` : ""]], D.admin_actions)) : ""}
     </div>`);
+}
+
+/* delete someone's account when they ask by email (Google Play requires a way to do this) */
+async function adminDeleteAccount(id){
+  const reason = prompt("Delete this account? Their name, email, phone, profile, portfolio, UPI and ID photos are erased. Booking and payment records stay without personal details. This can't be undone.\n\nWrite why (for example: asked by email on 12 Oct):", "");
+  if(reason === null) return;
+  if(!reason.trim()){ S.err = "Write why the account is being deleted."; render(); return; }
+  const { data, error } = await sb.rpc("admin_delete_account", { p_user: id, p_reason: reason.trim() });
+  if(error){ S.err = error.message; render(); return; }
+  const f = (data && data.files) || {};
+  if((f.kyc || []).length){ try{ await sb.storage.from("kyc").remove(f.kyc); }catch(e){} }
+  S.note = "Account deleted." + (data && data.login_closed ? "" : " Also remove their login in Supabase → Authentication → Users.");
+  if(S.dept.trust) deptLoad("trust", true);
+  openUser(id);
 }
 
 /* ============================ render ========================== */

@@ -20,7 +20,9 @@
 <meta name="twitter:title" content="SnapPro — Book a photographer near you">
 <meta name="twitter:description" content="Book a photographer near you. Post your shoot, get quotes from photographers in your city, compare portfolios and prices, and book.">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%23ff5a1f'/%3E%3Cpath d='M74 38H62l-4-6H42l-4 6H26a4 4 0 0 0-4 4v26a4 4 0 0 0 4 4h48a4 4 0 0 0 4-4V42a4 4 0 0 0-4-4z' fill='none' stroke='%23fff' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='50' cy='52' r='9' fill='none' stroke='%23fff' stroke-width='3.5'/%3E%3C/svg%3E">
-<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%23ff5a1f'/%3E%3Cpath d='M74 38H62l-4-6H42l-4 6H26a4 4 0 0 0-4 4v26a4 4 0 0 0 4 4h48a4 4 0 0 0 4-4V42a4 4 0 0 0-4-4z' fill='none' stroke='%23fff' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='50' cy='52' r='9' fill='none' stroke='%23fff' stroke-width='3.5'/%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
 <script>
 /* apply the saved appearance before the page paints (no white flash) */
 (function(){ try{ var p = JSON.parse(localStorage.getItem("snappro.v3") || "{}"), m = p.theme || "light", h = new Date().getHours();
@@ -1557,7 +1559,7 @@ const NO_CONN = "Couldn't connect to SnapPro. Check your internet and refresh th
 /* ============================================================
    AUTH SCREENS
    ============================================================ */
-function authGo(step, patch){ S.auth = Object.assign({}, S.auth, patch || {}, { step, err: null }); render(); scrollTop(); }
+function authGo(step, patch){ S.auth = Object.assign({}, S.auth, patch || {}, { step, err: null }); navMark(step === "welcome"); render(); scrollTop(); }
 function authTop(title, sub, back){
   return `<div class="topbar">${back ? `<button class="iconbtn" aria-label="Back" onclick="${back}">${icon("back",18)}</button>` : ""}
     <div class="grow"><div class="h3">${esc(title)}</div>${sub ? `<div class="xs muted2">${esc(sub)}</div>` : ""}</div></div>`;
@@ -2554,6 +2556,7 @@ function vProfile(){
     ${appearanceCard()}
     ${helpCard()}
     <button class="btn block mt16" onclick="logout()">${icon("logout",16)} Log out</button>
+    <div class="center mt16"><button class="linkish xs muted2" onclick="S.delChk=undefined;push('deleteAccount')">Delete my account</button></div>
   </div>`;
 }
 function vEditName(){
@@ -4213,6 +4216,92 @@ function appearanceCard(){
 }
 
 /* ============================================================
+   ANDROID APP & ACCOUNT DELETION
+   - phone back button: inner screen → previous screen, other tab → Home,
+     sign-up / log-in → welcome; only exits from Home or Welcome
+   - offline page through a small service worker (never caches the app itself)
+   - "Delete my account" (required by Google Play)
+   ============================================================ */
+function navMark(root){
+  try{
+    const st = history.state || {};
+    if(root){ if(st.soft){ ignorePop++; history.back(); } return; }
+    if(!st.soft && !st.snap) history.pushState({ soft: 1 }, "");
+  }catch(e){}
+}
+/* the phone's back button when there's no inner screen open */
+function softBack(){
+  if(S.me && !/^setup/.test((S.auth || {}).step || "")){
+    if(S.tab !== "home"){ S.tab = "home"; S.formErr = null; render(); scrollTop(); }
+    return;
+  }
+  const a = S.auth || {}, to = { signup: "welcome", login: "welcome", reset: "login", newpw: "login", otp: a.mode === "reset" ? "reset" : "signup" }[a.step];
+  if(!to) return;
+  if(typeof pwReset === "function") pwReset();
+  S.auth = Object.assign({}, a, { step: to, err: null }); render(); scrollTop();
+  if(to !== "welcome") try{ history.pushState({ soft: 1 }, ""); }catch(e){}
+}
+
+/* offline page for the installed app */
+if("serviceWorker" in navigator && location.protocol === "https:"){
+  window.addEventListener("load", () => { navigator.serviceWorker.register("/sw.js").catch(() => {}); });
+}
+
+/* ---------- delete my account ---------- */
+async function loadDelCheck(){
+  try{ const { data, error } = await sb.rpc("account_deletion_check"); S.delChk = error ? { err: error.message } : (data || { blockers: [] }); }
+  catch(e){ S.delChk = { err: "Couldn't check right now. Try again." }; }
+  softRender();
+}
+function vDeleteAccount(){
+  if(S.delChk === undefined){ S.delChk = null; loadDelCheck(); }
+  const c = S.delChk, bl = (c && c.blockers) || [], busy = S.loading && S.loading.del;
+  return `${topbar("Delete my account")}
+  <div class="pad">
+    <div class="card">
+      <div class="sm bold">What happens</div>
+      <div class="xs muted mt8">Your name, email, phone, address details${isPg() ? ", profile, portfolio photos and videos, UPI ID and ID-check photos" : ""} are erased, and you won't be able to log in again with this account. Any unused rewards are cancelled.</div>
+      <div class="xs muted mt8">Records of past bookings and payments are kept without your name or contact details, because tax and payment laws require it. Messages and reviews stay, shown as from “Deleted user”.</div>
+      <div class="xs muted mt8">This can't be undone. Want to stop for a while instead? Just log out.</div>
+    </div>
+    ${!c ? `<div class="skeleton mt16"></div>` : c.err ? `<div class="card soft mt16 sm">${esc(c.err)}</div>`
+      : bl.length ? `<div class="card mt16" style="border-color:var(--red)"><div class="sm bold">You can't delete your account yet</div>${bl.map(x => `<div class="xs muted mt8">• ${esc(x)}</div>`).join("")}
+          <div class="xs muted2 mt8">Need help? Email <a href="mailto:${SUPPORT_EMAIL}?subject=Delete%20my%20account">${SUPPORT_EMAIL}</a>.</div></div>`
+      : `<div class="card mt16">
+          <label class="xs muted" for="delReason">Why are you leaving? (optional)</label>
+          <textarea id="delReason" class="input mt6" rows="2" maxlength="300" placeholder="It helps us improve"></textarea>
+          <label class="xs muted mt12" for="delConfirm" style="display:block">Type <b>DELETE</b> to confirm</label>
+          <input id="delConfirm" class="input mt6" autocapitalize="characters" autocomplete="off" placeholder="DELETE">
+          <button class="btn block mt16" style="background:var(--red);color:#fff;border-color:var(--red)" ${busy ? "disabled" : ""} onclick="deleteMyAccount()">${busy ? "Deleting…" : "Delete my account"}</button>
+        </div>`}
+  </div>`;
+}
+async function deleteMyAccount(){
+  const box = el("delConfirm"), conf = box ? box.value.trim() : "", reason = (el("delReason") || {}).value || "";
+  if(conf.toUpperCase() !== "DELETE"){ toast("Type DELETE to confirm", "", "x"); return; }
+  if(!confirm("Delete your SnapPro account for good?")) return;
+  S.loading.del = true; render();
+  try{
+    const { data, error } = await sb.rpc("delete_my_account", { p_confirm: conf, p_reason: reason.trim() || null });
+    if(error) throw new Error(error.message);
+    const f = (data && data.files) || {};
+    if((f.kyc || []).length) await Promise.resolve(sb.storage.from("kyc").remove(f.kyc)).catch(() => {});
+    const legacy = (f.portfolio_bucket || []).map(u => { const m = /\/object\/public\/portfolio\/(.+)$/.exec(String(u).split("?")[0]); return m ? decodeURIComponent(m[1]) : null; }).filter(Boolean);
+    if(legacy.length) await Promise.resolve(sb.storage.from("portfolio").remove(legacy)).catch(() => {});
+    stopPolling();
+    S.me = null; S.pg = null; S.blocked = null; S.delChk = undefined;
+    try{ await sb.auth.signOut(); }catch(e){}
+    try{ Object.keys(localStorage).filter(k => /^snappro\.(ft|lt)$/.test(k)).forEach(k => localStorage.removeItem(k)); }catch(e){}
+    S.stack = []; S.tab = "home"; S.auth = { step: "welcome" };
+    S.loading.del = false; render(); scrollTop();
+    toast("Your account has been deleted", "Thanks for trying SnapPro", "check");
+  }catch(e){
+    S.loading.del = false; S.delChk = undefined; render();
+    toast("Couldn't delete your account", e.message, "x");
+  }
+}
+
+/* ============================================================
    NAVIGATION
    ============================================================ */
 const AUTH_VIEWS = { welcome: vWelcome, signup: vSignup, otp: vOtp, login: vLogin, reset: vReset, newpw: vNewPw,
@@ -4221,7 +4310,7 @@ const STACK_VIEWS = { pg: vPgProfile, photo: vPhoto, newRequest: vNewRequest, re
                       booking: vBooking, rate: vRate, chat: vChat, editName: vEditName, editLoc: vEditLoc,
                       quote: vQuote, job: vJob, portfolio: vPortfolio, editPg: vEditPg,
                       payResult: vPayResult, editPayout: vEditPayout,
-                      pgEarnings: vPgEarnings, pgDone: vPgDone, pgReviews: vPgReviews, how: vHow, storage: vStorage, rewards: vRewards, invite: vInvite, kyc: vKyc };
+                      pgEarnings: vPgEarnings, pgDone: vPgDone, pgReviews: vPgReviews, how: vHow, storage: vStorage, rewards: vRewards, invite: vInvite, kyc: vKyc, deleteAccount: vDeleteAccount };
 const CUST_TABS = [ ["home","Home","home",vCustHome], ["explore","Explore","search",vExplore], ["activity","Shoots","calendar",vActivity], ["profile","Profile","user",vProfile] ];
 const PG_TABS   = [ ["home","Home","home",vPgHome], ["requests","Requests","bolt",vPgRequests], ["jobs","Shoots","calendar",vJobs], ["profile","Profile","user",vProfile] ];
 const tabsFor = () => isPg() ? PG_TABS : CUST_TABS;
@@ -4245,10 +4334,11 @@ function replaceStack(v, p){
   if(S.stack.length) S.stack[S.stack.length - 1] = { v, p: p || {} }; else { S.stack.push({ v, p: p || {} }); try{ history.pushState({ snap: 1 }, ""); }catch(e){} }
   render(); scrollTop();
 }
-function go(tab){ S.tab = tab; S.stack = []; S.formErr = null; render(); scrollTop(); }
+function go(tab){ S.tab = tab; S.stack = []; S.formErr = null; navMark(tab === "home"); render(); scrollTop(); }
 window.addEventListener("popstate", () => {
   if(ignorePop){ ignorePop--; return; }
-  if(S.stack.length){ S.stack.pop(); S.formErr = null; render(); }
+  if(S.stack.length){ S.stack.pop(); S.formErr = null; render(); return; }
+  softBack();
 });
 
 function tabBadge(id){
@@ -4359,9 +4449,9 @@ async function boot(){
   if(back && /^[A-Za-z0-9_-]{3,45}$/.test(back)) S.returnOrder = back;
   if(want || back){ try{ history.replaceState(null, "", location.pathname); }catch(e){} }
   if(session){ await afterAuth(false); }
-  else if(want === "signup"){ pwReset(); S.auth = { step: "signup", type: "customer", email: "" }; render(); }
-  else if(want === "join"){ pwReset(); S.auth = { step: "signup", type: "photographer", email: "" }; render(); }
-  else if(want === "login"){ pwReset(); S.auth = { step: "login", email: "" }; render(); }
+  else if(want === "signup"){ pwReset(); S.auth = { step: "signup", type: "customer", email: "" }; navMark(false); render(); }
+  else if(want === "join"){ pwReset(); S.auth = { step: "signup", type: "photographer", email: "" }; navMark(false); render(); }
+  else if(want === "login"){ pwReset(); S.auth = { step: "login", email: "" }; navMark(false); render(); }
   else { S.auth = { step: "welcome" }; render(); }
   sb.auth.onAuthStateChange(ev => {
     if(ev === "SIGNED_OUT" && S.me){
@@ -4376,7 +4466,7 @@ function vBlocked(){
   const b = S.blocked || {};
   return `<div class="pad center" style="padding-top:12vh">
     <div class="bad-mark">${icon("x",26,"#fff",3)}</div>
-    <h1 class="display-sm mt16">Your account is ${b.status === "blocked" ? "blocked" : "suspended"}</h1>
+    <h1 class="display-sm mt16">${b.reason === "Account deleted" ? "This account was deleted" : "Your account is " + (b.status === "blocked" ? "blocked" : "suspended")}</h1>
     ${b.reason ? `<p class="sm muted mt8">Reason: ${esc(b.reason)}</p>` : ""}
     ${b.until ? `<p class="sm muted mt4">Until ${dayStr(b.until)}</p>` : ""}
     <p class="sm muted mt12">If you think this is a mistake, write to <a href="mailto:${SUPPORT_EMAIL}">${SUPPORT_EMAIL}</a> with your SnapPro ID${S.me && S.me.public_id ? " (" + esc(S.me.public_id) + ")" : ""}.</p>

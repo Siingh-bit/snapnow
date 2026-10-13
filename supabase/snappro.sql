@@ -3415,6 +3415,7 @@ create or replace function public._channel(p_src text, p_med text, p_ref text, p
 returns text language sql immutable as $$
   select case
     when nullif(p_code,'') is not null then 'Referral'
+    when coalesce(p_src,'') in ('android_app','app_install') then 'Android app'
     when coalesce(p_med,'') ~* '^(cpc|ppc|paid|paid[_ -]?social|paid[_ -]?search|ads?|display|banner|cpm|cpv)$' then 'Paid ads'
     when coalesce(p_med,'') ~* '(e-?mail|newsletter)' or coalesce(p_src,'') ~* '(e-?mail|newsletter|brevo|mailchimp)'
       or coalesce(p_ref,'') ~* '(^|\.)(mail\.|outlook\.|com\.google\.android\.gm)' then 'Email'
@@ -4335,6 +4336,8 @@ begin
         select p.id, p.public_id, p.name, p.referral_flag, r.public_id ref_id, r.name ref_name from public.profiles p
           left join public.profiles r on r.id = p.referred_by where p.referral_flag is not null) z),
     'chat_reads', (select count(*) from public.admin_audit where action ilike '%chat%' and at > now() - interval '30 days'),
+    'deletions', case when money then (select coalesce(jsonb_agg(z order by z.deleted_at desc), '[]') from (
+        select deleted_at, user_id, public_id, role, via, reason, login_closed from public.account_deletions order by deleted_at desc limit 1000) z) end,
     'staff_actions', (select coalesce(jsonb_agg(z order by z.n desc), '[]') from (
         select coalesce(staff_email,'?') staff, count(*) n, max(at) last_at from public.admin_audit where at > now() - interval '30 days' group by 1) z)
   ) into res;
@@ -4683,6 +4686,168 @@ grant execute on function public.admin_referrals(date, date)          to authent
 grant execute on function public.admin_referral_action(uuid, text)    to authenticated;
 -- <<< 8d departments
 
+-- >>> 8e deletion
+-- =====================================================================
+-- 8e. ACCOUNT DELETION (required by Google Play)
+--     People delete their own account from the app (or ask by email).
+--     Personal details are erased straight away. Booking, payment and
+--     tax records stay (without the name, email or phone) because the
+--     law requires them. Not allowed while a shoot is under way or
+--     money is still owed either way.
+-- =====================================================================
+
+create table if not exists public.account_deletions (
+  id           bigserial primary key,
+  user_id      uuid not null,
+  public_id    text,
+  role         text,
+  reason       text,
+  via          text not null default 'app',            -- app / admin
+  deleted_at   timestamptz not null default now(),
+  deleted_by   uuid,
+  login_closed boolean not null default false           -- false = remove the login in Supabase → Authentication → Users
+);
+create index if not exists idx_deletions_at on public.account_deletions(deleted_at desc);
+alter table public.account_deletions enable row level security;
+drop policy if exists deletions_staff_read on public.account_deletions;
+create policy deletions_staff_read on public.account_deletions for select to authenticated
+  using (coalesce(public.staff_role() in ('super_admin','admin'), false));
+revoke insert, update, delete on public.account_deletions from anon, authenticated;
+
+-- people may remove their own ID-check photos (the app does this when the account is deleted)
+drop policy if exists "snappro kyc delete own" on storage.objects;
+create policy "snappro kyc delete own" on storage.objects for delete to authenticated
+  using (bucket_id = 'kyc' and (storage.foldername(name))[1] = auth.uid()::text);
+drop policy if exists "snappro kyc admin delete" on storage.objects;
+create policy "snappro kyc admin delete" on storage.objects for delete to authenticated
+  using (bucket_id = 'kyc' and coalesce(public.staff_role() in ('super_admin','admin'), false));
+
+-- what stops a deletion right now (empty list = OK)
+create or replace function public._deletion_blockers(p_user uuid)
+returns jsonb language sql stable security definer set search_path = public
+as $$
+  select coalesce(jsonb_agg(x), '[]') from (
+    select 'You have a shoot that is booked or under way. Finish or cancel it first.' x
+     where exists (select 1 from public.bookings b where (b.customer_id = p_user or b.photographer_id = p_user)
+                     and b.status in ('confirmed','enroute','arrived','shooting'))
+    union all
+    select 'You still owe the balance for a shoot. Please pay it first.'
+     where exists (select 1 from public.bookings b where b.customer_id = p_user and b.balance_status = 'due' and b.status <> 'cancelled')
+    union all
+    select 'SnapPro still has to pay you for a shoot. We''ll send it first, then you can delete your account.'
+     where exists (select 1 from public.bookings b where b.photographer_id = p_user and b.payout_status in ('due','on_hold'))
+    union all
+    select 'A refund to you is still being processed. Please wait for it to finish.'
+     where exists (select 1 from public.bookings b where b.customer_id = p_user and b.payment_status in ('refund_due','refund_pending'))
+    union all
+    select 'Staff accounts are removed from the Team tab of the admin console.'
+     where exists (select 1 from public.staff s where s.id = p_user)
+  ) z $$;
+revoke all on function public._deletion_blockers(uuid) from public, anon, authenticated;
+
+create or replace function public.account_deletion_check()
+returns jsonb language plpgsql stable security definer set search_path = public
+as $$
+declare me uuid := auth.uid();
+begin
+  if me is null then raise exception 'Please log in again'; end if;
+  return jsonb_build_object('blockers', public._deletion_blockers(me));
+end $$;
+
+-- erase one person's personal details (server only)
+create or replace function public._erase_account(p_user uuid, p_reason text, p_via text, p_by uuid)
+returns jsonb language plpgsql security definer set search_path = public
+as $$
+declare pr record; files jsonb; closed boolean := false;
+begin
+  select * into pr from public.profiles where id = p_user;
+  if not found then raise exception 'Account not found'; end if;
+  if pr.name = 'Deleted user' and pr.status = 'blocked' then raise exception 'This account was already deleted'; end if;
+  files := jsonb_build_object(
+    'kyc', (select coalesce(jsonb_agg(x), '[]') from (select unnest(array[k.front_path, k.back_path, k.selfie_path]) x from public.photographer_kyc k where k.id = p_user) z where x is not null),
+    'portfolio_bucket', (select coalesce(to_jsonb(g.portfolio), '[]') from public.photographers g where g.id = p_user));
+
+  perform set_config('snappro.system', 'on', true);
+  update public.profiles set name = 'Deleted user', phone = null, email = null, area = null, pincode = null,
+         acq = null, visitor_id = null, referral_flag = null,
+         status = 'blocked', status_reason = 'Account deleted', status_until = null, status_at = now()
+   where id = p_user;
+  update public.photographers set display_name = 'Deleted photographer', bio = '', portfolio = '{}', categories = '{}',
+         areas = '{}', is_online = false, is_verified = false, approval_status = 'rejected', review_note = 'Account deleted'
+   where id = p_user;
+  update public.portfolio_media set status = 'hidden', hidden_at = now() - interval '31 days', updated_at = now()
+   where photographer_id = p_user and status in ('ready','pending','hidden');          -- removed from S3 on the next clean-up
+  delete from public.photographer_payout where id = p_user;
+  delete from public.photographer_kyc where id = p_user;
+  update public.user_benefits set status = 'revoked' where user_id = p_user and status = 'active';
+  update public.requests set status = 'cancelled' where customer_id = p_user and status in ('broadcasting','awaiting');
+  update public.requests set customer_name = 'Deleted user', notes = null where customer_id = p_user;
+  update public.bookings set customer_name = 'Deleted user', address = null where customer_id = p_user;
+  update public.bookings set photographer_name = 'Deleted photographer' where photographer_id = p_user;
+  update public.reviews set customer_name = 'Deleted user' where customer_id = p_user;
+  update public.offers set photographer_name = 'Deleted photographer' where photographer_id = p_user;
+  update public.site_visits set user_id = null where user_id = p_user;
+  perform set_config('snappro.system', '', true);
+
+  -- close the login: free the email and stop sign-in (skipped quietly if the database doesn't allow it)
+  begin
+    update auth.users set email = 'deleted-' || p_user || '@deleted.snappro.in', phone = null,
+           raw_user_meta_data = '{}'::jsonb where id = p_user;
+    begin execute 'update auth.users set banned_until = ''infinity'' where id = $1' using p_user; exception when others then null; end;
+    closed := true;
+  exception when others then closed := false; end;
+
+  insert into public.account_deletions (user_id, public_id, role, reason, via, deleted_by, login_closed)
+  values (p_user, pr.public_id, pr.role, left(p_reason, 500), p_via, p_by, closed);
+  perform public._ev('account_deleted', 'profile', p_user, p_user, null, pr.city, null, null,
+                     jsonb_build_object('via', p_via, 'reason', left(p_reason, 200)));
+  return jsonb_build_object('result', 'deleted', 'files', files, 'login_closed', closed);
+end $$;
+revoke all on function public._erase_account(uuid, text, text, uuid) from public, anon, authenticated;
+
+-- the person themselves, from the app
+create or replace function public.delete_my_account(p_confirm text, p_reason text default null)
+returns jsonb language plpgsql security definer set search_path = public
+as $$
+declare me uuid := auth.uid(); b jsonb;
+begin
+  if me is null then raise exception 'Please log in again'; end if;
+  if upper(trim(coalesce(p_confirm, ''))) <> 'DELETE' then raise exception 'Type DELETE to confirm'; end if;
+  b := public._deletion_blockers(me);
+  if jsonb_array_length(b) > 0 then raise exception '%', b->>0; end if;
+  return public._erase_account(me, p_reason, 'app', me);
+end $$;
+
+-- an admin, for someone who asked by email
+create or replace function public.admin_delete_account(p_user uuid, p_reason text)
+returns jsonb language plpgsql security definer set search_path = public
+as $$
+declare b jsonb; r jsonb; pr record;
+begin
+  if not public._money_ok() then raise exception 'Only admins can delete accounts'; end if;
+  if coalesce(trim(p_reason), '') = '' then raise exception 'Write why (for example: asked by email on 12 Oct)'; end if;
+  b := public._deletion_blockers(p_user);
+  if jsonb_array_length(b) > 0 then raise exception 'Can''t delete yet: %', b->>0; end if;
+  select public_id, name into pr from public.profiles where id = p_user;
+  r := public._erase_account(p_user, p_reason, 'admin', auth.uid());
+  perform public._audit('Deleted account', 'user', p_user::text, coalesce(pr.public_id, '') || ' ' || coalesce(pr.name, ''), jsonb_build_object('reason', p_reason));
+  return r;
+end $$;
+
+create or replace function public.admin_deletions()
+returns jsonb language sql stable security definer set search_path = public
+as $$ select case when public._money_ok() then (select coalesce(jsonb_agg(d order by d.deleted_at desc), '[]') from public.account_deletions d) end $$;
+
+revoke all on function public.account_deletion_check()               from public, anon;
+revoke all on function public.delete_my_account(text, text)          from public, anon;
+revoke all on function public.admin_delete_account(uuid, text)       from public, anon;
+revoke all on function public.admin_deletions()                      from public, anon;
+grant execute on function public.account_deletion_check()            to authenticated;
+grant execute on function public.delete_my_account(text, text)       to authenticated;
+grant execute on function public.admin_delete_account(uuid, text)    to authenticated;
+grant execute on function public.admin_deletions()                   to authenticated;
+-- <<< 8e deletion
+
 -- =====================================================================
 -- 9. ONE-OFF CLEAN-UP
 -- =====================================================================
@@ -4757,4 +4922,5 @@ select
   exists (select 1 from pg_proc where proname = 'submit_kyc')
     and exists (select 1 from storage.buckets where id = 'kyc' and not public)           as safety_ready,
   exists (select 1 from pg_proc where proname = 'admin_leads')
-    and exists (select 1 from pg_trigger where tgname = 'ev_bookings')                   as departments_ready;
+    and exists (select 1 from pg_trigger where tgname = 'ev_bookings')                   as departments_ready,
+  exists (select 1 from pg_proc where proname = 'delete_my_account')                   as deletion_ready;
