@@ -683,7 +683,9 @@ create policy photographers_staff_update on public.photographers for update to a
 -- requests: yours, plus open ones (city, pincode, budget — never an address)
 drop policy if exists requests_select      on public.requests;
 create policy requests_select on public.requests for select to authenticated
-  using (customer_id = auth.uid() or (status = 'broadcasting' and expires_at > now()));
+  using (customer_id = auth.uid()
+         or (status = 'broadcasting' and expires_at > now()
+             and exists (select 1 from public.photographers g where g.id = auth.uid() and g.approval_status = 'approved')));
 drop policy if exists requests_insert_own  on public.requests;
 create policy requests_insert_own on public.requests for insert to authenticated with check (customer_id = auth.uid());
 drop policy if exists requests_update_own  on public.requests;
@@ -2654,6 +2656,13 @@ create or replace function public.is_blocked(p_user uuid)
 returns boolean language sql stable security definer set search_path = public
 as $$ select exists (select 1 from public.profiles where id = p_user and status in ('suspended','blocked')
                        and (status = 'blocked' or status_until is null or status_until > now())) $$;
+-- open requests: only approved photographers who aren't suspended or blocked can see them
+drop policy if exists requests_select on public.requests;
+create policy requests_select on public.requests for select to authenticated
+  using (customer_id = auth.uid()
+         or (status = 'broadcasting' and expires_at > now()
+             and exists (select 1 from public.photographers g where g.id = auth.uid() and g.approval_status = 'approved')
+             and not public.is_blocked(auth.uid())));
 create or replace function public._check_not_blocked()
 returns void language plpgsql stable security definer set search_path = public
 as $$ begin

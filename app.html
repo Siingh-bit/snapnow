@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>SnapPro</title>
+<script>/* never run inside another site's frame (clickjacking) */if(window.top!==window.self){try{window.top.location.replace(window.location.href);}catch(e){document.documentElement.style.display="none";}}</script>
 <meta name="robots" content="noindex">
 <meta name="description" content="Book a photographer near you. Post your shoot, get quotes from photographers in your city, compare portfolios and prices, and book.">
 <meta name="theme-color" content="#fffdf8">
@@ -591,7 +592,6 @@ const $  = (s, r=document) => r.querySelector(s);
 const el = id => document.getElementById(id);
 const esc = s => String(s==null?"":s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const inr = n => "₹" + Math.round(Number(n)||0).toLocaleString("en-IN");
-const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
 const toMs = v => v == null ? 0 : (typeof v === "number" ? v : Date.parse(v));
 const firstName = n => String(n||"").trim().split(/\s+/)[0] || "";
 
