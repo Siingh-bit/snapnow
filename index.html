@@ -371,25 +371,37 @@ footer{border-top:1px solid var(--line);padding:36px 0 44px;font-size:14px;color
     items.forEach(function(n){ io.observe(n); });
   } else items.forEach(function(n){ n.classList.add("in"); });
 
-  /* anonymous visit count for the SnapPro dashboard: a random ID in this
-     browser, nothing personal */
-  try{
-    var k = "snappro.vid", id = localStorage.getItem(k);
-    if(!id || !/^[0-9a-f-]{36}$/i.test(id)){
-      id = (window.crypto && crypto.randomUUID) ? crypto.randomUUID()
-         : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function(c){ var r = Math.random()*16|0; return (c === "x" ? r : (r&3|8)).toString(16); });
-      localStorage.setItem(k, id);
-    }
-    var ua = navigator.userAgent || "", ref = null;
-    try{ if(document.referrer){ var h = new URL(document.referrer).hostname; if(h && h !== location.hostname) ref = h.replace(/^www\./, ""); } }catch(e){}
-    fetch("https://eafudrjxjtenqoorjzsc.supabase.co/rest/v1/rpc/track_visit", {
-      method: "POST", keepalive: true,
-      headers: { "apikey": "sb_publishable_n8ub8dzUbfa5uJqA_PHDXw_QLJJINCd", "Content-Type": "application/json" },
-      body: JSON.stringify({ p_visitor: id, p_path: location.pathname, p_referrer: ref,
-        p_device: /iPad|Tablet/i.test(ua) ? "tablet" : /Mobi|Android|iPhone/i.test(ua) ? "mobile" : "desktop" })
-    }).catch(function(){});
-  }catch(e){}
 })();
 </script>
+<!--seo:track-->
+<script>/* SnapPro visit counter: a random ID in this browser plus where the visit came from
+   (campaign tags, the site that sent it, the page it landed on). Nothing personal. */
+(function(){try{
+  var L = window.localStorage, k = "snappro.vid", id = L.getItem(k);
+  if(!id || !/^[0-9a-f-]{36}$/i.test(id)){
+    id = (window.crypto && crypto.randomUUID) ? crypto.randomUUID()
+       : "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function(c){ var r = Math.random()*16|0; return (c === "x" ? r : (r&3|8)).toString(16); });
+    L.setItem(k, id);
+  }
+  var q = new URLSearchParams(location.search), u = {}, tagged = false;
+  ["source","medium","campaign","term","content"].forEach(function(n){ var v = q.get("utm_" + n); if(v){ u[n] = v.slice(0, 120); tagged = true; } });
+  var ref = null;
+  try{ if(document.referrer){ var h = new URL(document.referrer).hostname; if(h && h !== location.hostname) ref = h.replace(/^www\./, ""); } }catch(e){}
+  var code = q.get("ref"); if(code && /^SP[CP]\d{4,}$/i.test(code)) u.ref = code.toUpperCase();
+  if(q.get("gclid") || q.get("fbclid") || q.get("msclkid")) u.ads_click = true;
+  var touch = { source: u.source, medium: u.medium, campaign: u.campaign, term: u.term, content: u.content, ref: u.ref,
+                referrer: ref, landing: location.pathname, shoot: q.get("shoot") || undefined, ads_click: u.ads_click, at: new Date().toISOString() };
+  if(!L.getItem("snappro.ft")) L.setItem("snappro.ft", JSON.stringify(touch));
+  if(tagged || ref || u.ref) L.setItem("snappro.lt", JSON.stringify(touch));
+  var ua = navigator.userAgent || "";
+  fetch("https://eafudrjxjtenqoorjzsc.supabase.co/rest/v1/rpc/track_visit", {
+    method: "POST", keepalive: true,
+    headers: { "apikey": "sb_publishable_n8ub8dzUbfa5uJqA_PHDXw_QLJJINCd", "Content-Type": "application/json" },
+    body: JSON.stringify({ p_visitor: id, p_path: location.pathname, p_referrer: ref,
+      p_device: /iPad|Tablet/i.test(ua) ? "tablet" : /Mobi|Android|iPhone/i.test(ua) ? "mobile" : "desktop", p_utm: u })
+  }).catch(function(){});
+}catch(e){}})();
+</script>
+<!--/seo:track-->
 </body>
 </html>

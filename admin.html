@@ -168,6 +168,35 @@ td{white-space:nowrap}
 .cl.photographer{align-self:flex-end;background:rgba(255,90,31,.14)}
 .cl-who{font-size:11px;color:var(--muted-2);font-weight:700;margin-bottom:3px}
 .cl-text{font-size:13.5px;white-space:pre-wrap;word-break:break-word}
+
+/* departments */
+.wrap{max-width:1320px}
+.tabgroup{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.tglabel{font-size:10.5px;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted-2);font-weight:800;min-width:92px}
+.cnt{font-size:11px;color:var(--muted);letter-spacing:0;text-transform:none;margin-left:6px;font-weight:600}
+table.dt td,table.dt th{white-space:nowrap}
+table.dt td{max-width:340px;overflow:hidden;text-overflow:ellipsis}
+th.sortable{cursor:pointer;user-select:none}th.sortable:hover{color:var(--text)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
+a.lnk{color:var(--text);font-weight:650;cursor:pointer;text-decoration:underline;text-decoration-color:rgba(255,255,255,.25);text-underline-offset:3px}
+a.lnk:hover{color:var(--accent)}
+table.heat{border-collapse:separate;border-spacing:2px;font-size:11px}
+table.heat td,table.heat th{padding:5px 4px;text-align:center;border:0;min-width:26px;border-radius:4px}
+table.heat th{color:var(--muted-2);font-weight:700}
+.tl{max-height:none}
+.tlrow{display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid var(--border-soft);font-size:13.5px}
+.tlrow:last-child{border-bottom:0}
+.tlt{flex:0 0 150px;color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums;padding-top:1px}
+.tldot{flex:0 0 9px;height:9px;border-radius:50%;margin-top:5px}
+.kv{display:flex;justify-content:space-between;gap:14px;padding:7px 0;border-bottom:1px solid var(--border-soft);font-size:13px}
+.kv:last-child{border-bottom:0}.kv span:first-child{color:var(--muted);flex:0 0 auto}.kv span:last-child{text-align:right;word-break:break-word}
+.sheet.wide{max-width:1240px}
+details.u3{background:var(--surface-2);border:1px solid var(--border-soft);border-radius:12px;padding:10px 14px;margin-top:10px}
+details.u3 summary{cursor:pointer;font-weight:750;font-size:14px}
+.lbgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+.lbgrid label{display:block}.lbgrid .input{margin-top:5px}
+@media(max-width:700px){.tlt{flex-basis:96px}.tglabel{min-width:0}}
 </style>
 </head>
 <body>
@@ -308,6 +337,8 @@ function openTab(k){
   if(k === 'payments') loadPayments(!!S.pay);
   if(k === 'offers'){ loadOffers(); if(!S.pay) loadPayments(true); }
   if(k === 'activity') loadAudit();
+  if(DEPT_RPC[k] && S.dept[k] && S.dept[k].data) deptLoad(k, true);
+  if(k === 'timeline' && S.tl && S.tl.rows) loadTimeline(true);
 }
 function go(view, patch){ Object.assign(S, patch||{}, { view, err:"" }); render(); }
 
@@ -600,14 +631,14 @@ async function loadInsights(quiet){
   if(!quiet || changed) render(); else paintUpdated();
 }
 function setPeriod(mode){
-  S.period.mode = mode;
+  S.period.mode = mode; S.dept = {};
   if(mode === "custom" && !S.period.from){ S.period.to = istToday(); S.period.from = addDays(S.period.to, -89); }
   loadInsights();
 }
 function applyCustom(){
   const f = el("pFrom"), t = el("pTo");
   if(!f.value || !t.value){ S.insightErr = "Choose both dates."; render(); return; }
-  S.period.from = f.value; S.period.to = t.value; loadInsights();
+  S.period.from = f.value; S.period.to = t.value; S.dept = {}; loadInsights();
 }
 function paintUpdated(){ const n = el("liveAt"); if(n && S.updatedAt) n.textContent = "updated " + S.updatedAt.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", second: "2-digit" }); }
 
@@ -620,6 +651,7 @@ setInterval(() => {
   if(S.tab === "users") loadUsers(true);
   if(S.tab === "pros") loadData();
   if(S.tab === "payments") loadPayments(true);
+  if(DEPT_RPC[S.tab] && !S.u360) deptLoad(S.tab, true);
 }, 60000);
 
 const pct = (a, b) => b ? Math.round(100 * a / b) + "%" : "—";
@@ -769,7 +801,7 @@ const ago = d => { if(!d) return "Never"; const s = (Date.now() - Date.parse(d))
 function userRowsHtml(){
   const list = (S.users || []).filter(userMatches);
   if(!list.length) return `<tr><td colspan="8"><div class="empty">No one matches.</div></td></tr>`;
-  return list.map(u => `<tr>
+  return list.map(u => `<tr class="rowlink" onclick="if(!event.target.closest('button,a'))openUser('${u.id}')">
     <td><div style="font-weight:600">${esc(u.name || "—")}</div>${u.public_id ? `<div class="xs" style="color:var(--accent);font-weight:700">${esc(u.public_id)}</div>` : ""}<div class="xs muted2">${esc(u.email || "")}</div>${u.phone ? `<div class="xs muted2">${esc(u.phone)}</div>` : ""}</td>
     <td>${u.is_staff ? `<span class="chip super">Staff</span>` : u.role === "photographer" ? `<span class="chip manager">Photographer</span>${u.approval_status === "pending" ? `<div class="mt8"><span class="chip amber">In review</span></div>` : u.approval_status === "rejected" ? `<div class="mt8"><span class="chip red">Not approved</span></div>` : ""}` : `<span class="chip admin">Customer</span>`}</td>
     <td>${u.city ? esc(u.city) + `<div class="xs muted2">${esc([u.state, u.pincode].filter(Boolean).join(" · "))}</div>` : `<span class="chip amber">Not finished</span>`}</td>
@@ -1179,9 +1211,16 @@ function vConsole(){
       </div>
     </div>
 
-    <div class="tabs mt16" style="width:fit-content;flex-wrap:wrap">
-      ${tabs.map(([k,l])=>`<button class="tab ${S.tab===k?'on':''}" onclick="openTab('${k}')">${l}</button>`).join('')}
+    <div class="row mt16" style="flex-wrap:wrap;gap:10px">
+      <input id="findQ" class="input" style="max-width:420px;padding:10px 14px" placeholder="Find anyone — name, email, phone or SnapPro ID" onkeydown="if(event.key==='Enter')findAnyone()">
+      <button class="btn sm" onclick="findAnyone()">Open</button>
     </div>
+    <div class="tabgroup mt16"><span class="tglabel">Departments</span><div class="tabs" style="width:fit-content;flex-wrap:wrap">
+      ${[["overview","Overview"]].concat(DEPT_TABS.filter(([k]) => k !== "finance" || canUsers)).map(([k,l])=>`<button class="tab ${S.tab===k?'on':''}" onclick="openTab('${k}')">${l}</button>`).join('')}
+    </div></div>
+    <div class="tabgroup mt8"><span class="tglabel">Records</span><div class="tabs" style="width:fit-content;flex-wrap:wrap">
+      ${tabs.filter(([k]) => k !== "overview").map(([k,l])=>`<button class="tab ${S.tab===k?'on':''}" onclick="openTab('${k}')">${l}</button>`).join('')}
+    </div></div>
 
     ${S.note?`<div class="ok mt12">${esc(S.note)}</div>`:''}
     ${S.err?`<div class="err mt12">${esc(S.err)}</div>`:''}
@@ -1195,7 +1234,15 @@ function vConsole(){
       S.tab==='pros'     ? vPros()     :
       S.tab==='offers'   ? vOffers()   :
       S.tab==='activity' ? vActivity() :
-      S.tab==='team'     ? vTeam()     : ''
+      S.tab==='team'     ? vTeam()     :
+      S.tab==='leads'    ? vLeads()    :
+      S.tab==='marketing'? vMarketing():
+      S.tab==='finance'  ? vFinance()  :
+      S.tab==='ops'      ? vOps()      :
+      S.tab==='customers'? vCustomers():
+      S.tab==='referrals'? vReferrals():
+      S.tab==='trust'    ? vTrust()    :
+      S.tab==='timeline' ? vTimeline() : ''
     }</div>
   </div>`;
 }
@@ -1670,11 +1717,19 @@ function refRead(aud, who){
 }
 async function saveReferral(){
   const P = { enabled: el("rf_enabled").checked };
-  ["customer","photographer"].forEach(a => { P[a] = { when: el("rf_" + a + "_when").value, new_user_reward: refRead(a, "new"), referrer_reward: refRead(a, "referrer") }; });
+  const cd = el("rf_code_days"), bs = el("rf_block_same");
+  P.code_days = cd && cd.value !== "" ? Math.max(0, parseInt(cd.value, 10) || 0) : 14;
+  P.block_same_device = bs ? bs.value === "1" : true;
+  ["customer","photographer"].forEach(a => {
+    const on = el("rf_" + a + "_on"), mn = el("rf_" + a + "_min"), mx = el("rf_" + a + "_max");
+    P[a] = { when: el("rf_" + a + "_when").value, enabled: on ? on.checked : true, new_user_reward: refRead(a, "new"), referrer_reward: refRead(a, "referrer") };
+    if(mn && mn.value !== "") P[a].min_booking = Math.max(0, Number(mn.value) || 0);
+    if(mx && mx.value !== "") P[a].max_rewards = Math.max(0, parseInt(mx.value, 10) || 0);
+  });
   S.err = ""; S.note = "";
   const { error } = await sb.rpc("admin_referral_save", { p: P });
   if(error){ S.err = error.message; render(); return; }
-  S.note = "Referral program saved."; await loadOffers();
+  S.note = "Referral program saved."; await loadOffers(); if(S.dept && S.dept.referrals) deptLoad("referrals", true);
 }
 function vOffers(){
   if(S.offErr) return `<div class="warn">${esc(S.offErr)}</div>`;
@@ -1715,17 +1770,9 @@ function vOffers(){
         </div></div>`; }).join("")}</div>`
       : `<div class="card"><div class="xs muted2">No ${aud} offers yet — start with one of the cards above.</div></div>`}
 
-    <div class="sec mt24">Referral program</div>
-    <div class="card">
-      ${isSuper ? `<label class="sw"><input id="rf_enabled" type="checkbox" ${P.enabled ? "checked" : ""}> Referral rewards are ON</label>
-      <div class="xs muted2 mt8">Everyone's SnapPro ID is their referral code. Friends add it when they join (or open the invite link). You decide what each side gets.</div>
-      ${["customer","photographer"].map(a => { const C = P[a] || {}; return `<div class="refbox mt16"><div class="h2">${a === "customer" ? "Customers" : "Photographers"}</div>
-        <label class="ofl mt8" style="max-width:340px">When a new ${a} joins with a code, reward both after<select id="rf_${a}_when" class="input"><option value="first_booking" ${C.when !== "signup" ? "selected" : ""}>their first completed shoot</option><option value="signup" ${C.when === "signup" ? "selected" : ""}>they sign up</option></select></label>
-        <div class="xs muted mt12" style="font-weight:700">A new ${a} who joined with a code gets</div>${refRewardInputs(a, "new", C.new_user_reward)}
-        <div class="xs muted mt12" style="font-weight:700">A ${a} who invited someone gets</div>${refRewardInputs(a, "referrer", C.referrer_reward)}</div>`; }).join("")}
-      <div class="row mt16"><button class="btn primary" onclick="saveReferral()">Save referral program</button></div>
-      <div class="xs muted2 mt8">Customers can only get booking discounts; photographers get storage, commission, featured or storage-discount rewards.</div>`
-      : `<div class="sm">${P.enabled ? "Referral rewards are ON." : "Referral rewards are OFF."} Only a super admin can change them.</div>`}
+    <div class="sec mt24">Referral program <button class="btn sm" style="margin-left:8px" onclick="openTab('referrals')">Full referral tracking ›</button></div>
+    ${refEditor(P)}
+    <div class="card mt12">
       ${(O.referrals && O.referrals.top || []).length ? `<div class="sec mt16">Top referrers</div><div class="tblwrap"><table><thead><tr><th>SnapPro ID</th><th>Name</th><th>Type</th><th>Invited</th><th>Rewarded</th></tr></thead><tbody>
         ${O.referrals.top.map(t => `<tr><td>${esc(t.public_id)}</td><td>${esc(t.name || "—")}</td><td>${esc(t.role)}</td><td>${num(t.invited)}</td><td>${num(t.rewarded)}</td></tr>`).join("")}</tbody></table></div>` : ""}
     </div>
@@ -1996,6 +2043,787 @@ function drawReportCharts(){
   bars("chRatings", ["5★","4★","3★","2★","1★"], rt, "Reviews", "rgba(255,200,87,.7)", i => openDrill("reviews", "Reviews", String(5 - i)));
 }
 
+/* ===================== departments ===================== */
+/* Leads · Marketing · Finance · Operations · Customers · Referrals · Trust · Timeline,
+   plus "everything about one person" (User 360). All numbers come from the database. */
+const DEPT_RPC = {
+  leads:     r => ["admin_leads",     { p_from: r.from, p_to: r.to }],
+  marketing: r => ["admin_marketing", { p_from: r.from, p_to: r.to, p_bucket: r.bucket }],
+  finance:   r => ["admin_finance",   { p_from: r.from, p_to: r.to, p_bucket: r.bucket }],
+  ops:       r => ["admin_ops",       { p_from: r.from, p_to: r.to }],
+  customers: r => ["admin_customers", {}],
+  referrals: r => ["admin_referrals", { p_from: r.from, p_to: r.to }],
+  trust:     r => ["admin_trust",     {}]
+};
+const DEPT_TABS = [["leads","Leads"],["marketing","Marketing"],["finance","Finance"],["ops","Operations"],["customers","Customers"],["referrals","Referrals"],["trust","Trust & support"],["timeline","Timeline"]];
+const isDept = k => !!DEPT_RPC[k] || k === "timeline";
+S.dept = {}; S.tb = {};
+let deptSeq = {};
+async function deptLoad(tab, quiet){
+  if(!DEPT_RPC[tab]) return;
+  const r = periodRange(), [fn, args] = DEPT_RPC[tab](r), seq = deptSeq[tab] = (deptSeq[tab] || 0) + 1;
+  const cur = S.dept[tab] || {};
+  S.dept[tab] = { ...cur, busy: true, err: quiet ? cur.err : "" };
+  if(!quiet) render();
+  const { data, error } = await sb.rpc(fn, args);
+  if(seq !== deptSeq[tab]) return;
+  if(error){
+    S.dept[tab] = { ...S.dept[tab], busy: false, err: /function|does not exist|schema cache/i.test(error.message)
+      ? "This needs the latest database update — run supabase/snappro.sql in the Supabase SQL Editor." : error.message };
+    render(); return;
+  }
+  const changed = JSON.stringify(data) !== JSON.stringify(cur.data);
+  S.dept[tab] = { data, busy: false, err: "", at: new Date(), range: r };
+  if(!quiet || changed) render(); else paintUpdated();
+}
+function deptWait(tab, noPeriod){
+  const D = S.dept[tab];
+  if(!D){ S.dept[tab] = { busy: true }; setTimeout(() => deptLoad(tab, true)); }
+  if(!D || !D.data) return deptHead(tab, noPeriod) + (D && D.err ? "" : `<div class="empty">Loading…</div>`);
+  return null;
+}
+function deptSetPeriod(mode){
+  S.period.mode = mode;
+  if(mode === "custom" && !S.period.from){ S.period.to = istToday(); S.period.from = addDays(S.period.to, -89); }
+  S.insights = null; S.dept = {}; deptLoad(S.tab);
+}
+function deptApplyCustom(){
+  const f = el("dFrom"), t = el("dTo");
+  if(!f.value || !t.value){ S.err = "Choose both dates."; render(); return; }
+  S.period.from = f.value; S.period.to = t.value; S.insights = null; S.dept = {}; deptLoad(S.tab);
+}
+function deptHead(tab, noPeriod){
+  const r = periodRange(), D = S.dept[tab] || {};
+  return `<div class="between" style="flex-wrap:wrap;gap:12px">
+    ${noPeriod ? `<div class="xs muted2">All time · live</div>` : `<div class="tabs" style="width:fit-content">${PERIODS.map(([m, l]) => `<button class="tab ${S.period.mode===m?'on':''}" onclick="deptSetPeriod('${m}')">${l}</button>`).join("")}<button class="tab" onclick="deptSetPeriod('all')" ${S.period.mode==='all'?'style="background:var(--surface-3)"':''}>All time</button></div>`}
+    <div class="row xs muted2"><span class="live-dot"></span><span>Live</span><span id="liveAt">${D.at ? "updated " + D.at.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", second: "2-digit" }) : ""}</span>
+      <button class="btn sm" onclick="deptLoad('${tab}')">Refresh</button></div>
+  </div>
+  ${!noPeriod && S.period.mode === "custom" ? `<div class="row mt12" style="flex-wrap:wrap">
+      <label class="xs muted">From <input id="dFrom" class="input" type="date" style="width:auto;padding:8px 10px" value="${esc(S.period.from)}" max="${istToday()}"></label>
+      <label class="xs muted">To <input id="dTo" class="input" type="date" style="width:auto;padding:8px 10px" value="${esc(S.period.to)}" max="${istToday()}"></label>
+      <button class="btn sm primary" onclick="deptApplyCustom()">Apply</button></div>` : ""}
+  ${noPeriod ? "" : `<div class="xs muted2 mt8">${esc(r.label)}${D.busy ? " · loading…" : ""}</div>`}
+  ${D.err ? `<div class="warn mt12">${esc(D.err)}</div>` : ""}`;
+}
+/* "All time" option for every department */
+const _periodRange = periodRange;
+periodRange = function(){
+  if(S.period.mode === "all") return { from: "2020-01-01", to: istToday(), bucket: "month", label: "All time" };
+  return _periodRange();
+};
+
+/* ---------- small building blocks ---------- */
+const PAL = ["#ff5a1f","#4d8dff","#28c76f","#a67cff","#ffc857","#ff4d5e","#5fd3e0","#f6a35b","#ff8fb1","#8b8b9e","#b4e05f","#e0a95f"];
+const CH_COLORS = { "Search":"#4d8dff", "AI assistants":"#a67cff", "Social":"#ff8fb1", "Paid ads":"#ffc857", "Referral":"#28c76f", "Email":"#5fd3e0",
+  "Direct":"#8b8b9e", "Other websites":"#f6a35b", "Other campaigns":"#e0a95f", "Offline / QR / SMS":"#b4e05f", "Unknown (before tracking)":"#61617a" };
+const chColor = (c, i) => CH_COLORS[c] || PAL[i % PAL.length];
+const pc = (a, b) => b ? (Math.round(1000 * a / b) / 10) + "%" : "—";
+const n0 = v => num(v == null ? 0 : v);
+const money = () => S.me && S.me.role !== "manager";
+function dt(d){ return d ? new Date(d).toLocaleString("en-IN", { day: "numeric", month: "short", year: "2-digit", hour: "numeric", minute: "2-digit" }) : "—"; }
+function dts(d){ return d ? new Date(d).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit", second: "2-digit" }) : "—"; }
+function ktile(v, l, sub, cls, onclick){
+  return onclick ? `<button class="stat tap ${cls||''}" onclick="${onclick}"><div class="v">${v}</div><div class="l">${l} <span class="go">›</span></div>${sub ? `<div class="xs muted2 mt8">${sub}</div>` : ""}</button>`
+                 : kpi(v, l, sub, cls);
+}
+const userLink = (id, name, pid) => id ? `<a class="lnk" onclick="event.stopPropagation();openUser('${esc(id)}')">${esc(name || pid || "—")}</a>${pid ? ` <span class="xs" style="color:var(--accent)">${esc(pid)}</span>` : ""}` : esc(name || "—");
+const bkLink = (id, label) => id ? `<a class="lnk" onclick="event.stopPropagation();openBooking('${esc(id)}')">${esc(label || payRef(id))}</a>` : "—";
+
+/* sortable, searchable tables with CSV */
+const TB = {};
+function tbState(id){ return S.tb[id] || (S.tb[id] = { q: "", sort: null, dir: -1, limit: 50 }); }
+let tbTimer = null;
+function tbQ(id, v){ tbState(id).q = v; tbState(id).limit = 50; clearTimeout(tbTimer); tbTimer = setTimeout(render, 180); }
+function tbSort(id, k){ const s = tbState(id); if(s.sort === k) s.dir = -s.dir; else { s.sort = k; s.dir = -1; } render(); }
+function tbMore(id){ tbState(id).limit += 200; render(); }
+function tbCsv(id){
+  const t = TB[id]; if(!t) return;
+  const q = v => { v = v == null ? "" : typeof v === "object" ? JSON.stringify(v) : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g,'""') + '"' : v; };
+  const keys = t.cols.map(c => c[0]);
+  const blob = new Blob([t.cols.map(c => c[1].replace(/<[^>]+>/g, "")).join(",") + "\n" + t.rows.map(r => keys.map(k => q(r[k])).join(",")).join("\n")], { type: "text/csv" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "snappro-" + id + "-" + istToday() + ".csv";
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+}
+function cmpv(a, b){ if(a == null && b == null) return 0; if(a == null) return -1; if(b == null) return 1;
+  const na = Number(a), nb = Number(b); if(!isNaN(na) && !isNaN(nb) && a !== "" && b !== "") return na - nb;
+  return String(a).localeCompare(String(b)); }
+function cell(c, r){
+  const v = r[c[0]], t = c[2];
+  if(typeof t === "function") return t(r);
+  if(v == null || v === "") return `<span class="muted2">—</span>`;
+  if(t === "n") return num(v);
+  if(t === "inr") return inr(v);
+  if(t === "pct") return v + "%";
+  if(t === "dt") return dt(v);
+  if(t === "d") return fmt(v);
+  if(t === "ago") return ago(v);
+  if(t === "chip") return `<span class="chip">${esc(v)}</span>`;
+  return esc(v);
+}
+function dtable(id, title, cols, rows, o){
+  o = o || {}; rows = rows || [];
+  const st = tbState(id); let list = rows;
+  if(st.q){ const q = st.q.toLowerCase(); list = list.filter(r => Object.values(r).some(v => v != null && typeof v !== "object" && String(v).toLowerCase().includes(q))); }
+  if(st.sort){ const k = st.sort; list = [...list].sort((a, b) => cmpv(a[k], b[k]) * st.dir); }
+  TB[id] = { cols, rows: list };
+  const shown = list.slice(0, st.limit);
+  return `<div class="card ${o.cls || ""}" ${o.span ? 'style="grid-column:1/-1"' : ""}>
+    <div class="between" style="flex-wrap:wrap;gap:8px"><div class="sec" style="margin:0">${title} <span class="cnt">${num(list.length)}${list.length !== rows.length ? " of " + num(rows.length) : ""}</span></div>
+      <div class="row">${rows.length > 6 && o.search !== false ? `<input id="tq_${id}" class="input" style="width:200px;padding:7px 10px" placeholder="Search" value="${esc(st.q)}" oninput="tbQ('${id}',this.value)">` : ""}
+        ${rows.length ? `<button class="btn sm" onclick="tbCsv('${id}')">CSV</button>` : ""}</div></div>
+    ${o.note ? `<div class="xs muted2 mt8">${o.note}</div>` : ""}
+    ${shown.length ? `<div class="tblwrap mt8"><table class="dt"><thead><tr>${cols.map(c => `<th class="sortable" onclick="tbSort('${id}','${c[0]}')">${c[1]}${st.sort === c[0] ? (st.dir > 0 ? " ▲" : " ▼") : ""}</th>`).join("")}</tr></thead>
+      <tbody>${shown.map(r => `<tr ${o.click && o.click(r) ? `class="rowlink" onclick="${o.click(r)}"` : ""} ${o.rowCls ? `data-x="${o.rowCls(r) || ""}"` : ""}>${cols.map(c => `<td>${cell(c, r)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`
+      : `<div class="xs muted2 mt8">${o.empty || "Nothing here for this period."}</div>`}
+    ${list.length > st.limit ? `<button class="btn sm mt8" onclick="tbMore('${id}')">Show more (${num(list.length - st.limit)} left)</button>` : ""}
+  </div>`;
+}
+
+/* charts: views register them, render() draws them */
+let deptCharts = [], pendingCharts = [];
+function chart(id, cfg, h){ pendingCharts.push([id, cfg]); return `<div class="chart-box" ${h ? `style="height:${h}px"` : ""}><canvas id="${id}"></canvas></div>`; }
+function drawDeptCharts(){
+  deptCharts.forEach(c => { try{ c.destroy(); }catch(e){} }); deptCharts = [];
+  const todo = pendingCharts; pendingCharts = [];
+  if(!window.Chart || S.view !== "console" || !isDept(S.tab)) return;
+  todo.forEach(([id, cfg]) => { const c = el(id); if(c) deptCharts.push(new Chart(c, cfg)); });
+}
+const GRID = "rgba(255,255,255,.06)", TICK = "#8b8b9e", LEG = { labels: { color: "#c9c9d6", boxWidth: 12, font: { size: 11 } } };
+function axes(isMoney, stacked){ return { x: { stacked: !!stacked, grid: { color: GRID }, ticks: { color: TICK, maxRotation: 0, autoSkip: true, maxTicksLimit: 12 } },
+  y: { stacked: !!stacked, beginAtZero: true, grid: { color: GRID }, ticks: isMoney ? { color: TICK, callback: v => inr(v) } : { color: TICK, precision: 0 } } }; }
+function barCfg(labels, sets, o){ o = o || {};
+  return { type: "bar", data: { labels, datasets: sets.map((s, i) => ({ borderRadius: 3, backgroundColor: s.color || PAL[i % PAL.length], borderColor: s.color || PAL[i % PAL.length], ...s })) },
+    options: { responsive: true, maintainAspectRatio: false, animation: false, indexAxis: o.horizontal ? "y" : "x", interaction: { mode: "index", intersect: false },
+      plugins: { legend: sets.length > 1 ? LEG : { display: false }, tooltip: { callbacks: o.money ? { label: c => c.dataset.label + ": " + inr(o.horizontal ? c.parsed.x : c.parsed.y) } : {} } },
+      scales: o.horizontal ? { x: axes(o.money, o.stacked).y, y: { ...axes(false, o.stacked).x, ticks: { color: TICK, autoSkip: false } } } : axes(o.money, o.stacked),
+      onClick: o.onPick ? (e, els) => { if(els.length) o.onPick(els[0].index); } : undefined } };
+}
+function pieCfg(labels, data, colors, onPick){
+  return { type: "doughnut", data: { labels, datasets: [{ data, borderWidth: 0, backgroundColor: colors || PAL }] },
+    options: { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { position: "right", labels: LEG.labels } },
+      onClick: onPick ? (e, els) => { if(els.length) onPick(els[0].index); } : undefined } };
+}
+function buckets(rows, key){ return [...new Set(rows.map(r => String(r[key]).slice(0, 10)))].sort(); }
+function stacked(rows, key, groupKey, valKey){
+  const xs = buckets(rows, key), gs = [...new Set(rows.map(r => r[groupKey]))];
+  return { xs, sets: gs.map((g, i) => ({ label: g, color: chColor(g, i), data: xs.map(x => rows.filter(r => String(r[key]).slice(0, 10) === x && r[groupKey] === g).reduce((t, r) => t + Number(r[valKey] || 0), 0)) })) };
+}
+function heat(rows, title){
+  const max = Math.max(1, ...rows.map(r => r.n));
+  const at = (d, h) => (rows.find(r => r.dow === d && r.h === h) || {}).n || 0;
+  return `<div class="card" style="grid-column:1/-1"><div class="sec">${title}</div><div class="tblwrap"><table class="heat"><thead><tr><th></th>${Array.from({ length: 24 }, (_, h) => `<th>${h % 12 || 12}${h < 12 ? "a" : "p"}</th>`).join("")}</tr></thead>
+    <tbody>${WEEKDAYS.map((w, i) => `<tr><th>${w}</th>${Array.from({ length: 24 }, (_, h) => { const v = at(i + 1, h); return `<td style="background:rgba(255,90,31,${v ? (0.12 + 0.88 * v / max).toFixed(2) : 0})" title="${w} ${h}:00 — ${v}">${v || ""}</td>`; }).join("")}</tr>`).join("")}</tbody></table></div></div>`;
+}
+const filterChips = (key, opts) => `<div class="tabs" style="width:fit-content;flex-wrap:wrap">${opts.map(([k, l]) => `<button class="tab ${(S[key] || opts[0][0]) === k ? "on" : ""}" onclick="S['${key}']='${k}';Object.keys(S.tb).forEach(x=>S.tb[x].limit=50);render()">${l}</button>`).join("")}</div>`;
+const contactCell = r => r.email || r.phone ? `${r.email ? `<a href="mailto:${esc(r.email)}" onclick="event.stopPropagation()">${esc(r.email)}</a>` : ""}${r.phone ? `<div class="xs"><a href="tel:${esc(r.phone)}" onclick="event.stopPropagation()">${esc(r.phone)}</a> · <a href="https://wa.me/${esc(String(r.phone).replace(/\D/g, "").replace(/^(\d{10})$/, "91$1"))}" target="_blank" rel="noopener" onclick="event.stopPropagation()">WhatsApp</a></div>` : ""}` : `<span class="muted2">—</span>`;
+
+/* ===================== LEADS ===================== */
+const LEAD_FILTERS = [["all","All leads"],["customer","Customers"],["photographer","Photographers"],["hot","Hot — quoted, not booked"],["cold","Follow up — signed up, no shoot"],["waiting","Photographers to approve"],["booked","Booked"],["untracked","Source unknown"]];
+function leadMatch(x){
+  const f = S.leadF || "all";
+  if(f === "customer" || f === "photographer") return x.role === f;
+  if(f === "hot") return x.role === "customer" && x.quoted > 0 && !x.booked;
+  if(f === "cold") return x.role === "customer" && !x.requests && Date.now() - Date.parse(x.created_at) > 2 * 864e5;
+  if(f === "waiting") return x.stage === "Waiting for approval";
+  if(f === "booked") return x.booked > 0;
+  if(f === "untracked") return /^Unknown/.test(x.channel);
+  if(f.startsWith("ch:")) return x.channel === f.slice(3);
+  if(f.startsWith("st:")) return x.stage === f.slice(3);
+  return true;
+}
+function vLeads(){
+  const w = deptWait("leads"); if(w) return w;
+  const D = S.dept.leads;
+  const L = D.data, k = L.kpis, m = L.money, list = L.list.filter(leadMatch);
+  const goF = f => `S.leadF='${f}';render();setTimeout(()=>{const n=el('leadList');n&&n.scrollIntoView({behavior:'smooth'})},50)`;
+  const ch = L.by_channel || [];
+  const daily = stacked(L.daily || [], "day", "channel", "n");
+  const st = r => (L.stages || []).filter(x => x.role === r).sort((a, b) => a.stage.localeCompare(b.stage));
+  const cst = st("customer"), pst = st("photographer");
+  return deptHead("leads") + `
+  <div class="sec mt24">Leads in this period</div>
+  <div class="grid">
+    ${ktile(n0(k.leads), "New leads (sign-ups)", n0(k.customers) + " customers · " + n0(k.photographers) + " photographers", "hl", goF("all"))}
+    ${ktile(n0(k.visitors), "Visitors", pc(k.leads, k.visitors) + " became leads")}
+    ${ktile(n0(k.posted), "Posted a shoot", pc(k.posted, k.customers) + " of customers", "", goF("st:Posted a shoot"))}
+    ${ktile(n0(k.booked), "Booked", pc(k.booked, k.leads) + " lead → booking", "", goF("booked"))}
+    ${ktile(n0(k.completed), "Completed a shoot", "")}
+    ${ktile(n0(k.hot), "Hot leads", "Got quotes, haven't booked — call them", k.hot ? "hl" : "", goF("hot"))}
+    ${ktile(n0(k.cold), "Need a follow-up", "Signed up 2+ days ago, no shoot yet", "", goF("cold"))}
+    ${ktile(n0(k.pg_waiting), "Photographers to approve", "", k.pg_waiting ? "hl" : "", goF("waiting"))}
+    ${ktile(k.median_hours_to_request != null ? k.median_hours_to_request + " h" : "—", "Sign-up → first shoot", "median")}
+    ${ktile(k.median_hours_to_booking != null ? k.median_hours_to_booking + " h" : "—", "Sign-up → first booking", "median")}
+    ${m ? ktile(inr(k.value), "Value booked by these leads", "") : ""}
+    ${ktile(pc(k.tracked, k.leads), "Leads with a known source", n0(k.leads - k.tracked) + " unknown", "", goF("untracked"))}
+  </div>
+  <div class="grid2 mt16">
+    <div class="card"><div class="sec">New leads by channel</div>${chart("lcDaily", barCfg(daily.xs.map(x => bucketLabel(x, "day")), daily.sets, { stacked: true }))}</div>
+    <div class="card"><div class="sec">Where leads came from</div>${chart("lcPie", pieCfg(ch.map(x => x.channel), ch.map(x => x.leads), ch.map((x, i) => chColor(x.channel, i)), i => { S.leadF = "ch:" + ch[i].channel; render(); }))}</div>
+    <div class="card"><div class="sec">Customer funnel</div>${chart("lcFunC", barCfg(cst.map(x => x.stage.slice(2)), [{ label: "Customers", data: cst.map(x => x.n), color: "#ff5a1f" }], { horizontal: true, onPick: i => { S.leadF = "st:" + cst[i].stage.slice(2); render(); } }), 240)}</div>
+    <div class="card"><div class="sec">Photographer funnel</div>${chart("lcFunP", barCfg(pst.map(x => x.stage.slice(2)), [{ label: "Photographers", data: pst.map(x => x.n), color: "#a67cff" }], { horizontal: true, onPick: i => { S.leadF = "st:" + pst[i].stage.slice(2); render(); } }), 240)}</div>
+  </div>
+  <div class="grid2 mt16">
+    ${dtable("lchan", "Channels — visitors to bookings", [["channel","Channel", r => `<span class="dot" style="background:${chColor(r.channel, 0)}"></span>${esc(r.channel)}`],["visitors","Visitors","n"],["leads","Leads","n"],["conv","Visitor → lead", r => pc(r.leads, r.visitors)],["customers","Customers","n"],["photographers","Photographers","n"],["posted","Posted","n"],["booked","Booked","n"],["completed","Completed","n"]].concat(m ? [["value","Value","inr"]] : []), ch, { span: true, click: r => `S.leadF='ch:${esc(r.channel).replace(/'/g,"\\'")}';render()` })}
+    ${dtable("lcamp", "Campaigns (UTM tags)", [["source","Source"],["medium","Medium"],["campaign","Campaign"],["leads","Leads","n"],["booked","Booked","n"]].concat(m ? [["value","Value","inr"]] : []), L.by_campaign, { empty: "No tagged campaign links yet — build one on the Marketing tab." })}
+    ${dtable("lland", "Landing pages (first page they saw)", [["landing","Page", r => `<span class="mono">${esc(r.landing)}</span>`],["leads","Leads","n"],["booked","Booked","n"]], L.by_landing)}
+    ${dtable("lref", "Websites & apps that sent them", [["referrer","Site"],["leads","Leads","n"],["booked","Booked","n"]], L.by_referrer)}
+    ${dtable("lcity", "Cities", [["city","City"],["leads","Leads","n"],["customers","Customers","n"],["photographers","Photographers","n"],["booked","Booked","n"]], L.by_city)}
+    ${dtable("ldev", "Devices", [["device","Device"],["leads","Leads","n"]], L.by_device, { search: false })}
+    ${dtable("lint", "Shoot type they came for (from our SEO pages)", [["shoot","Shoot type", r => esc(CAT_NAMES[r.shoot] || r.shoot)],["leads","Leads","n"],["booked","Booked","n"]], L.by_interest, { search: false, empty: "No one has arrived from a shoot-type page yet." })}
+  </div>
+  <div id="leadList" class="sec mt24">Every lead</div>
+  ${filterChips("leadF", LEAD_FILTERS.concat(String(S.leadF || "").includes(":") ? [[S.leadF, S.leadF.split(":")[1]]] : []))}
+  <div class="mt12">${dtable("leads", "Leads", [
+      ["created_at","Joined","dt"],["name","Name", r => userLink(r.id, r.name, r.public_id)],["role","Type","chip"],
+      ["channel","Channel", r => `<span class="dot" style="background:${chColor(r.channel, 0)}"></span>${esc(r.channel)}`],
+      ["source","Source / medium / campaign", r => [r.source, r.medium, r.campaign].filter(Boolean).map(esc).join(" / ") || (r.ads_click ? "ad click" : `<span class="muted2">—</span>`)],
+      ["landing","Landed on", r => r.landing ? `<span class="mono">${esc(r.landing)}</span>` : `<span class="muted2">—</span>`],
+      ["referrer","Sent by", r => esc(r.referrer || "") || (r.ref_name ? "" : `<span class="muted2">—</span>`)],
+      ["ref_name","Invited by", r => r.ref_id ? `${esc(r.ref_name || "")} <span class="xs" style="color:var(--accent)">${esc(r.ref_id)}</span>` : `<span class="muted2">—</span>`],
+      ["city","City"],["device","Device"],["stage","Stage", r => `<span class="chip ${r.stage_no >= 5 ? "green" : r.stage_no === 0 ? "red" : r.stage_no >= 3 ? "amber" : ""}">${esc(r.stage)}</span>`],
+      ["requests","Shoots","n"],["booked","Bookings","n"]
+    ].concat(m ? [["spend","Spent","inr"],["email","Contact", contactCell]] : []).concat([["last_seen_at","Last seen","ago"]]),
+    list, { span: true, click: r => `openUser('${r.id}')` })}</div>`;
+}
+
+/* ===================== MARKETING ===================== */
+function vMarketing(){
+  const w = deptWait("marketing"); if(w) return w;
+  const D = S.dept.marketing;
+  const M = D.data, k = M.kpis, b = M.range.bucket, m = M.money;
+  const ser = stacked(M.series || [], "bucket", "channel", "n");
+  const chs = M.channels || [], dv = M.devices || [];
+  const hrs = Array.from({ length: 24 }, (_, h) => ((M.hours || []).find(x => x.h === h) || {}).n || 0);
+  const isSeo = p => /photographers|photography-prices|guides|how-it-works|faq|about/.test(p || "");
+  return deptHead("marketing") + `
+  <div class="sec mt24">Traffic</div>
+  <div class="grid">
+    ${ktile(n0(k.visitors), "Unique visitors", n0(k.views) + " page views", "hl")}
+    ${ktile(n0(k.new_visitors), "New visitors", "First visit ever in this period")}
+    ${ktile(n0(k.returning), "Came back", "Visited on 2+ days")}
+    ${ktile(k.pages_per_visit || "—", "Pages per visit", "")}
+    ${ktile(n0(k.signups), "Sign-ups", pc(k.signups, k.visitors) + " of visitors")}
+    ${ktile(n0(k.bookings), "Bookings", pc(k.bookings, k.signups) + " of sign-ups")}
+    ${ktile(n0(k.search_visitors), "From Google / Bing", "Search")}
+    ${ktile(n0(k.seo_visitors), "Landed on SEO pages", "City & shoot-type pages, guides, prices")}
+    ${ktile(n0(k.ai_visitors), "From AI assistants", "ChatGPT, Perplexity, Gemini, Claude…")}
+    ${ktile(n0(k.social_visitors), "From social media", "Instagram, Facebook, WhatsApp…")}
+    ${ktile(n0(k.ref_link_opens), "Invite links opened", "", "", "openTab('referrals')")}
+    ${m ? ktile(inr(k.discounts), "Discounts given", n0(k.discounted_bookings) + " bookings used an offer") : ""}
+  </div>
+  <div class="grid2 mt16">
+    <div class="card" style="grid-column:1/-1"><div class="sec">Visitors by channel</div>${chart("mkSeries", barCfg(ser.xs.map(x => bucketLabel(x, b)), ser.sets, { stacked: true }))}</div>
+    <div class="card"><div class="sec">Channel share</div>${chart("mkPie", pieCfg(chs.map(x => x.channel), chs.map(x => x.visitors), chs.map((x, i) => chColor(x.channel, i))))}</div>
+    <div class="card"><div class="sec">Devices</div>${chart("mkDev", pieCfg(dv.map(x => x.device), dv.map(x => x.visitors)))}</div>
+    <div class="card" style="grid-column:1/-1"><div class="sec">Time of day people visit (India time)</div>${chart("mkHours", barCfg(hrs.map((_, h) => (h % 12 || 12) + (h < 12 ? "am" : "pm")), [{ label: "Visitors", data: hrs, color: "#4d8dff" }]), 200)}</div>
+  </div>
+  <div class="grid2 mt16">
+    ${dtable("mch", "Channels", [["channel","Channel", r => `<span class="dot" style="background:${chColor(r.channel, 0)}"></span>${esc(r.channel)}`],["visitors","Visitors","n"],["views","Page views","n"],["mobile","Mobile", r => pc(r.mobile, r.visitors)],["signups","Sign-ups","n"],["conv","Conversion", r => pc(r.signups, r.visitors)],["bookings","Bookings","n"]].concat(m ? [["value","Booked value","inr"]] : []), chs, { span: true })}
+    ${dtable("mcamp", "Campaigns (UTM tags)", [["source","Source"],["medium","Medium"],["campaign","Campaign"],["visitors","Visitors","n"],["views","Views","n"],["signups","Sign-ups","n"],["conv","Conversion", r => pc(r.signups, r.visitors)]], M.campaigns, { span: true, empty: "No tagged links yet. Use the link builder below for every ad, post and QR poster." })}
+    ${dtable("mland", "Landing pages", [["path","Page", r => `<span class="mono">${esc(r.path)}</span>${isSeo(r.path) ? ' <span class="chip blue">SEO</span>' : ""}`],["visitors","Visitors","n"],["views","Views","n"],["signups","Sign-ups","n"],["conv","Conversion", r => pc(r.signups, r.visitors)]], M.landing)}
+    ${dtable("mpages", "Every page viewed", [["path","Page", r => `<span class="mono">${esc(r.path)}</span>`],["visitors","Visitors","n"]], M.pages)}
+    ${dtable("mrefs", "Referring websites & apps", [["referrer","Site"],["channel","Counted as"],["visitors","Visitors","n"],["views","Views","n"]], M.referrers)}
+    ${dtable("mterms", "Ad keywords (utm_term)", [["term","Keyword"],["visitors","Visitors","n"]], M.terms, { empty: "Add utm_term to ad links to see keywords here." })}
+    ${dtable("mint", "Shoot types people came for", [["shoot","Shoot type", r => esc(CAT_NAMES[r.shoot] || r.shoot)],["n","Sign-ups","n"]], M.interest, { search: false })}
+    ${dtable("moffers", "Offers & promo codes", [["title","Offer"],["code","Code"],["audience","For"],["active","Live", r => r.active ? '<span class="chip green">Live</span>' : '<span class="chip">Paused</span>'],["claimed","Claimed","n"],["used","Used","n"],["bookings","Bookings","n"]].concat(m ? [["discount","Discount cost","inr"]] : []), M.offers, { span: true, click: () => "openTab('offers')" })}
+  </div>
+  <div class="grid mt16">
+    ${ktile(n0(M.referral.opens), "Invite links opened", "", "", "openTab('referrals')")}
+    ${ktile(n0(M.referral.joined), "Joined with a code", "")}
+    ${ktile(n0(M.referral.rewarded), "Invites rewarded", "")}
+    ${ktile(n0(M.referral.rewards_given), "Invite rewards given", n0(M.referral.rewards_used) + " used")}
+  </div>
+  ${linkBuilder()}`;
+}
+/* campaign link builder: every ad / post / poster gets its own trackable link */
+function linkBuilder(){
+  const B = S.lb || (S.lb = { page: "/", source: "", medium: "", campaign: "", content: "", term: "" });
+  const pages = [["/","Home page"],["/app.html#signup","App — customer sign-up"],["/app.html#join","App — photographer sign-up"],["/photographers/","Find photographers"],["/photography-prices/","Prices page"],["custom","Another page…"]];
+  const path = B.page === "custom" ? (B.custom || "/") : B.page;
+  const [p, hash] = path.split("#");
+  const qs = ["source","medium","campaign","content","term"].filter(x => B[x]).map(x => "utm_" + x + "=" + encodeURIComponent(B[x].trim().toLowerCase().replace(/\s+/g, "_"))).join("&");
+  const url = "https://snappro.in" + (p.startsWith("/") ? p : "/" + p) + (qs ? (p.includes("?") ? "&" : "?") + qs : "") + (hash ? "#" + hash : "");
+  const inp = (k, ph) => `<input id="lb_${k}" class="input" style="padding:9px 12px" placeholder="${ph}" value="${esc(B[k] || "")}" oninput="S.lb.${k}=this.value;clearTimeout(tbTimer);tbTimer=setTimeout(render,250)">`;
+  return `<div class="sec mt24">Campaign link builder</div>
+  <div class="card"><div class="xs muted2">Make a separate link for every ad, Instagram post, WhatsApp message or QR poster. Visits, sign-ups and bookings from it show up under Campaigns above and on the Leads tab.</div>
+    <div class="lbgrid mt12">
+      <label class="xs muted">Page<select id="lb_page" class="input" style="padding:9px 12px" onchange="S.lb.page=this.value;render()">${pages.map(([v, l]) => `<option value="${v}" ${B.page === v ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+      ${B.page === "custom" ? `<label class="xs muted">Path${inp("custom", "/wedding-photographers-in-delhi/")}</label>` : ""}
+      <label class="xs muted">Source (where)${inp("source", "instagram, google, whatsapp, poster")}</label>
+      <label class="xs muted">Medium (type)${inp("medium", "paid_social, cpc, story, qr, sms")}</label>
+      <label class="xs muted">Campaign (name)${inp("campaign", "diwali_weddings")}</label>
+      <label class="xs muted">Content (which ad)${inp("content", "video_a")}</label>
+      <label class="xs muted">Keyword${inp("term", "wedding photographer delhi")}</label>
+    </div>
+    <div class="row mt12" style="flex-wrap:wrap"><input class="input grow mono" readonly value="${esc(url)}" onclick="this.select()">
+      <button class="btn sm primary" onclick="navigator.clipboard.writeText(${JSON.stringify(url).replace(/"/g, "&quot;")});S.note='Link copied.';render()">Copy link</button></div>
+    ${!B.source ? `<div class="xs muted2 mt8">Fill in at least Source so the visit is credited.</div>` : ""}
+  </div>`;
+}
+
+/* ===================== FINANCE ===================== */
+const LEDGER_F = [["all","All"],["in","Money in"],["out","Money out"]];
+function vFinance(){
+  if(!money()) return `<div class="warn">Finance is for admins.</div>`;
+  const w = deptWait("finance"); if(w) return w;
+  const D = S.dept.finance;
+  const F = D.data, k = F.kpis, b = F.range.bucket, s = F.series || [];
+  const labels = s.map(x => bucketLabel(x.bucket, b)), N = (x, key) => Number(x[key] || 0);
+  const lf = S.ledF || "all", led = (F.ledger || []).filter(x => lf === "all" || x.dir === lf);
+  const pnl = (F.pnl || []).map(x => ({ ...x, net_cash: N(x, "collected") - N(x, "refunded"), revenue: N(x, "commission") + N(x, "storage") }));
+  const mth = F.by_method || [], cat = F.by_category || [];
+  return deptHead("finance") + `
+  <div class="sec mt24">Sales</div>
+  <div class="grid">
+    ${ktile(inr(k.gmv), "Booking value (GMV)", n0(k.bookings) + " bookings · before discounts", "hl", "openDrill('booking_value','Bookings (value)')")}
+    ${ktile(inr(k.net_gmv), "After discounts", inr(k.discounts) + " discounts")}
+    ${ktile(k.avg_booking ? inr(k.avg_booking) : "—", "Average booking", "")}
+    ${ktile(inr(k.completed_value), "Completed shoots value", n0(k.completed) + " shoots", "", "openDrill('completed','Completed shoots')")}
+    ${ktile(inr(k.cancelled_value), "Cancelled bookings value", "")}
+  </div>
+  <div class="sec mt24">SnapPro revenue</div>
+  <div class="grid">
+    ${ktile(inr(k.revenue), "Total revenue", "Commission + storage plans", "hl")}
+    ${ktile(inr(k.commission), "Commission earned", "From shoots completed in this period", "", "openDrill('commission','Payments with commission')")}
+    ${ktile(inr(k.commission_booked), "Commission booked", "From bookings made in this period")}
+    ${ktile(k.take_rate != null ? k.take_rate + "%" : "—", "Take rate", "Commission ÷ completed value")}
+    ${ktile(inr(k.storage_revenue), "Storage plans sold", n0(k.storage_orders) + " plans")}
+    ${ktile(inr(k.discounts), "Discounts & rewards cost", "Paid from commission")}
+  </div>
+  <div class="sec mt24">Cash</div>
+  <div class="grid">
+    ${ktile(inr(k.collected), "Collected online", n0(k.payments) + " payments", "hl", "openDrill('collected','Payments collected')")}
+    ${ktile(inr(k.collected_advance), "Advances (25%)", "")}
+    ${ktile(inr(k.collected_balance), "Balances (75%)", "")}
+    ${ktile(inr(k.refunded), "Refunded", n0(k.refunds) + " refunds", "", "openDrill('refunds','Refunds')")}
+    ${ktile(inr(Number(k.collected) - Number(k.refunded)), "Net cash in", "Collected − refunded")}
+    ${ktile(inr(k.payouts_paid), "Paid to photographers", n0(k.payouts_paid_n) + " payouts", "", "openDrill('payouts_paid','Payouts paid')")}
+    ${ktile(inr(k.collected_live), "Live money", "Test-mode: " + inr(k.collected_test))}
+  </div>
+  <div class="sec mt24">Owed &amp; to do — right now</div>
+  <div class="grid">
+    ${ktile(inr(k.payouts_due), "Owed to photographers", n0(k.payouts_due_n) + " payouts due", k.payouts_due_n ? "hl" : "", "openDrill('payouts_due','Payouts due to photographers')")}
+    ${ktile(inr(k.payouts_on_hold), "Payouts on hold", "")}
+    ${ktile(inr(k.balances_due), "Balances customers owe", n0(k.balances_due_n) + " shoots started", k.balances_due_n ? "hl" : "", "openDrill('balances_due','Balances owed')")}
+    ${ktile(inr(k.balances_pending), "Balances still to come", "Shoots not started yet")}
+    ${ktile(n0(k.refunds_to_do), "Refunds to do", "", k.refunds_to_do ? "hl" : "", "openDrill('refunds_due','Refunds to do')")}
+    ${ktile(n0(k.refunds_failed), "Failed refunds", "", k.refunds_failed ? "hl" : "", "openTab('trust')")}
+    ${ktile(n0(k.failed_payments), "Failed payments", inr(k.failed_amount), "", "openDrill('payments_failed','Failed or abandoned payments')")}
+    ${ktile(n0(k.abandoned), "Abandoned checkouts", "Started paying, never finished")}
+    ${ktile(n0(k.duplicates), "Duplicate payments", "Paid twice — refund one", k.duplicates ? "hl" : "", "openTab('trust')")}
+  </div>
+  <div class="grid2 mt16">
+    <div class="card" style="grid-column:1/-1"><div class="sec">Cash in and out</div>${chart("fnCash", barCfg(labels, [
+      { label: "Advances", data: s.map(x => N(x, "advance")), color: "#4d8dff", stack: "in" }, { label: "Balances", data: s.map(x => N(x, "balance")), color: "#5fd3e0", stack: "in" },
+      { label: "Storage", data: s.map(x => N(x, "storage")), color: "#ffc857", stack: "in" },
+      { label: "Refunds", data: s.map(x => N(x, "refunded")), color: "#ff4d5e", stack: "out" }, { label: "Payouts", data: s.map(x => N(x, "payouts")), color: "#a67cff", stack: "out" }], { money: true, stacked: true }))}</div>
+    <div class="card"><div class="sec">Revenue</div>${chart("fnRev", barCfg(labels, [
+      { label: "Commission", data: s.map(x => N(x, "commission")), color: "#28c76f" }, { label: "Storage plans", data: s.map(x => N(x, "storage")), color: "#ffc857" },
+      { label: "Discounts", data: s.map(x => N(x, "discounts")), color: "#ff8fb1", type: "line", tension: .3, pointRadius: 2 }], { money: true, stacked: true }))}</div>
+    <div class="card"><div class="sec">Booking value (GMV)</div>${chart("fnGmv", barCfg(labels, [{ label: "GMV", data: s.map(x => N(x, "gmv")), color: "#ff5a1f" }], { money: true }))}</div>
+    <div class="card"><div class="sec">How customers pay</div>${chart("fnMeth", pieCfg(mth.map(x => methodName(x.method)), mth.map(x => Number(x.amount))))}</div>
+    <div class="card"><div class="sec">Value by shoot type</div>${chart("fnCat", barCfg(cat.map(x => CAT_NAMES[x.category] || x.category), [{ label: "GMV", data: cat.map(x => Number(x.gmv)), color: "#ff5a1f" }, { label: "Commission", data: cat.map(x => Number(x.commission)), color: "#28c76f" }], { money: true }))}</div>
+  </div>
+  <div class="grid2 mt16">
+    ${dtable("pnl", "Monthly profit &amp; loss — last 12 months", [["month","Month", r => bucketLabel(r.month, "month")],["gmv","GMV","inr"],["collected","Collected","inr"],["refunded","Refunded","inr"],["net_cash","Net cash","inr"],["commission","Commission","inr"],["storage","Storage","inr"],["discounts","Discounts","inr"],["revenue","SnapPro revenue","inr"],["payouts","Paid to photographers","inr"]], pnl, { span: true, search: false })}
+    ${dtable("fcat", "By shoot type", [["category","Shoot type", r => esc(CAT_NAMES[r.category] || r.category)],["n","Bookings","n"],["gmv","Value","inr"],["commission","Commission","inr"]], cat)}
+    ${dtable("fcity", "By city", [["city","City"],["n","Bookings","n"],["gmv","Value","inr"],["commission","Commission","inr"]], F.by_city)}
+    ${dtable("fmeth", "Payment methods", [["method","Method", r => esc(methodName(r.method))],["n","Payments","n"],["amount","Amount","inr"]], mth, { search: false })}
+    ${dtable("fplan", "Storage plans sold", [["plan","Plan"],["n","Sold","n"],["amount","Amount","inr"]], F.by_plan, { search: false })}
+    ${dtable("ftopp", "Top photographers by earnings", [["name","Photographer", r => userLink(r.id, r.name, r.public_id)],["shoots","Shoots","n"],["earned","Earned","inr"],["commission","Commission","inr"]], F.top_photographers)}
+    ${dtable("ftopc", "Top customers by spend", [["name","Customer", r => userLink(r.id, r.name, r.public_id)],["bookings","Bookings","n"],["spend","Spent","inr"]], F.top_customers)}
+  </div>
+  <div class="sec mt24">Ledger — every rupee in and out</div>
+  ${filterChips("ledF", LEDGER_F)}
+  <div class="mt12">${dtable("ledger", "Transactions", [["at","When","dt"],["type","Type", r => `<span class="chip ${r.dir === "in" ? "green" : "red"}">${esc(r.type)}</span>`],["detail","Detail"],["amount","Amount", r => `<b style="color:${r.dir === "in" ? "var(--green)" : "var(--red)"}">${r.dir === "in" ? "+" : "−"}${inr(r.amount)}</b>`],
+      ["who","Who", r => userLink(null, r.who, r.who_id)],["method","Method", r => esc(methodName(r.method) || "")],["status","Status"],["ref","Our ref", r => `<span class="mono">${esc(r.ref || "")}</span>`],["gateway","Razorpay ref", r => `<span class="mono">${esc(r.gateway || "")}</span>`],["env","Mode"],["booking_id","Booking", r => bkLink(r.booking_id)]], led, { span: true })}</div>`;
+}
+
+/* ===================== OPERATIONS ===================== */
+function vOps(){
+  const w = deptWait("ops"); if(w) return w;
+  const D = S.dept.ops;
+  const O = D.data, L = O.live, k = O.kpis, m = O.money;
+  const unq = (L.open_requests || []).filter(r => !r.quotes && r.minutes_open >= 15);
+  const cat = O.by_category || [], urg = O.by_urgency || [];
+  const sd = (O.supply_demand || []).map(x => ({ ...x, gap: x.requests && !x.photographers ? "No photographers" : x.unquoted ? x.unquoted + " got no quote" : "" }));
+  const goto = id => `document.getElementById('${id}').scrollIntoView({behavior:'smooth'})`;
+  return deptHead("ops") + `
+  <div class="sec mt24">Right now</div>
+  <div class="grid">
+    ${ktile(n0(L.open_requests.length), "Open requests", "Waiting for quotes", L.open_requests.length ? "hl" : "", goto("opsOpen"))}
+    ${ktile(n0(unq.length), "No quote after 15 min", "Nudge photographers", unq.length ? "hl" : "", goto("opsOpen"))}
+    ${ktile(n0(L.shoots_today.length), "Shoots today", "", "", goto("opsToday"))}
+    ${ktile(n0(L.in_progress.length), "Happening now", "On the way / arrived / shooting", "", goto("opsNow"))}
+    ${ktile(n0(L.late.length), "Running late", "Not started 15+ min after start time", L.late.length ? "hl" : "", goto("opsLate"))}
+    ${ktile(n0(L.stuck_shooting.length), "Never marked done", "Shooting long past its end", L.stuck_shooting.length ? "hl" : "", goto("opsLate"))}
+    ${ktile(n0(L.abandoned_checkouts.length), "Abandoned checkouts", "Chose a photographer, didn't pay", "", goto("opsAband"))}
+    ${ktile(n0(L.balances_due.length), "Balances unpaid", "Shoot started, 75% not paid", L.balances_due.length ? "hl" : "", "openDrill('balances_due','Balances owed')")}
+    ${ktile(n0(L.approvals.length), "Photographers to approve", "", L.approvals.length ? "hl" : "", "openTab('pros')")}
+    ${ktile(n0(L.kyc_waiting), "ID checks waiting", "", L.kyc_waiting ? "hl" : "", "openTab('pros')")}
+    ${m ? ktile(n0(L.payouts_due), "Payouts to send", "", L.payouts_due ? "hl" : "", "openDrill('payouts_due','Payouts due to photographers')") : ""}
+    ${m ? ktile(n0(L.refunds_to_do), "Refunds to do", "", L.refunds_to_do ? "hl" : "", "openDrill('refunds_due','Refunds to do')") : ""}
+  </div>
+  <div class="grid2 mt16">
+    <div id="opsOpen" style="grid-column:1/-1">${dtable("opsOpen", "Open requests", [["created_at","Posted","dt"],["customer_name","Customer"],["category","Shoot", r => esc(CAT_NAMES[r.category] || r.category)],["city","City"],["urgency","When"],["start_at","Starts","dt"],
+        ["minutes_open","Waiting", r => `<b style="color:${!r.quotes && r.minutes_open >= 15 ? "var(--red)" : "inherit"}">${r.minutes_open < 60 ? r.minutes_open + " min" : Math.round(r.minutes_open / 6) / 10 + " h"}</b>`],
+        ["quotes","Quotes","n"],["matching_pgs","Photographers who could quote", r => `<b style="color:${r.matching_pgs ? "inherit" : "var(--red)"}">${num(r.matching_pgs)}</b>`],["budget","Budget","inr"],["expires_at","Closes","dt"]], L.open_requests, { empty: "No open requests right now." })}</div>
+    <div id="opsLate" style="grid-column:1/-1">${dtable("opsLate", "Running late / not marked done", [["start_at","Start","dt"],["id","Booking", r => bkLink(r.id)],["customer_name","Customer"],["photographer_name","Photographer"],["status","Status","chip"],["minutes_late","Late by", r => r.minutes_late != null ? r.minutes_late + " min" : "—"]], L.late.concat(L.stuck_shooting), { empty: "Nothing late. 👍" })}</div>
+    <div id="opsToday">${dtable("opsToday", "Today's shoots", [["start_at","Start","dt"],["id","Booking", r => bkLink(r.id)],["customer_name","Customer"],["photographer_name","Photographer"],["category","Shoot", r => esc(CAT_NAMES[r.category] || r.category)],["city","City"],["status","Status","chip"]], L.shoots_today, { empty: "No shoots today." })}</div>
+    <div id="opsNow">${dtable("opsNow", "Happening now", [["start_at","Start","dt"],["id","Booking", r => bkLink(r.id)],["customer_name","Customer"],["photographer_name","Photographer"],["status","Status","chip"],["updated_at","Last update","ago"]], L.in_progress, { empty: "No shoots in progress." })}</div>
+    ${dtable("opsUp", "Next 7 days", [["start_at","Start","dt"],["id","Booking", r => bkLink(r.id)],["customer_name","Customer"],["photographer_name","Photographer"],["category","Shoot", r => esc(CAT_NAMES[r.category] || r.category)],["city","City"],["status","Status","chip"]], L.upcoming, { empty: "Nothing booked for the next week." })}
+    <div id="opsAband">${dtable("opsAband", "Abandoned checkouts (last 7 days)", [["created_at","When","dt"],["id","Booking", r => bkLink(r.id)],["customer_name","Customer"],["photographer_name","Photographer"],["category","Shoot", r => esc(CAT_NAMES[r.category] || r.category)]].concat(m ? [["advance_amount","Advance","inr"]] : []), L.abandoned_checkouts, { empty: "None." })}</div>
+    ${dtable("opsAppr", "Photographers waiting for approval", [["submitted_at","Applied","dt"],["display_name","Name", r => userLink(r.id, r.display_name)],["city","City"],["photos","Photos","n"],["kyc","ID check", r => esc(r.kyc || "not sent")],["hours_waiting","Waiting", r => r.hours_waiting + " h"]], L.approvals, { click: () => "openTab('pros')", empty: "No one waiting." })}
+    ${dtable("opsOnline", "Photographers available now, by city", [["city","City"],["online","Available","n"],["approved","Approved","n"]], L.online_by_city)}
+  </div>
+  <div class="sec mt24">How well it ran — this period</div>
+  <div class="grid">
+    ${ktile(n0(k.requests), "Requests", "", "hl", "openDrill('requests','Shoot requests')")}
+    ${ktile(pc(k.quoted, k.requests), "Got at least one quote", n0(k.quoted) + " requests")}
+    ${ktile(pc(k.booked, k.requests), "Turned into a booking", n0(k.booked) + " requests")}
+    ${ktile(n0(k.no_quote), "Closed with no quote", "Lost demand", k.no_quote ? "hl" : "")}
+    ${ktile(k.avg_quotes != null ? k.avg_quotes : "—", "Quotes per request", "")}
+    ${ktile(k.median_first_quote_min != null ? k.median_first_quote_min + " min" : "—", "Time to first quote", "median")}
+    ${ktile(k.median_to_book_min != null ? k.median_to_book_min + " min" : "—", "Request → booking", "median")}
+    ${ktile(pc(k.completed, k.bookings), "Bookings completed", n0(k.completed) + " of " + n0(k.bookings))}
+    ${ktile(n0(k.cancelled_bookings), "Cancelled", n0(k.cancelled_by_customer) + " by customers · " + n0(k.cancelled_by_photographer) + " by photographers", "", "openDrill('cancelled','Cancelled bookings')")}
+    ${ktile(n0(k.abandoned), "Never paid", "Booking started, advance not paid")}
+    ${ktile(k.avg_rating != null ? k.avg_rating + "★" : "—", "Average rating", n0(k.reviews) + " reviews", "", "openDrill('reviews','Reviews')")}
+    ${ktile(n0(k.messages), "Chat messages", "")}
+  </div>
+  <div class="grid2 mt16">
+    <div class="card"><div class="sec">Requests by shoot type</div>${chart("opCat", barCfg(cat.map(x => CAT_NAMES[x.category] || x.category), [{ label: "Requests", data: cat.map(x => x.requests), color: "#4d8dff" }, { label: "Quoted", data: cat.map(x => x.quoted), color: "#ffc857" }, { label: "Booked", data: cat.map(x => x.booked), color: "#28c76f" }]))}</div>
+    <div class="card"><div class="sec">How soon people want a photographer</div>${chart("opUrg", pieCfg(urg.map(x => x.urgency), urg.map(x => x.n)))}</div>
+    ${heat(O.heatmap || [], "When requests are posted (India time)")}
+    ${heat(O.shoot_heatmap || [], "When shoots happen (India time)")}
+    ${dtable("opsSD", "Supply vs demand by city", [["city","City"],["requests","Requests","n"],["unquoted","No quote","n"],["booked","Booked","n"],["photographers","Approved photographers","n"],["online","Available now","n"],["gap","Gap", r => r.gap ? `<span class="chip red">${esc(r.gap)}</span>` : ""]], sd, { span: true, note: "Cities with requests but no photographers are where to recruit next." })}
+    ${dtable("opsCat", "Shoot types", [["category","Shoot", r => esc(CAT_NAMES[r.category] || r.category)],["requests","Requests","n"],["quoted","Quoted","n"],["booked","Booked","n"],["rate","Booked %", r => pc(r.booked, r.requests)],["avg_budget","Avg budget","inr"],["avg_quote","Avg quote","inr"],["photographers","Photographers offering it","n"]], cat, { span: true })}
+    ${dtable("opsCanc", "Cancellations", [["who","Cancelled by"],["stage","At stage"],["n","Bookings","n"]], O.cancellations, { search: false, empty: "No cancellations. 👍" })}
+    ${dtable("opsPg", "Photographer performance", [["name","Photographer", r => userLink(r.id, r.name, r.public_id)],["city","City"],["is_online","Now", r => r.is_online ? '<span class="chip green">Available</span>' : '<span class="chip">Off</span>'],["quotes","Quotes","n"],["wins","Won","n"],["winrate","Win %", r => pc(r.wins, r.quotes)],["completed","Done","n"],["cancelled","Cancelled","n"],["median_quote_min","Quote speed", r => r.median_quote_min != null ? r.median_quote_min + " min" : "—"],["rating","Rating", r => r.rating ? Number(r.rating).toFixed(1) + "★ (" + r.review_count + ")" : "—"],["kyc","ID", r => esc(r.kyc || "—")],["last_online","Last available","ago"],["last_seen_at","Last opened app","ago"]].concat(m ? [["earned","Earned","inr"]] : []), O.photographers, { span: true })}
+  </div>`;
+}
+
+/* ===================== CUSTOMERS ===================== */
+function vCustomers(){
+  const w = deptWait("customers", true); if(w) return w;
+  const D = S.dept.customers;
+  const C = D.data, k = C.kpis, m = C.money, seg = C.segments || [];
+  const sf = S.custF || "all", list = (C.list || []).filter(x => sf === "all" || x.segment === sf);
+  const maxCo = Math.max(1, ...(C.cohorts || []).map(c => c.size));
+  return deptHead("customers", true) + `
+  <div class="grid mt16">
+    ${ktile(n0(k.customers), "Customers", "", "hl", "S.custF='all';render()")}
+    ${ktile(n0(k.with_booking), "Have booked", pc(k.with_booking, k.customers))}
+    ${ktile(n0(k.repeat), "Repeat customers", "2+ completed shoots", "", "S.custF='Repeat';render()")}
+    ${ktile(k.repeat_rate != null ? k.repeat_rate + "%" : "—", "Repeat rate", "Of customers with a completed shoot")}
+    ${m ? ktile(k.avg_ltv ? inr(k.avg_ltv) : "—", "Average lifetime value", "Per customer who booked") : ""}
+    ${ktile(k.avg_bookings || "—", "Bookings per customer", "")}
+    ${ktile(n0(k.active_30), "Opened the app in 30 days", "")}
+    ${ktile(n0(k.referrers), "Invited a friend", "", "", "openTab('referrals')")}
+  </div>
+  <div class="grid2 mt16">
+    <div class="card"><div class="sec">Segments</div>${chart("cuSeg", pieCfg(seg.map(x => x.segment), seg.map(x => x.n), null, i => { S.custF = seg[i].segment; render(); }))}</div>
+    ${m && C.ltv_buckets ? `<div class="card"><div class="sec">Lifetime spend</div>${chart("cuLtv", barCfg(C.ltv_buckets.map(x => x.bucket), [{ label: "Customers", data: C.ltv_buckets.map(x => x.n), color: "#28c76f" }]))}</div>` : ""}
+    ${dtable("cuSegT", "Segments", [["segment","Segment"],["n","Customers","n"]].concat(m ? [["spend","Spent","inr"]] : []), seg, { search: false, click: r => `S.custF='${esc(r.segment)}';render()` })}
+    ${dtable("cuCity", "Cities", [["city","City"],["n","Customers","n"],["booked","Booked","n"]].concat(m ? [["spend","Spent","inr"]] : []), C.cities)}
+    <div class="card" style="grid-column:1/-1"><div class="sec">Cohorts — of people who joined each month, how many booked in month 0, 1, 2…</div>
+      <div class="tblwrap"><table class="heat"><thead><tr><th>Joined</th><th>People</th>${Array.from({ length: 12 }, (_, i) => `<th>M${i}</th>`).join("")}</tr></thead>
+      <tbody>${(C.cohorts || []).map(c => `<tr><th>${bucketLabel(c.cohort, "month")}</th><td>${num(c.size)}</td>${Array.from({ length: 12 }, (_, i) => { const v = (c.months || [])[i];
+        return v == null ? `<td></td>` : `<td style="background:rgba(40,199,111,${v ? (0.15 + 0.85 * v / Math.max(1, c.size)).toFixed(2) : 0})" title="${v} of ${c.size}">${v ? pc(v, c.size) : "0"}</td>`; }).join("")}</tr>`).join("") || `<tr><td colspan="14" class="muted2">No customers in the last 12 months.</td></tr>`}</tbody></table></div></div>
+  </div>
+  <div class="sec mt24">Every customer</div>
+  ${filterChips("custF", [["all","All"]].concat(seg.map(x => [x.segment, x.segment])))}
+  <div class="mt12">${dtable("cust", "Customers", [["created_at","Joined","d"],["name","Name", r => userLink(r.id, r.name, r.public_id)],["segment","Segment","chip"],["channel","Came from"],["city","City"],["requests","Shoots posted","n"],["bookings","Bookings","n"],["completed","Completed","n"],["cancelled","Cancelled","n"]].concat(m ? [["spend","Spent","inr"]] : []).concat([["last_booking","Last booking","d"],["referred","Invited","n"],["last_seen_at","Last seen","ago"]]).concat(m ? [["email","Contact", contactCell]] : []), list, { span: true, click: r => `openUser('${r.id}')` })}</div>`;
+}
+
+/* ===================== REFERRALS ===================== */
+async function refAction(id, action){
+  const L = { reward: "Give both rewards now?", hold: "Hold this referral's rewards for review?", clear: "Clear the hold? Rewards are given if they've qualified.", remove: "Remove the invite link between these two accounts?" };
+  if(!confirm(L[action])) return;
+  const { error } = await sb.rpc("admin_referral_action", { p_user: id, p_action: action });
+  if(error){ S.err = error.message; render(); return; }
+  S.note = "Done."; deptLoad("referrals", true); if(S.dept.trust) deptLoad("trust", true);
+}
+function vReferrals(){
+  const w = deptWait("referrals"); if(w) return w;
+  const D = S.dept.referrals;
+  const R = D.data, k = R.kpis, m = R.money, s = R.series || [];
+  const P = R.program || {};
+  const rf = S.refF || "all", list = (R.list || []).filter(x => rf === "all" || x.status === rf || (rf === "same" && x.same_device));
+  return deptHead("referrals") + `
+  <div class="grid mt16">
+    ${ktile(P.enabled ? '<span style="color:var(--green)">ON</span>' : '<span style="color:var(--muted)">OFF</span>', "Invite rewards", P.enabled ? "Customers " + ((P.customer || {}).enabled === false ? "off" : "on") + " · photographers " + ((P.photographer || {}).enabled === false ? "off" : "on") : "Turn on below", P.enabled ? "hl" : "", "document.getElementById('refEdit').scrollIntoView({behavior:'smooth'})")}
+    ${ktile(n0(k.opens), "Invite links opened", "Unique browsers")}
+    ${ktile(n0(k.joined), "Joined with a code", n0(k.customers) + " customers · " + n0(k.photographers) + " photographers", "", "S.refF='all';render()")}
+    ${ktile(pc(k.joined, k.opens), "Open → join", "")}
+    ${ktile(n0(k.booked), "Booked", "", "", "S.refF='Booked';render()")}
+    ${ktile(n0(k.completed), "Completed a shoot", "", "", "S.refF='Completed a shoot';render()")}
+    ${ktile(n0(k.rewarded), "Rewarded", "", "", "S.refF='Rewarded';render()")}
+    ${ktile(n0(k.flagged), "Held for review", "Same phone/browser, or held by admin", k.flagged ? "hl" : "", "S.refF='Held for review';render()")}
+    ${ktile(n0(k.inviters), "People inviting", "")}
+    ${ktile(n0(k.rewards_given), "Rewards given", n0(k.rewards_used) + " used")}
+    ${m ? ktile(inr(k.discount_cost), "Cost of invite discounts", "") : ""}
+    ${m ? ktile(inr(k.referred_spend), "Spent by invited customers", "") : ""}
+  </div>
+  <div class="card mt16"><div class="sec">Invites over time</div>${chart("rfSeries", barCfg(s.map(x => bucketLabel(x.day, "day")), [{ label: "Link opens", data: s.map(x => x.opens), color: "#4d8dff" }, { label: "Joined", data: s.map(x => x.joined), color: "#ff5a1f" }, { label: "Rewarded", data: s.map(x => x.rewarded), color: "#28c76f" }]))}</div>
+  <div class="grid2 mt16">
+    ${dtable("rfInv", "Inviters — leaderboard", [["name","Inviter", r => userLink(r.id, r.name, r.public_id)],["role","Type","chip"],["opens","Link opens","n"],["joined","Joined","n"],["completed","Completed","n"],["rewarded","Rewarded","n"],["joined_all_time","All-time joins","n"]].concat(m ? [["spend","Friends' spend","inr"]] : []), R.inviters, { span: true, click: r => `openUser('${r.id}')` })}
+  </div>
+  <div class="sec mt24">Every referral</div>
+  ${filterChips("refF", [["all","All"],["Joined","Joined"],["Booked","Booked"],["Completed a shoot","Completed"],["Rewarded","Rewarded"],["Held for review","Held"],["same","Same browser"]])}
+  <div class="mt12">${dtable("rfList", "Referrals", [["referral_at","Joined with code","dt"],["name","Friend", r => userLink(r.id, r.name, r.public_id)],["role","Type","chip"],["city","City"],["ref_name","Invited by", r => userLink(r.ref_id, r.ref_name, r.ref_pid)],["status","Status", r => `<span class="chip ${r.status === "Rewarded" ? "green" : r.status === "Held for review" ? "red" : ""}">${esc(r.status)}</span>${r.flag ? `<div class="xs muted2">${esc(r.flag)}</div>` : ""}`],
+      ["same_device","Same browser", r => r.same_device ? '<span class="chip red">Yes</span>' : "No"],["bookings","Bookings","n"],["completed","Completed","n"]].concat(m ? [["spend","Spent","inr"]] : []).concat([["rewarded_at","Rewarded","dt"],
+      ["actions","", r => !m ? "" : `<div class="row" style="gap:6px;flex-wrap:nowrap">${!r.rewarded_at ? `<button class="btn sm" onclick="event.stopPropagation();refAction('${r.id}','reward')">Reward now</button>` : ""}${!r.rewarded_at && !r.flag ? `<button class="btn sm" onclick="event.stopPropagation();refAction('${r.id}','hold')">Hold</button>` : ""}${r.flag ? `<button class="btn sm" onclick="event.stopPropagation();refAction('${r.id}','clear')">Clear hold</button>` : ""}${!r.rewarded_at ? `<button class="btn sm danger" onclick="event.stopPropagation();refAction('${r.id}','remove')">Remove</button>` : ""}</div>`]]),
+    list, { span: true, click: r => `openUser('${r.id}')` })}</div>
+  <div id="refEdit" class="sec mt24">Referral program settings</div>
+  ${refEditor(P)}`;
+}
+function refEditor(P){
+  P = P || {};
+  const isSuper = S.me.role === "super_admin";
+  if(!isSuper) return `<div class="card sm">${P.enabled ? "Referral rewards are ON." : "Referral rewards are OFF."} Only a super admin can change them.</div>`;
+  return `<div class="card">
+    <label class="sw"><input id="rf_enabled" type="checkbox" ${P.enabled ? "checked" : ""}> Referral rewards are ON</label>
+    <div class="xs muted2 mt8">Everyone's SnapPro ID is their invite code. Friends add it when they join (the invite link adds it for them). You decide what each side gets and when.</div>
+    <div class="lbgrid mt12">
+      <label class="ofl">Days a new member has to add a code<input id="rf_code_days" class="input" type="number" min="0" value="${esc(P.code_days == null ? 14 : P.code_days)}"></label>
+      <label class="ofl">Same phone / browser as the inviter<select id="rf_block_same" class="input"><option value="1" ${P.block_same_device !== false ? "selected" : ""}>Hold rewards for review</option><option value="0" ${P.block_same_device === false ? "selected" : ""}>Reward anyway</option></select></label>
+    </div>
+    ${["customer","photographer"].map(a => { const C = P[a] || {}; return `<div class="refbox mt16"><div class="between"><div class="h2">${a === "customer" ? "Customers inviting customers" : "Photographers"} </div>
+        <label class="sw"><input id="rf_${a}_on" type="checkbox" ${C.enabled !== false ? "checked" : ""}> Rewards for new ${a}s</label></div>
+      <div class="lbgrid mt8">
+        <label class="ofl">Reward both after<select id="rf_${a}_when" class="input"><option value="first_booking" ${C.when !== "signup" ? "selected" : ""}>their first completed shoot</option><option value="signup" ${C.when === "signup" ? "selected" : ""}>they sign up</option></select></label>
+        <label class="ofl">First shoot must be at least (₹)<input id="rf_${a}_min" class="input" type="number" min="0" placeholder="Any amount" value="${esc(C.min_booking == null ? "" : C.min_booking)}"></label>
+        <label class="ofl">Max rewards per inviter<input id="rf_${a}_max" class="input" type="number" min="0" placeholder="No limit" value="${esc(C.max_rewards == null ? "" : C.max_rewards)}"></label>
+      </div>
+      <div class="xs muted mt12" style="font-weight:700">A new ${a} who joined with a code gets</div>${refRewardInputs(a, "new", C.new_user_reward)}
+      <div class="xs muted mt12" style="font-weight:700">A ${a} who invited someone gets</div>${refRewardInputs(a, "referrer", C.referrer_reward)}</div>`; }).join("")}
+    <div class="row mt16"><button class="btn primary" onclick="saveReferral()">Save referral program</button></div>
+    <div class="xs muted2 mt8">Customers can only get booking discounts; photographers get storage, commission, featured or storage-discount rewards. "Max rewards" limits what the inviter earns — friends still get theirs.</div>
+  </div>`;
+}
+
+/* ===================== TRUST & SUPPORT ===================== */
+function vTrust(){
+  const w = deptWait("trust", true); if(w) return w;
+  const D = S.dept.trust;
+  const T = D.data, m = T.money, ky = T.kyc || {};
+  return deptHead("trust", true) + `
+  <div class="grid mt16">
+    ${ktile(n0((T.restricted || []).length), "Suspended / blocked", "", (T.restricted || []).length ? "hl" : "")}
+    ${ktile(n0(ky.submitted), "IDs to check", "", ky.submitted ? "hl" : "", "openTab('pros')")}
+    ${ktile(n0(ky.verified), "IDs verified", "")}
+    ${ktile(n0(ky.rejected), "IDs to re-do", "")}
+    ${ktile(n0(T.kyc_missing), "Approved without verified ID", "Ask them to verify", T.kyc_missing ? "hl" : "")}
+    ${ktile(n0((T.low_reviews || []).length), "1–2★ reviews (12 months)", "", (T.low_reviews || []).length ? "hl" : "")}
+    ${ktile(n0((T.pg_cancellers || []).length), "Photographers cancelling", "2+ cancellations in 6 months")}
+    ${ktile(n0((T.customer_cancellers || []).length), "Customers cancelling", "3+ cancellations in 6 months")}
+    ${m ? ktile(n0((T.failed_refunds || []).length), "Failed refunds", "", (T.failed_refunds || []).length ? "hl" : "") : ""}
+    ${m ? ktile(n0((T.duplicate_payments || []).length), "Duplicate payments", "") : ""}
+    ${ktile(n0((T.referral_flags || []).length), "Invites held", "", "", "openTab('referrals')")}
+    ${ktile(n0(T.chat_reads), "Chats read by staff", "Last 30 days", "", "openTab('activity')")}
+  </div>
+  <div class="grid2 mt16">
+    ${dtable("trRes", "Suspended & blocked accounts", [["status_at","Since","dt"],["name","Person", r => userLink(r.id, r.name, r.public_id)],["role","Type","chip"],["status","Status", r => `<span class="chip red">${esc(r.status)}</span>`],["status_reason","Reason"],["status_until","Until","dt"],
+        ["a","", r => m ? `<button class="btn sm" onclick="event.stopPropagation();setUserStatus('${r.id}','active').then(()=>deptLoad('trust',true))">Restore</button>` : ""]], T.restricted, { span: true, click: r => `openUser('${r.id}')`, empty: "No restricted accounts." })}
+    ${dtable("trLow", "Low reviews", [["created_at","When","dt"],["stars","Stars", r => "★".repeat(r.stars)],["photographer","Photographer", r => userLink(r.photographer_id, r.photographer)],["customer_name","Customer"],["body","What they said"],["booking_id","Booking", r => bkLink(r.booking_id)]], T.low_reviews, { span: true, empty: "No low reviews. 👍" })}
+    ${dtable("trPgC", "Photographers who cancel", [["name","Photographer", r => userLink(r.id, r.name)],["n","Cancellations","n"]], T.pg_cancellers, { search: false, empty: "None." })}
+    ${dtable("trCuC", "Customers who cancel", [["name","Customer", r => userLink(r.id, r.name)],["n","Cancellations","n"]], T.customer_cancellers, { search: false, empty: "None." })}
+    ${m ? dtable("trFr", "Failed refunds", [["created_at","When","dt"],["refund_id","Refund"],["amount","Amount","inr"],["reason","Reason"],["booking_id","Booking", r => bkLink(r.booking_id)]], T.failed_refunds, { search: false, empty: "None." }) : ""}
+    ${m ? dtable("trDup", "Duplicate payments", [["paid_at","Paid","dt"],["order_id","Order"],["amount","Amount","inr"],["refund_status","Refund"],["booking_id","Booking", r => bkLink(r.booking_id)]], T.duplicate_payments, { search: false, empty: "None." }) : ""}
+    ${dtable("trRef", "Invites held for review", [["name","Friend", r => userLink(r.id, r.name, r.public_id)],["ref_name","Invited by", r => esc(r.ref_name || "") + " " + esc(r.ref_id || "")],["referral_flag","Why"],
+        ["a","", r => m ? `<button class="btn sm" onclick="event.stopPropagation();refAction('${r.id}','reward')">Reward</button> <button class="btn sm" onclick="event.stopPropagation();refAction('${r.id}','remove')">Remove</button>` : ""]], T.referral_flags, { search: false, empty: "None." })}
+    ${dtable("trStaff", "Staff activity — last 30 days", [["staff","Staff"],["n","Actions","n"],["last_at","Last action","ago"]], T.staff_actions, { search: false, click: () => "openTab('activity')" })}
+  </div>`;
+}
+
+/* ===================== TIMELINE ===================== */
+const EV_GROUPS = [["","Everything"],["accounts","Accounts"],["photographers","Photographers"],["requests","Requests & quotes"],["bookings","Bookings"],["money","Money"],["reviews","Reviews"],["chat","Chat"],["rewards","Rewards"],["referrals","Invites"],["admin","Staff actions"]];
+const EV_COLOR = { accounts: "#4d8dff", photographers: "#a67cff", requests: "#5fd3e0", bookings: "#ff5a1f", money: "#28c76f", reviews: "#ffc857", chat: "#8b8b9e", rewards: "#ff8fb1", referrals: "#f6a35b", admin: "#ff4d5e", other: "#61617a" };
+const TL_RANGES = [["1h","Last hour"],["today","Today"],["24h","24 hours"],["7d","7 days"],["30d","30 days"],["custom","Custom"]];
+function tlRange(){
+  const now = Date.now(), r = S.tlR || "24h";
+  if(r === "1h") return [new Date(now - 3600e3), new Date(now)];
+  if(r === "today") return [new Date(istToday() + "T00:00:00+05:30"), new Date(now)];
+  if(r === "7d") return [new Date(now - 7 * 864e5), new Date(now)];
+  if(r === "30d") return [new Date(now - 30 * 864e5), new Date(now)];
+  if(r === "custom" && S.tlFrom) return [new Date(S.tlFrom), S.tlTo ? new Date(S.tlTo) : new Date(now)];
+  return [new Date(now - 864e5), new Date(now)];
+}
+let tlSeq = 0, tlTimer = null;
+async function loadTimeline(quiet){
+  const [f, t] = tlRange(), seq = ++tlSeq;
+  if(!quiet){ S.tl = Object.assign(S.tl || {}, { busy: true }); render(); }
+  const { data, error } = await sb.rpc("admin_timeline", { p_from: f.toISOString(), p_to: t.toISOString(), p_group: S.tlG || null, p_user: null, p_limit: 5000 });
+  if(seq !== tlSeq) return;
+  const prev = S.tl && S.tl.rows;
+  S.tl = { rows: error ? [] : (data || []), err: error ? (/function/i.test(error.message) ? "This needs the latest database update — run supabase/snappro.sql in the Supabase SQL Editor." : error.message) : "", busy: false, at: new Date() };
+  if(!quiet || JSON.stringify(prev) !== JSON.stringify(S.tl.rows)) render();
+}
+function tlLive(on){ S.tlLive = on; clearInterval(tlTimer); if(on) tlTimer = setInterval(() => { if(!document.hidden && S.tab === "timeline") loadTimeline(true); }, 15000); render(); }
+const catN = c => (CAT_NAMES[c] || c || "").toLowerCase();
+function evText(e, self){
+  const i = e.info || {}, a = e.amount != null ? inr(e.amount) : "";
+  const who = self ? "They" : userLink(e.user_id, e.user_name, e.user_pid);
+  const oth = e.other_id || e.other_pid ? (self ? userLink(null, e.other_name, e.other_pid) : userLink(e.other_id, e.other_name, e.other_pid)) : "someone";
+  const k = e.kind;
+  if(k.startsWith("admin:")) return `<b>${esc(e.user_name || "Staff")}</b> ${esc(k.slice(6))}${e.other_name ? " — " + esc(e.other_name) : ""}${i && Object.keys(i).length ? ` <span class="xs muted2">${esc(JSON.stringify(i)).slice(0, 160)}</span>` : ""}`;
+  const T = {
+    signup: () => `${who} signed up as a ${esc(i.role || "customer")}`,
+    profile_setup: () => `${who} finished their profile${e.city ? " (" + esc(e.city) + ")" : ""}`,
+    role_change: () => `${who} changed from ${esc(i.from)} to ${esc(i.to)}`,
+    source_recorded: () => `${who} came from <b>${esc(i.channel || "—")}</b>${i.source ? " (" + esc(i.source) + ")" : ""}${i.landing ? " — first page " + `<span class="mono">${esc(i.landing)}</span>` : ""}`,
+    referral_joined: () => `${who} joined with ${oth}'s invite code`,
+    referral_rewarded: () => `Invite rewards given to ${who} and ${oth}`,
+    pg_profile_created: () => `${who} created a photographer profile`,
+    pg_approved: () => `${who} was approved as a photographer`,
+    pg_rejected: () => `${who} was not approved${i.note ? ": " + esc(i.note) : ""}`,
+    pg_pending: () => `${who} was sent back to review`,
+    pg_online: () => `${who} became available`, pg_offline: () => `${who} went offline`,
+    pg_badge_on: () => `${who} got the Verified badge`, pg_badge_off: () => `${who}'s Verified badge was removed`,
+    kyc_submitted: () => `${who} sent their ID (${esc((ID_NAMES || {})[i.id_type] || i.id_type || "ID")}) and face photo`,
+    kyc_verified: () => `${who}'s ID was verified`, kyc_rejected: () => `${who} was asked to re-do their ID${i.note ? ": " + esc(i.note) : ""}`,
+    request_posted: () => `${who} posted a ${esc(catN(e.category))} shoot${e.city ? " in " + esc(e.city) : ""}${a ? " — budget " + a : ""}${i.urgency ? " · " + esc(i.urgency) : ""}`,
+    quote_sent: () => `${who} quoted <b>${a}</b> to ${oth} for a ${esc(catN(e.category))} shoot`,
+    booking_created: () => `${who} chose ${oth} — ${esc(catN(e.category))}${a ? ", " + a : ""}`,
+    booking_confirmed: () => `Booking confirmed: ${who} with ${oth}`,
+    booking_enroute: () => `${oth} is on the way to ${who}`, booking_arrived: () => `${oth} arrived for ${who}'s shoot`,
+    booking_shooting: () => `${oth} started shooting for ${who}`, booking_completed: () => `Shoot completed: ${who} with ${oth}`,
+    booking_cancelled: () => `Booking cancelled${i.cancelled_by ? " by the " + esc(i.cancelled_by) : ""}: ${who} with ${oth}`,
+    balance_due: () => `${who} now owes the balance of <b>${a}</b>`, balance_paid: () => `${who} paid the balance of <b>${a}</b>`,
+    payout_due: () => `Payout of <b>${a}</b> to ${who} is due`, payout_paid: () => `Paid <b>${a}</b> to ${who}${i.ref ? " (ref " + esc(i.ref) + ")" : ""}`, payout_on_hold: () => `Payout of ${a} to ${who} put on hold`,
+    payment_started: () => `${who} started paying <b>${a}</b> (${esc(i.stage || "")})`,
+    payment_paid: () => `${who} paid <b>${a}</b> (${esc(i.stage || "")}${i.method ? " · " + esc(methodName(i.method)) : ""})${i.env && i.env !== "live" ? ' <span class="chip">test</span>' : ""}`,
+    payment_failed: () => `${who}'s payment of ${a} failed${i.message ? ": " + esc(i.message) : ""}`,
+    review_posted: () => `${who} gave ${oth} <b>${"★".repeat(Number(e.amount) || 0)}</b>`,
+    chat_message: () => `${who} messaged ${oth}`,
+    reward_given: () => `${who} got a reward: <b>${esc(i.title || i.kind)}</b> (${esc(i.source || "")})`,
+    reward_used: () => `${who} used a reward: ${esc(i.title || i.kind)}`, reward_expired: () => `${who}'s reward expired: ${esc(i.title || "")}`, reward_revoked: () => `${who}'s reward was removed: ${esc(i.title || "")}`
+  };
+  if(T[k]) return T[k]();
+  if(k.startsWith("account_")) return `${who}'s account is now <b>${esc(k.slice(8))}</b>${i.reason ? ": " + esc(i.reason) : ""}`;
+  if(k.startsWith("request_")) return `${who}'s ${esc(catN(e.category))} request is now ${esc(k.slice(8))}`;
+  if(k.startsWith("booking_")) return `Booking ${esc(k.slice(8))}: ${who} with ${oth}`;
+  if(k.startsWith("payment_")) return `${who}'s payment of ${a} is ${esc(k.slice(8))}`;
+  if(k.startsWith("refund_")) return `Refund of <b>${a}</b> to ${who}: ${esc(k.slice(7))}${i.reason ? " — " + esc(i.reason) : ""}`;
+  if(k.startsWith("storage_")) return `${who}'s storage plan${i.plan ? " (" + esc(i.plan) + ")" : ""}: ${esc(k.slice(8))}${a ? " — " + a : ""}`;
+  return `${who}: ${esc(k)}`;
+}
+function evGroup(k){ return k.startsWith("admin:") ? "admin" : /^(signup|profile_setup|role_change|source_recorded|account_)/.test(k) ? "accounts" : /^referral_/.test(k) ? "referrals" : /^(pg_|kyc_)/.test(k) ? "photographers"
+  : /^(request_|quote_sent)/.test(k) ? "requests" : /^(booking_|balance_)/.test(k) ? "bookings" : /^(payment_|refund_|payout_|storage_)/.test(k) ? "money" : k === "review_posted" ? "reviews" : k === "chat_message" ? "chat" : /^reward_/.test(k) ? "rewards" : "other"; }
+function vTimeline(){
+  if(!S.tl){ S.tl = { busy: true, rows: null }; setTimeout(() => loadTimeline(true)); }
+  if(!S.tl.rows && !S.tl.err) return `<div class="empty">Loading…</div>`;
+  const q = (S.tlQ || "").toLowerCase();
+  const rows = (S.tl.rows || []).map(e => ({ ...e, _t: evText(e) })).filter(e => !q || e._t.replace(/<[^>]+>/g, "").toLowerCase().includes(q));
+  const counts = {}; (S.tl.rows || []).forEach(e => { const g = e.grp || evGroup(e.kind); counts[g] = (counts[g] || 0) + 1; });
+  TB.timeline = { cols: [["at","When"],["kind","What"],["text","Details"],["user_pid","SnapPro ID"],["user_name","Person"],["other_name","With"],["amount","Amount"],["city","City"],["category","Shoot"]],
+                  rows: rows.map(e => ({ ...e, text: e._t.replace(/<[^>]+>/g, "") })) };
+  const lim = S.tlLim || 300;
+  return `<div class="between" style="flex-wrap:wrap;gap:12px">
+      <div class="tabs" style="width:fit-content">${TL_RANGES.map(([k, l]) => `<button class="tab ${(S.tlR || "24h") === k ? "on" : ""}" onclick="S.tlR='${k}';${k === "custom" ? "render()" : "loadTimeline()"}">${l}</button>`).join("")}</div>
+      <div class="row xs muted2"><label class="sw"><input type="checkbox" ${S.tlLive ? "checked" : ""} onchange="tlLive(this.checked)"> Live (every 15 s)</label>
+        <span>${S.tl.at ? "updated " + S.tl.at.toLocaleTimeString("en-IN") : ""}</span><button class="btn sm" onclick="loadTimeline()">Refresh</button></div></div>
+    ${(S.tlR || "24h") === "custom" ? `<div class="row mt12" style="flex-wrap:wrap"><label class="xs muted">From <input id="tlFrom" class="input" type="datetime-local" style="width:auto;padding:8px 10px" value="${esc(S.tlFrom || "")}" onchange="S.tlFrom=this.value"></label>
+      <label class="xs muted">To <input id="tlTo" class="input" type="datetime-local" style="width:auto;padding:8px 10px" value="${esc(S.tlTo || "")}" onchange="S.tlTo=this.value"></label><button class="btn sm primary" onclick="loadTimeline()">Show</button></div>` : ""}
+    <div class="tabs mt12" style="width:fit-content;flex-wrap:wrap">${EV_GROUPS.map(([k, l]) => `<button class="tab ${(S.tlG || "") === k ? "on" : ""}" onclick="S.tlG='${k}';loadTimeline()"><span class="dot" style="background:${EV_COLOR[k] || "#fff"}"></span>${l}${!S.tlG && k && counts[k] ? ` <span class="muted2">${counts[k]}</span>` : ""}</button>`).join("")}</div>
+    ${S.tl.err ? `<div class="warn mt12">${esc(S.tl.err)}</div>` : ""}
+    <div class="row mt12"><input id="tlQ" class="input grow" style="padding:9px 12px" placeholder="Search names, IDs, cities, amounts…" value="${esc(S.tlQ || "")}" oninput="S.tlQ=this.value;clearTimeout(tbTimer);tbTimer=setTimeout(render,200)">
+      <button class="btn sm" onclick="tbCsv('timeline')">Download CSV</button></div>
+    <div class="xs muted2 mt8">${num(rows.length)} events${S.tl.busy ? " · loading…" : ""}${rows.length >= 5000 ? " · showing the newest 5,000 — narrow the time range for more" : ""}</div>
+    <div class="card mt12 tl">${rows.slice(0, lim).map(e => { const g = e.grp || evGroup(e.kind);
+      return `<div class="tlrow"><div class="tlt">${dts(e.at)}</div><span class="tldot" style="background:${EV_COLOR[g] || EV_COLOR.other}"></span>
+        <div class="grow">${e._t}${e.entity === "booking" && e.entity_id ? ` · ${bkLink(e.entity_id, "booking")}` : ""}</div></div>`; }).join("") || `<div class="xs muted2">Nothing happened in this window.</div>`}
+      ${rows.length > lim ? `<button class="btn sm mt12" onclick="S.tlLim=${lim + 500};render()">Show more (${num(rows.length - lim)} left)</button>` : ""}</div>`;
+}
+
+/* ===================== ONE PERSON — EVERYTHING ===================== */
+async function openUser(key){
+  if(!key) return;
+  S.u360 = { key, data: null, err: "" }; render();
+  const { data, error } = await sb.rpc("admin_user_360", { p_key: String(key) });
+  if(!S.u360 || S.u360.key !== key) return;
+  if(error) S.u360.err = /function/i.test(error.message) ? "This needs the latest database update — run supabase/snappro.sql in the Supabase SQL Editor." : error.message;
+  else S.u360.data = data;
+  render();
+}
+function closeUser(){ S.u360 = null; render(); }
+async function findAnyone(){
+  const q = (el("findQ") || {}).value || ""; const t = q.trim(); if(!t) return;
+  if(/@|^SP[CP]\d+$/i.test(t) || /^\+?\d[\d\s-]{6,}$/.test(t) || /^[0-9a-f-]{36}$/i.test(t)) return openUser(/^[0-9a-f-]{36}$/i.test(t) || t.includes("@") ? t : t.replace(/[\s-]/g, "").toUpperCase());
+  if(!S.users) await loadUsers(true);
+  const hits = (S.users || []).filter(u => [u.name, u.email, u.phone, u.public_id, u.city].some(v => v && String(v).toLowerCase().includes(t.toLowerCase())));
+  if(hits.length === 1) return openUser(hits[0].id);
+  S.u360 = { key: t, hits, data: null, err: hits.length ? "" : "No one found for “" + t + "”." }; render();
+}
+function kvs(pairs){ return pairs.filter(p => p[1] != null && p[1] !== "").map(([k, v]) => `<div class="kv"><span>${k}</span><span>${v}</span></div>`).join(""); }
+function touchHtml(t){
+  if(!t) return `<span class="muted2">Not recorded</span>`;
+  return kvs([["Source", esc(t.source)], ["Medium", esc(t.medium)], ["Campaign", esc(t.campaign)], ["Ad content", esc(t.content)], ["Keyword", esc(t.term)],
+    ["Sent by site", esc(t.referrer)], ["First page", t.landing ? `<span class="mono">${esc(t.landing)}</span>` : ""], ["Came for", esc(CAT_NAMES[t.shoot] || t.shoot)],
+    ["Invite code", esc(t.ref)], ["Clicked an ad", t.ads_click ? "Yes" : ""], ["When", t.at ? dt(t.at) : ""]]) || `<span class="muted2">Came directly (typed the address or a bookmark)</span>`;
+}
+function vUser360(){
+  const U = S.u360; if(!U) return "";
+  const D = U.data, m = D && D.money;
+  const shell = inner => `<div class="sheet-bg" onclick="if(event.target===this)closeUser()"><div class="sheet wide" role="dialog" aria-label="Person">${inner}</div></div>`;
+  if(U.hits && !D) return shell(`<div class="between"><div class="h2">People matching “${esc(U.key)}”</div><button class="btn sm" onclick="closeUser()">Close</button></div>
+    ${U.err ? `<div class="warn mt12">${esc(U.err)}</div>` : `<div class="tblwrap mt12"><table><tbody>${U.hits.slice(0, 100).map(u => `<tr class="rowlink" onclick="openUser('${u.id}')"><td><b>${esc(u.name || "—")}</b> <span class="xs" style="color:var(--accent)">${esc(u.public_id || "")}</span></td><td>${esc(u.role)}</td><td>${esc(u.city || "")}</td><td class="muted">${m !== false ? esc(u.email || "") : ""}</td></tr>`).join("")}</tbody></table></div>`}`);
+  if(U.err) return shell(`<div class="between"><div class="h2">Person</div><button class="btn sm" onclick="closeUser()">Close</button></div><div class="warn mt12">${esc(U.err)}</div>`);
+  if(!D) return shell(`<div class="between"><div class="h2">Loading…</div><button class="btn sm" onclick="closeUser()">Close</button></div><div class="empty">Loading…</div>`);
+  const p = D.profile, g = D.photographer, a = p.acq || {}, bks = D.bookings || [];
+  const spent = bks.filter(b => b.customer_name && !["cancelled","pending_payment"].includes(b.status)).reduce((t, b) => t + Number(b.total_amount || 0), 0);
+  const sec = (title, inner, open) => `<details class="u3" ${open ? "open" : ""}><summary>${title}</summary><div class="mt8">${inner}</div></details>`;
+  const mini = (cols, rows, click) => rows && rows.length ? `<div class="tblwrap"><table class="dt"><thead><tr>${cols.map(c => `<th>${c[1]}</th>`).join("")}</tr></thead><tbody>${rows.map(r => `<tr ${click ? `class="rowlink" onclick="${click(r)}"` : ""}>${cols.map(c => `<td>${cell(c, r)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>` : `<div class="xs muted2">None.</div>`;
+  return shell(`
+    <div class="between" style="align-items:flex-start;flex-wrap:wrap">
+      <div><div class="h1">${esc(p.name || "—")}</div>
+        <div class="row mt8" style="flex-wrap:wrap;gap:6px"><span class="chip super">${esc(p.public_id || "")}</span><span class="chip ${p.role === "photographer" ? "manager" : "admin"}">${esc(p.role)}</span>
+          <span class="chip ${p.status === "active" ? "green" : "red"}">${esc(p.status || "active")}</span><span class="chip"><span class="dot" style="background:${chColor(p.channel, 0)}"></span>${esc(p.channel)}</span>
+          ${p.referral_flag ? `<span class="chip red">Invite held: ${esc(p.referral_flag)}</span>` : ""}</div></div>
+      <div class="row"><button class="btn sm" onclick="S.tlG='';S.tlQ='${esc(p.public_id || "")}';S.tlR='30d';S.u360=null;S.tl=null;openTab('timeline')">On timeline</button><button class="btn sm" onclick="closeUser()">Close</button></div>
+    </div>
+    <div class="grid mt16">
+      ${kpi(fmt(p.created_at), "Joined", ago(p.created_at))}
+      ${kpi(p.last_seen_at ? ago(p.last_seen_at) : "—", "Last opened SnapPro", p.last_seen_at ? dt(p.last_seen_at) : "")}
+      ${kpi(num((D.requests || []).length), "Shoots posted")}
+      ${kpi(num(bks.length), "Bookings", num(bks.filter(b => b.status === "completed").length) + " completed")}
+      ${m && p.role !== "photographer" ? kpi(inr(spent), "Spent") : ""}
+      ${m && p.role === "photographer" ? kpi(inr(bks.filter(b => b.status === "completed").reduce((t, b) => t + Number(b.photographer_amount || 0), 0)), "Earned") : ""}
+      ${kpi(num((D.referred || []).length), "Friends invited")}
+    </div>
+    <div class="grid2 mt16">
+      <div class="card"><div class="sec">Details</div>${kvs([["Email", m && p.email ? `<a href="mailto:${esc(p.email)}">${esc(p.email)}</a>` : ""], ["Phone", m && p.phone ? `<a href="tel:${esc(p.phone)}">${esc(p.phone)}</a>` : ""],
+        ["City", esc([p.city, p.state, p.pincode].filter(Boolean).join(", "))], ["Member no.", num(p.member_no)], ["Account", esc(p.status) + (p.status_reason ? " — " + esc(p.status_reason) : "") + (p.status_until ? " until " + dt(p.status_until) : "")],
+        ["Invited by", p.referred_by ? userLink(p.referred_by.id, p.referred_by.name, p.referred_by.public_id) + (p.referral_at ? " · " + fmt(p.referral_at) : "") : ""], ["Invite rewarded", p.referral_rewarded_at ? dt(p.referral_rewarded_at) : ""]])}
+        ${m ? `<div class="row mt12" style="flex-wrap:wrap">${p.status === "active" ? `<button class="btn sm danger" onclick="setUserStatus('${p.id}','suspended').then(()=>openUser('${p.id}'))">Suspend</button><button class="btn sm danger" onclick="setUserStatus('${p.id}','blocked').then(()=>openUser('${p.id}'))">Block</button>` : `<button class="btn sm" onclick="setUserStatus('${p.id}','active').then(()=>openUser('${p.id}'))">Restore account</button>`}
+          ${p.phone ? `<a class="btn sm" href="https://wa.me/${esc(String(p.phone).replace(/\D/g, "").replace(/^(\d{10})$/, "91$1"))}" target="_blank" rel="noopener">WhatsApp</a>` : ""}</div>` : ""}</div>
+      <div class="card"><div class="sec">How they found SnapPro</div>
+        <div class="xs muted2">First visit</div>${touchHtml(a.first)}
+        ${a.last && JSON.stringify(a.last) !== JSON.stringify(a.first) ? `<div class="xs muted2 mt12">Last visit before signing up</div>${touchHtml(a.last)}` : ""}
+        ${a.device ? `<div class="kv mt8"><span>Device</span><span>${esc(a.device)}</span></div>` : ""}</div>
+      ${g ? `<div class="card" style="grid-column:1/-1"><div class="sec">Photographer</div><div class="grid">
+        ${kpi(esc(g.approval_status), "Approval", g.approved_at ? fmt(g.approved_at) : "")}${kpi(esc(g.kyc || "not sent"), "ID check")}${kpi(g.rating ? Number(g.rating).toFixed(1) + "★" : "—", "Rating", num(g.review_count) + " reviews")}
+        ${kpi(num(g.jobs_done), "Shoots done")}${kpi(num(g.photos), "Portfolio items")}${kpi(g.is_online ? "Available" : "Off", "Right now")}${kpi(esc((g.categories || []).map(c => CAT_NAMES[c] || c).join(", ") || "—"), "Shoots offered")}
+        ${m ? kpi(g.commission_pct != null ? g.commission_pct + "%" : "Default", "Commission") : ""}${m && g.storage_quota ? kpi((Number(g.storage_quota) / 1048576).toFixed(0) + " MB", "Storage") : ""}${g.featured_until ? kpi(fmt(g.featured_until), "Featured until") : ""}</div></div>` : ""}
+    </div>
+    <div class="mt16">
+      ${sec("Timeline — everything they did (" + num((D.timeline || []).length) + ")", `<div class="tl">${(D.timeline || []).map(e => { const gg = evGroup(e.kind);
+        return `<div class="tlrow"><div class="tlt">${dts(e.at)}</div><span class="tldot" style="background:${EV_COLOR[gg]}"></span><div class="grow">${evText({ ...e, user_id: null, other_id: null }, true)}${e.entity === "booking" && e.entity_id ? ` · ${bkLink(e.entity_id, "booking")}` : ""}</div></div>`; }).join("") || `<div class="xs muted2">Nothing yet.</div>`}</div>`, true)}
+      ${sec("Bookings (" + num(bks.length) + ")", mini([["created_at","Booked","dt"],["start_at","Shoot","dt"],["status","Status","chip"],["category","Shoot", r => esc(CAT_NAMES[r.category] || r.category)],["customer_name","Customer"],["photographer_name","Photographer"]].concat(m ? [["total_amount","Value","inr"],["discount_amount","Discount","inr"]] : []).concat([["payment_status","Payment"],["balance_status","Balance"],["payout_status","Payout"],["messages","Messages","n"],["stars","Review", r => r.stars ? "★".repeat(r.stars) : "—"]]), bks, r => `openBooking('${r.id}')`))}
+      ${(D.requests || []).length ? sec("Shoots posted (" + num(D.requests.length) + ")", mini([["created_at","Posted","dt"],["category","Shoot", r => esc(CAT_NAMES[r.category] || r.category)],["city","City"],["urgency","When"],["start_at","Starts","dt"],["budget","Budget","inr"],["quotes","Quotes","n"],["status","Status","chip"]], D.requests)) : ""}
+      ${(D.quotes || []).length ? sec("Quotes sent (" + num(D.quotes.length) + ")", mini([["created_at","Sent","dt"],["category","Shoot", r => esc(CAT_NAMES[r.category] || r.category)],["city","City"],["price","Price","inr"],["won","Won", r => r.won ? '<span class="chip green">Won</span>' : ""],["request_status","Request","chip"]], D.quotes)) : ""}
+      ${m && (D.payments || []).length ? sec("Payments (" + num(D.payments.length) + ")", mini([["created_at","Started","dt"],["paid_at","Paid","dt"],["stage","Stage"],["amount","Amount","inr"],["status","Status","chip"],["payment_group","Method", r => esc(methodName(r.payment_group) || "")],["refund_status","Refund"],["refunded_amount","Refunded","inr"],["environment","Mode"],["order_id","Order"]], D.payments, r => r.booking_id ? `openBooking('${r.booking_id}')` : "")) : ""}
+      ${m && (D.storage_orders || []).length ? sec("Storage plans", mini([["created_at","Ordered","dt"],["plan","Plan"],["amount","Amount","inr"],["status","Status","chip"],["period_end","Until","d"]], D.storage_orders)) : ""}
+      ${sec("Visits & pages viewed (" + num((D.visits || []).length) + " days)", mini([["day","Day","d"],["first_at","First","dt"],["last_at","Last","dt"],["views","Views","n"],["device","Device"],["channel","Channel"],["referrer","From site"],["utm_campaign","Campaign"],["ref_code","Invite code"],["paths","Pages, in order", r => (r.paths || []).map(x => `<span class="mono">${esc(x)}</span>`).join(" → ")]], D.visits))}
+      ${sec("Rewards (" + num((D.rewards || []).length) + ")", mini([["created_at","Given","dt"],["title","Reward"],["source","From"],["status","Status","chip"],["uses_left","Uses left","n"],["expires_at","Expires","d"],["used_at","Used","dt"]], D.rewards))}
+      ${sec("Friends they invited (" + num((D.referred || []).length) + ")", mini([["referral_at","Joined","dt"],["name","Friend", r => userLink(r.id, r.name, r.public_id)],["role","Type"],["referral_rewarded_at","Rewarded","dt"],["referral_flag","Held"]], D.referred))}
+      ${(D.reviews_given || []).length || (D.reviews_received || []).length ? sec("Reviews", mini([["created_at","When","dt"],["stars","Stars", r => "★".repeat(r.stars)],["customer_name","From"],["body","Review"]], (D.reviews_received || []).concat(D.reviews_given || []), r => `openBooking('${r.booking_id}')`)) : ""}
+      ${m && (D.admin_actions || []).length ? sec("Staff actions on this account (" + num(D.admin_actions.length) + ")", mini([["at","When","dt"],["staff_email","Staff"],["action","Action"],["details","Details", r => r.details ? `<span class="xs mono">${esc(JSON.stringify(r.details)).slice(0, 200)}</span>` : ""]], D.admin_actions)) : ""}
+    </div>`);
+}
+
 /* ============================ render ========================== */
 
 function render(){
@@ -2011,10 +2839,11 @@ function render(){
     S.view==="newpw"   ? vNewPw()   :
     S.view==="code"    ? vCode()    :
     S.view==="denied"  ? vDenied()  :
-    S.view==="console" ? vConsole() + vDrill() + vBooking() + vChatView() : vLogin();
+    S.view==="console" ? vConsole() + vDrill() + vUser360() + vBooking() + vChatView() : vLogin();
 
   try{ drawCharts(); }catch(e){ console.warn('charts', e); }
   try{ drawReportCharts(); }catch(e){ console.warn('report charts', e); }
+  try{ drawDeptCharts(); }catch(e){ console.warn('dept charts', e); }
   if(fid){
     const n = el(fid);
     if(n){ n.focus(); if(caret!=null && n.setSelectionRange){ try{ n.setSelectionRange(caret,caret); }catch(e){} } }
@@ -2022,7 +2851,7 @@ function render(){
 }
 
 window.addEventListener("error", e => console.error("Admin:", e.message));
-document.addEventListener("keydown", e => { if(e.key === "Escape" && (S.bk || S.drill)){ if(S.bk) S.bk = null; else S.drill = null; render(); } });
+document.addEventListener("keydown", e => { if(e.key === "Escape" && (S.bk || S.drill || S.u360)){ if(S.bk) S.bk = null; else if(S.drill) S.drill = null; else S.u360 = null; render(); } });
 boot();
 </script>
 </body>
