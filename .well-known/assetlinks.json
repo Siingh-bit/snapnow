@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "in.snappro.app",
+      "sha256_cert_fingerprints": [
+        "3E:F7:70:88:48:0C:85:52:0D:CC:9A:4F:28:35:42:AD:B3:A9:63:0D:30:03:87:87:3F:A8:A5:B2:29:94:72:21"
+      ]
+    }
+  }
+]
