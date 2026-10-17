@@ -5,6 +5,7 @@
       "namespace": "android_app",
       "package_name": "in.snappro.app",
       "sha256_cert_fingerprints": [
+        "EC:ED:74:1D:55:1C:42:02:E0:4F:9F:47:A6:2C:A4:7E:13:76:32:76:73:1B:2B:A0:46:D8:31:DA:C0:E7:18:2D",
         "3E:F7:70:88:48:0C:85:52:0D:CC:9A:4F:28:35:42:AD:B3:A9:63:0D:30:03:87:87:3F:A8:A5:B2:29:94:72:21"
       ]
     }
