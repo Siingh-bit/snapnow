@@ -676,7 +676,8 @@ function icon(name, size=20, color="currentColor", w=2){
     phone:'<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/>',
     mic:'<rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v1a7 7 0 0 0 14 0v-1M12 18v4"/>',
     micoff:'<path d="M2 2l20 20M9 9v2a3 3 0 0 0 5.1 2.1M15 9.3V5a3 3 0 0 0-5.9-.6M17 16.9A7 7 0 0 1 5 11v-1m14 0v1c0 .6-.1 1.2-.2 1.8M12 18v4"/>',
-    chevron:'<path d="M9 18l6-6-6-6"/>'
+    chevron:'<path d="M9 18l6-6-6-6"/>',
+    flag:'<path d="M5 22V4"/><path d="M5 4h13l-2.5 4.5L18 13H5"/>'
   };
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[name]||""}</svg>`;
 }
@@ -1102,7 +1103,7 @@ const api = {
     rows.forEach(r => S.d.pgs[r.id] = r);
   },
   async reviewsFor(pgId){
-    const rows = await q(sb.from("reviews").select("id,booking_id,customer_name,stars,body,created_at").eq("photographer_id", pgId).order("created_at", {ascending:false}).limit(50));
+    const rows = await q(sb.from("reviews").select("id,booking_id,customer_id,customer_name,stars,body,created_at").eq("photographer_id", pgId).order("created_at", {ascending:false}).limit(50));
     S.d.reviews[pgId] = rows; return rows;
   },
 
@@ -1225,6 +1226,8 @@ async function refresh(fromPoll){
   try{ sendSource(); }catch(e){}
   sb.rpc("my_status").then(r => { const st = r && r.data; const blocked = !!(st && st.status && st.status !== "active"); if(blocked !== !!S.blocked){ S.blocked = blocked ? st : null; render(); } }).catch(() => {});
   if(isPg() && S.kyc === undefined && !S.loading.kycl){ S.loading.kycl = true; loadKyc().then(() => { S.loading.kycl = false; softRender(); }); }
+  if(S.ublocksFor !== S.me.id){ S.ublocksFor = S.me.id; S.ublocks = undefined; }
+  if(S.ublocks === undefined){ S.ublocks = null; loadUserBlocks().then(softRender); }
   if(S.rewards === undefined && !S.loading.rewards){ S.loading.rewards = true; loadRewards().then(() => { S.loading.rewards = false; softRender(); }); }
   try{
     if(isCustomer()){
@@ -2032,7 +2035,7 @@ function bookingCard(b){
 function exFilter(){
   const f = S.prefs.ex || (S.prefs.ex = { q:"", scope:"city", cat:"all", sort:"rated" });
   const city = meCity().toLowerCase();
-  let list = S.d.pgList.slice();
+  let list = S.d.pgList.filter(p => !iBlocked(p.id));
   if(f.scope === "city" && city) list = list.filter(p => (p.city||"").toLowerCase() === city);
   if(f.cat !== "all") list = list.filter(p => (p.categories||[]).includes(f.cat));
   const qv = (f.q||"").trim().toLowerCase();
@@ -2080,6 +2083,7 @@ function vPgProfile(p){
   if(reviews === undefined && !S.loading["rv"+pg.id]){ S.loading["rv"+pg.id] = true; api.reviewsFor(pg.id).then(() => { S.loading["rv"+pg.id] = false; softRender(); }).catch(() => { S.d.reviews[pg.id] = []; }); }
   const offer = p.offerId ? findOffer(p.offerId) : null;
   const photos = pg.portfolio || [];
+  const blocked = iBlocked(pg.id);
   return `${topbar(pg.display_name, pg.city || "")}
   <div class="cover">${photos[0] ? `<img src="${esc(photos[0])}" alt="">` : ""}</div>
   <div class="pad" style="margin-top:-40px">
@@ -2087,6 +2091,7 @@ function vPgProfile(p){
     <div class="row gap6 mt12"><span class="h2">${esc(pg.display_name)}</span>${pg.is_verified ? icon("shield",16,"var(--blue)") : ""}${isFeatured(pg) ? `<span class="feat">★ Featured</span>` : ""}</div>
     <div class="sm mt4">${ratingHtml(pg)} ${pg.is_online ? `<span class="chip green">Available</span>` : `<span class="chip">Away</span>`}</div>
     <div class="xs muted2 mt4">${pgMeta(pg)}</div>
+    ${blocked ? `<div class="card soft mt12 sm">You've blocked ${esc(firstName(pg.display_name))}. <button class="linkish accent" onclick="push('blockedPeople')"><b>Manage blocked people</b></button></div>` : ""}
     ${pg.bio ? `<p class="sm muted mt12 prose">${esc(pg.bio)}</p>` : ""}
     <div class="chips mt12">${(pg.categories||[]).map(c => `<span class="chip accent">${esc(catById(c).name)}</span>`).join("")}</div>
     <div class="grid3 mt16">
@@ -2099,10 +2104,11 @@ function vPgProfile(p){
       : `<div class="card soft sm muted">${esc(firstName(pg.display_name))} hasn't added portfolio photos yet.</div>`}
     <div class="sec-title mt24">Reviews</div>
     ${reviews === undefined ? `<div class="skeleton sm"></div>`
-      : reviews.length ? `<div class="stack gap10">${reviews.map(r => `<div class="card"><div class="between"><b class="sm">${esc(r.customer_name||"Customer")}</b><span class="rating">${"★".repeat(r.stars)}<span class="muted2">${"★".repeat(5-r.stars)}</span></span></div>${r.body ? `<div class="sm muted mt6 prose">${esc(r.body)}</div>` : ""}<div class="xs muted2 mt6">${timeAgo(r.created_at)}</div></div>`).join("")}</div>`
+      : reviews.length ? `<div class="stack gap10">${reviews.map(r => `<div class="card"><div class="between"><b class="sm">${esc(r.customer_name||"Customer")}</b><span class="rating">${"★".repeat(r.stars)}<span class="muted2">${"★".repeat(5-r.stars)}</span></span></div>${r.body ? `<div class="sm muted mt6 prose">${esc(r.body)}</div>` : ""}<div class="between mt6"><span class="xs muted2">${timeAgo(r.created_at)}</span>${safetyLink(r.customer_id, r.customer_name, "review", r.id)}</div></div>`).join("")}</div>`
       : `<div class="card soft sm muted">No reviews yet — reviews appear after completed shoots.</div>`}
+    ${pg.id !== S.me.id ? `<div class="center mt24">${safetyLink(pg.id, pg.display_name, "profile")}</div>` : ""}
   </div>
-  ${offer ? `<div class="bottom-bar"><div><div class="xs muted2">Their quote</div><div class="h3">${inr(offer.price)}</div></div>
+  ${blocked ? `<div style="height:24px"></div>` : offer ? `<div class="bottom-bar"><div><div class="xs muted2">Their quote</div><div class="h3">${inr(offer.price)}</div></div>
     <button class="btn primary grow" onclick="push('confirm',{offerId:'${offer.id}'})">Book ${esc(firstName(pg.display_name))}</button></div>`
     : isCustomer() && pg.id !== S.me.id ? `<div class="bottom-bar"><div class="grow"><div class="sm bold">Like ${esc(firstName(pg.display_name))}'s work?</div><div class="xs muted2">Post your shoot — photographers in ${esc(pg.city || "your city")} who do it send you a price.</div></div>
     <button class="btn primary" onclick="startRequest(null,'${esc((pg.categories||[])[0] || "")}' || null)">Post a shoot</button></div>` : `<div style="height:24px"></div>`}`;
@@ -2269,6 +2275,7 @@ function offerCard(r, o, soon, best){
     ${soon ? `<div class="xs muted mt8">${icon("clock",12)} Can be there in about ${o.eta_min} min</div>` : ""}
     ${o.note ? `<div class="quote mt8">“${esc(o.note)}”</div>` : ""}
     <div class="mt8">${portfolioStrip(pg, 4)}</div>
+    <div class="right mt6">${safetyLink(pg.id, pg.display_name || o.photographer_name, "quote", o.id)}</div>
     <div class="row gap8 mt12">
       <button class="btn sm grow" onclick="push('pg',{id:'${pg.id}',offerId:'${o.id}'})">View profile</button>
       <button class="btn sm primary grow" onclick="push('confirm',{offerId:'${o.id}'})">Book for ${inr(o.price)}</button>
@@ -2407,6 +2414,7 @@ function vBooking(p){
     ${b.status === "completed" && rv === null ? `<button class="btn primary block mt16" onclick="push('rate',{id:'${b.id}'})">${icon("star",16,"var(--on-text)")} Rate your shoot</button>` : ""}
     ${rv ? `<div class="card mt12"><div class="sec-title">Your review</div><div class="rating">${"★".repeat(rv.stars)}</div>${rv.body ? `<div class="sm muted mt6">${esc(rv.body)}</div>` : ""}</div>` : ""}
     ${canCancel ? `<button class="btn block danger mt16" onclick="cancelBooking('${b.id}')">Cancel booking</button>` : ""}
+    <div class="center mt16">${safetyLink(pg.id, pg.display_name, "booking", b.id)}</div>
   </div>`;
 }
 async function saveAddr(id){
@@ -2501,12 +2509,15 @@ function vChat(p){
   const b = S.d.bookings.find(x => x.id === p.id); if(!b) return `${topbar("Messages")}`;
   const other = isPg() ? b.customer_name : b.photographer_name;
   if(!S.d.msgs[b.id]) loadChat(b.id);
-  const closed = b.status === "cancelled";
+  const closed = b.status === "cancelled", blocked = blockedOn(b);
+  const rk = "r" + (++repSeq); REP[rk] = { uid: otherOn(b), name: other || "", ctx: "booking", cid: b.id };
   return `<div class="chat-wrap">${topbar(other || "Messages", catById(b.category).name + " · " + whenStr(b.start_at),
-      canCall(b) ? `<button class="iconbtn callbtn" aria-label="Voice call" title="Voice call over the internet" onclick="startCall('${b.id}')">${icon("phone",18)}</button>` : "")}
+      (canCall(b) ? `<button class="iconbtn callbtn" aria-label="Voice call" title="Voice call over the internet" onclick="startCall('${b.id}')">${icon("phone",18)}</button>` : "")
+      + `<button class="iconbtn" aria-label="Report or block" title="Report or block" onclick="openReport('${rk}')">${icon("flag",17)}</button>`)}
     <div class="chat-safe xs">${icon("shield",12,"var(--muted-2)")} For your safety, SnapPro may review chats if there's a dispute or fraud report. Keep payments inside the app.</div>
     <div class="chat-scroll" id="chatList">${msgsHtml(b)}</div>
-    ${closed ? `<div class="chat-closed">This booking was cancelled, so the chat is closed.</div>` : `<div class="chat-input">
+    ${closed ? `<div class="chat-closed">This booking was cancelled, so the chat is closed.</div>`
+      : blocked ? `<div class="chat-closed">You blocked ${esc(firstName(other))}, so you can't message each other. <button class="linkish accent" onclick="setUserBlock('${esc(otherOn(b))}',false)"><b>Unblock</b></button></div>` : `<div class="chat-input">
       <input id="chatBox" placeholder="Message ${esc(firstName(other))}…" maxlength="2000" autocomplete="off" onkeydown="if(event.key==='Enter'){event.preventDefault();sendChat('${b.id}')}">
       <button class="iconbtn send" aria-label="Send" onclick="sendChat('${b.id}')">${icon("send",16,"var(--on-text)")}</button></div>`}
   </div>`;
@@ -2551,6 +2562,7 @@ function vProfile(){
     <div class="card mt16 list">
       <button class="li" onclick="push('editName')">${icon("user",18,"var(--muted)")}<div class="grow"><div class="sm bold">Name</div><div class="xs muted2">${esc(me.name)}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
       <button class="li" onclick="push('editLoc')">${icon("pin",18,"var(--muted)")}<div class="grow"><div class="sm bold">Location</div><div class="xs muted2">${esc([me.city, me.state, me.pincode].filter(Boolean).join(", ") || "Not set")}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
+      <button class="li" onclick="push('blockedPeople')">${icon("shield",18,"var(--muted)")}<div class="grow"><div class="sm bold">Blocked people</div><div class="xs muted2">${(S.ublocks || []).length ? S.ublocks.length + " blocked" : "No one blocked"}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
       <a class="li" href="mailto:${SUPPORT_EMAIL}">${icon("mail",18,"var(--muted)")}<div class="grow"><div class="sm bold">Help and support</div><div class="xs muted2">${SUPPORT_EMAIL}</div></div>${icon("chevron",16,"var(--muted-2)")}</a>
     </div>
     ${appearanceCard()}
@@ -2619,6 +2631,7 @@ function reqCardPg(r, compact){
     <div class="row gap8 mt8 xs muted">${icon("calendar",13)} ${whenStr(r.start_at)} <span class="muted2">·</span> <span data-until="${esc(r.expires_at)}">${leftStr(r.expires_at)}</span> to quote</div>
     ${!compact && (r.deliverables||[]).length ? `<div class="chips mt8">${r.deliverables.map(x => `<span class="chip">${esc(x)}</span>`).join("")}</div>` : ""}
     ${!compact && r.notes ? `<div class="quote mt8">“${esc(r.notes)}”</div>` : ""}
+    ${!compact ? `<div class="right mt6">${safetyLink(r.customer_id, r.customer_name, "request", r.id)}</div>` : ""}
     ${mine ? `<div class="row gap8 mt12"><span class="chip green">You quoted ${inr(mine.price)}</span><div class="grow"></div><button class="btn sm" onclick="withdrawOffer('${mine.id}')">Withdraw</button></div>`
       : `<div class="row gap8 mt12"><button class="btn sm grow" onclick="passRequest('${r.id}')">Not for me</button>
          <button class="btn sm primary grow" onclick="push('quote',{id:'${r.id}'})">Send a quote</button></div>`}
@@ -2748,7 +2761,8 @@ function vPgReviews(){
       <div class="between"><div class="row gap8">${avatarHtml(b ? b.customer_id : r.id, r.customer_name, "av-40")}
         <div><div class="sm bold">${esc(r.customer_name || "Customer")}</div><div class="xs muted2">${b ? esc(catById(b.category).name) + " · " : ""}${dayStr(r.created_at)}</div></div></div>
         <span class="rating">${"★".repeat(r.stars)}<span class="muted2">${"★".repeat(5 - r.stars)}</span></span></div>
-      ${r.body ? `<div class="sm mt8">${esc(r.body)}</div>` : `<div class="xs muted2 mt8">No written comment.</div>`}</div>`; }).join("")
+      ${r.body ? `<div class="sm mt8">${esc(r.body)}</div>` : `<div class="xs muted2 mt8">No written comment.</div>`}
+      <div class="right mt6" onclick="event.stopPropagation()">${safetyLink(r.customer_id, r.customer_name, "review", r.id)}</div></div>`; }).join("")
       : emptyState("⭐", "No reviews yet", "After each completed shoot, your customer can rate you. Reviews show up here.")}
   </div>`;
 }
@@ -2784,6 +2798,7 @@ function vQuote(p){
     <div class="note">${icon("wallet",18,"var(--green)")}<div>The customer pays ${S.advance}% online when they book and the rest online after the shoot. SnapPro keeps ${myCommission()}% and transfers the rest to you once the shoot is done and fully paid.</div></div>
     <button class="btn primary block mt16" ${S.loading.quote?"disabled":""} onclick="sendQuote('${r.id}')">${S.loading.quote ? "Sending…" : icon("send",16,"var(--on-text)") + " Send quote"}</button>
     <div id="formErr">${errHtml(S.formErr)}</div>
+    <div class="center mt16">${safetyLink(r.customer_id, r.customer_name, "request", r.id)}</div>
   </div>`;
 }
 function quoteHint(budget){
@@ -2873,6 +2888,7 @@ function vJob(p){
         : "Shoot complete. SnapPro will send " + inr(b.photographer_amount) + " to your payout UPI ID."}</div></div>` : ""}
     ${b.status === "shooting" && b.balance_status === "due" ? `<div class="note mt12">${icon("wallet",18,"var(--accent)")}<div>${esc(firstName(b.customer_name))} can pay the balance of ${inr(balOf(b))} in the SnapPro app now. Please don't take cash — paying in the app is what lets us pay you.</div></div>` : ""}
     ${canCancel ? `<button class="btn block danger mt12" onclick="jobStep('${b.id}','cancelled')">Cancel this booking</button>` : ""}
+    <div class="center mt16">${safetyLink(b.customer_id, b.customer_name, "booking", b.id)}</div>
   </div>`;
 }
 async function jobStep(id, to){
@@ -2896,7 +2912,7 @@ function pgProfileExtras(){
     <button class="li" onclick="push('pg',{id:'${pg.id}'})">${icon("user",18,"var(--muted)")}<div class="grow"><div class="sm bold">See your public profile</div><div class="xs muted2">What customers see</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
     <button class="li" onclick="push('portfolio')">${icon("image",18,"var(--muted)")}<div class="grow"><div class="sm bold">Portfolio</div><div class="xs muted2">${(pg.portfolio||[]).length} item${(pg.portfolio||[]).length===1?"":"s"}${S.storage ? " · " + fmtBytes(S.storage.used) + " of " + fmtBytes(S.storage.quota) : ""}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
     <button class="li" onclick="push('kyc')">${icon("shield",18,kycDone() ? "var(--green)" : "var(--red)")}<div class="grow"><div class="sm bold">Identity verification</div><div class="xs muted2">${!S.kyc ? "ID + face photo" : S.kyc.status === "verified" ? "Verified" : S.kyc.status === "submitted" ? "Being checked" : S.kyc.status === "rejected" ? "Please re-do" : "Not done yet — required"}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
-    <button class="li" onclick="push('storage')">${icon("grid",18,"var(--muted)")}<div class="grow"><div class="sm bold">Storage plan</div><div class="xs muted2">${S.storage ? (S.storage.plan === "free" ? "Free · " + fmtBytes(S.storage.quota) : esc(S.storage.plan) + " · until " + dayStr(S.storage.expires_at)) : "Free 250 MB · upgrade for more"}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
+    <button class="li" onclick="push('storage')">${icon("grid",18,"var(--muted)")}<div class="grow"><div class="sm bold">Storage plan</div><div class="xs muted2">${S.storage ? (S.storage.plan === "free" ? "Free · " + fmtBytes(S.storage.quota) : esc(S.storage.plan) + " · until " + dayStr(S.storage.expires_at)) : PLAY_APP ? "Free 250 MB" : "Free 250 MB · upgrade for more"}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
     <button class="li" onclick="push('editPayout')">${icon("wallet",18,"var(--muted)")}<div class="grow"><div class="sm bold">Payout details</div><div class="xs muted2">${S.payout && S.payout.upi_id ? esc(S.payout.upi_id) : "Add the UPI ID we pay you on"}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
     <button class="li" onclick="push('editPg')">${icon("edit",18,"var(--muted)")}<div class="grow"><div class="sm bold">Bio, shoot types and rates</div><div class="xs muted2">${(pg.categories||[]).map(c => esc(catById(c).name)).join(", ") || "Not set"}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
   </div>`;
@@ -3271,7 +3287,7 @@ async function uploadPortfolio(files){
       added++;
     }catch(e){
       failed++; console.warn("SnapPro upload", e);
-      if(/space|upgrade|storage/i.test(e.message)){ full = true; toast("Out of storage", e.message, "image"); break; }
+      if(/space|upgrade|storage/i.test(e.message)){ full = true; toast("Out of storage", PLAY_APP ? "Your portfolio is full. Remove some items to make room." : e.message, "image"); break; }
       toast("Couldn't upload " + label, e.message, "x");
     }
   }
@@ -3304,14 +3320,18 @@ function storageMeter(compact){
     <div class="between"><div class="sm bold">${fmtBytes(st.used)} of ${fmtBytes(st.quota)} used</div>
       <span class="chip ${st.plan === "free" ? "" : "green"}">${st.plan === "free" ? "Free plan" : esc(plan ? plan.name : st.plan) + " plan"}</span></div>
     <div class="meter mt8 ${pctUsed >= 90 ? "hot" : ""}"><i style="width:${pctUsed}%"></i></div>
-    ${st.expires_at ? `<div class="xs ${soon ? "accent bold" : "muted2"} mt8">${soon ? "Ends soon — " : ""}Renews on ${dayStr(st.expires_at)}. ${soon ? "Renew to keep everything on your profile." : ""}</div>` : ""}
-    ${st.hidden ? `<div class="note mt8">${icon("image",16,"var(--accent)")}<div><b>${st.hidden} item${st.hidden === 1 ? " is" : "s are"} hidden</b> (${fmtBytes(st.hidden_bytes)}) because your plan ended. ${st.delete_after ? "They'll be deleted on " + dayStr(st.delete_after) + " unless you renew." : ""}</div></div>` : ""}
-    <button class="btn ${st.hidden || pctUsed >= 80 ? "primary" : ""} block mt12" onclick="push('storage')">${st.plan === "free" ? "Get more storage" : soon || st.hidden ? "Renew storage" : "Storage plans"}</button>
+    ${st.expires_at ? `<div class="xs ${soon ? "accent bold" : "muted2"} mt8">${PLAY_APP ? "Plan ends " + dayStr(st.expires_at) + "." : (soon ? "Ends soon — " : "") + "Renews on " + dayStr(st.expires_at) + ". " + (soon ? "Renew to keep everything on your profile." : "")}</div>` : ""}
+    ${st.hidden ? `<div class="note mt8">${icon("image",16,"var(--accent)")}<div><b>${st.hidden} item${st.hidden === 1 ? " is" : "s are"} hidden</b> (${fmtBytes(st.hidden_bytes)}) because your plan ended. ${st.delete_after ? "They'll be deleted on " + dayStr(st.delete_after) + (PLAY_APP ? "." : " unless you renew.") : ""}</div></div>` : ""}
+    ${PLAY_APP ? "" : `<button class="btn ${st.hidden || pctUsed >= 80 ? "primary" : ""} block mt12" onclick="push('storage')">${st.plan === "free" ? "Get more storage" : soon || st.hidden ? "Renew storage" : "Storage plans"}</button>`}
   </div>`;
 }
 function vStorage(){
   if(!S.storage){ loadStorage().then(softRender); return `${topbar("Storage")}<div class="pad"><div class="skeleton"></div></div>`; }
   const st = S.storage, plans = st.plans || [];
+  if(PLAY_APP) return `${topbar("Portfolio storage", fmtBytes(st.used) + " of " + fmtBytes(st.quota) + " used")}
+  <div class="pad">${storageMeter(true)}
+    <p class="sm muted mt16">Every photographer gets <b>${fmtBytes(st.free)} free</b> for portfolio photos and videos. To make room, remove items you no longer need from your portfolio.</p>
+    <button class="btn block mt12" onclick="replaceStack('portfolio')">Open portfolio</button></div>`;
   return `${topbar("Portfolio storage", fmtBytes(st.used) + " of " + fmtBytes(st.quota) + " used")}
   <div class="pad">
     <p class="sm muted">Every photographer gets <b>${fmtBytes(st.free)} free</b>. Need room for more photos and videos? Pick a yearly plan.</p>
@@ -3329,7 +3349,7 @@ function vStorage(){
   </div>`;
 }
 async function buyStorage(plan){
-  if(S.loading.buy) return;
+  if(S.loading.buy || PLAY_APP) return;
   S.loading.buy = plan; render();
   try{
     const res = await mediaFn("buy", { plan });
@@ -3405,7 +3425,12 @@ function tryPendingShoot(){
 }
 
 async function loadRewards(){
-  try{ const { data, error } = await sb.rpc("my_rewards"); if(!error && data) S.rewards = data; }catch(e){}
+  try{ const { data, error } = await sb.rpc("my_rewards");
+    if(!error && data){
+      /* storage-plan discounts can't be used in the Google Play app (plans are only sold on the website) */
+      if(PLAY_APP){ const keep = x => x.kind !== "storage_discount"; data.offers = (data.offers || []).filter(keep); data.benefits = (data.benefits || []).filter(keep); }
+      S.rewards = data;
+    } }catch(e){}
   return S.rewards;
 }
 /* once the account is set up, attach the friend's code they arrived with */
@@ -3843,7 +3868,7 @@ const CALLABLE = ["confirmed","enroute","arrived","shooting","completed"];
 const callChans = {};                 // call_token -> channel
 let CALL = null;                      // the current call
 let ringTone = null;
-const canCall = b => b && b.call_token && CALLABLE.includes(b.status) && !(b.status === "completed" && Date.now() - toMs(b.updated_at || b.start_at) > 7 * 864e5);
+const canCall = b => b && b.call_token && CALLABLE.includes(b.status) && !blockedOn(b) && !(b.status === "completed" && Date.now() - toMs(b.updated_at || b.start_at) > 7 * 864e5);
 
 /* join (or leave) the call channel of every booking we can call on */
 function syncCallChannels(){
@@ -4074,7 +4099,8 @@ function photographerActions(){
   if(stg === undefined && !S.loading.storage){ S.loading.storage = true; loadStorage().then(() => { S.loading.storage = false; softRender(); }); }
   if(stg && stg.hidden)
     out.push({ key: "stg-hidden", ic: "image", tone: "accent", urgent: true,
-      title: `${stg.hidden} portfolio item${stg.hidden === 1 ? " is" : "s are"} hidden`, sub: "Your storage plan ended — renew to show them again", btn: "Renew", go: `push('storage')` });
+      title: `${stg.hidden} portfolio item${stg.hidden === 1 ? " is" : "s are"} hidden`, sub: PLAY_APP ? "Your storage plan ended" : "Your storage plan ended — renew to show them again", btn: PLAY_APP ? "View" : "Renew", go: `push('storage')` });
+  else if(PLAY_APP){ /* storage plans aren't sold in the Google Play app */ }
   else if(stg && stg.expires_at && toMs(stg.expires_at) - Date.now() < 14 * 864e5)
     out.push({ key: "stg-soon", ic: "image", tone: "accent",
       title: "Your storage plan ends " + dayStr(stg.expires_at), sub: "Renew to keep everything on your profile", btn: "Renew", go: `push('storage')` });
@@ -4242,6 +4268,16 @@ function softBack(){
   if(to !== "welcome") try{ history.pushState({ soft: 1 }, ""); }catch(e){}
 }
 
+/* Opened from the Google Play app? (Play opens it with ?utm_source=android_app, from
+   android-app://in.snappro.app). Google Play only allows its own billing for digital
+   purchases, so storage plans aren't sold in the Play app — only on the website.
+   Remembered for this app session. */
+const PLAY_APP = (function(){ try{
+  const q = new URLSearchParams(location.search);
+  if(q.get("utm_source") === "android_app" || /^android-app:\/\/in\.snappro\.app/.test(document.referrer || "")) sessionStorage.setItem("snappro.play", "1");
+  return sessionStorage.getItem("snappro.play") === "1";
+}catch(e){ return false; } })();
+
 /* offline page for the installed app */
 if("serviceWorker" in navigator && location.protocol === "https:"){
   window.addEventListener("load", () => { navigator.serviceWorker.register("/sw.js").catch(() => {}); });
@@ -4302,6 +4338,111 @@ async function deleteMyAccount(){
 }
 
 /* ============================================================
+   REPORT & BLOCK
+   Report a photographer or customer (their profile, a quote, a
+   request, a review or a booking's chat), or block them so the two
+   of you stop seeing each other. The database enforces both; these
+   are just the screens. Staff handle reports in Admin → Trust.
+   ============================================================ */
+const REPORT_REASONS = [
+  ["abuse", "Rude, abusive or threatening"],
+  ["inappropriate", "Sexual or inappropriate content"],
+  ["fraud", "Asked to pay outside SnapPro, or a scam"],
+  ["fake", "Fake profile or someone else's photos"],
+  ["spam", "Spam or advertising"],
+  ["safety", "I feel unsafe"],
+  ["other", "Something else"]
+];
+const REPORT_ABOUT = { profile: "their profile", quote: "their quote", request: "their shoot request", review: "their review",
+                       booking: "this booking — your recent messages with them are included so our team can see what happened" };
+
+async function loadUserBlocks(){
+  try{ const { data, error } = await sb.rpc("my_blocks"); if(!error && Array.isArray(data)) S.ublocks = data; }catch(e){}
+  return S.ublocks;
+}
+const iBlocked = id => !!(id && (S.ublocks || []).some(b => b.id === id));
+const otherOn = b => b ? (S.me && b.customer_id === S.me.id ? b.photographer_id : b.customer_id) : null;
+/* is either side of this booking blocked (by me)? the server also stops it the other way round */
+const blockedOn = b => iBlocked(otherOn(b));
+
+/* "Report or block" link; the details are kept here rather than in the HTML */
+let REP = {}, repSeq = 0;
+function safetyLink(uid, name, ctx, cid, cls){
+  if(!uid || !S.me || uid === S.me.id) return "";
+  if(repSeq > 500){ REP = {}; repSeq = 0; }
+  const k = "r" + (++repSeq); REP[k] = { uid, name: name || "", ctx: ctx || "profile", cid: cid || null };
+  return `<button class="linkish xs ${cls || ""}" onclick="openReport('${k}')">${icon("flag",12)} Report${ctx === "review" || ctx === "quote" || ctx === "request" ? "" : " or block"}</button>`;
+}
+function openReport(k){ const t = REP[k]; if(!t) return; S.rep = { key: k, reason: null, details: "" }; push("report", t); }
+
+function vReport(p){
+  if(!S.rep) S.rep = { reason: null, details: "" };
+  const R = S.rep, blocked = iBlocked(p.uid), nm = firstName(p.name) || "this person";
+  return `${topbar("Report or block", p.name || "")}
+  <div class="pad">
+    <div class="card">
+      <div class="sm bold">Report ${esc(nm)}</div>
+      <div class="xs muted mt4">About ${REPORT_ABOUT[p.ctx] || REPORT_ABOUT.profile}.</div>
+      <div class="stack gap8 mt12">${REPORT_REASONS.map(([k, l]) => `<label class="row gap8 sm" style="cursor:pointer"><input type="radio" name="repReason" value="${k}" ${R.reason === k ? "checked" : ""} onchange="S.rep.reason='${k}'"><span>${l}</span></label>`).join("")}</div>
+      <label class="xs muted mt12" for="repDetails" style="display:block">What happened? <span class="muted2">(optional, but it helps)</span></label>
+      <textarea id="repDetails" class="input mt6" rows="3" maxlength="1000" placeholder="For example: asked me to pay cash instead of through the app" oninput="S.rep.details=this.value">${esc(R.details || "")}</textarea>
+      ${blocked ? "" : `<label class="row gap8 sm mt12" style="cursor:pointer"><input type="checkbox" id="repBlock"><span>Also block ${esc(nm)}</span></label>`}
+      <button class="btn primary block mt16" ${S.loading.rep ? "disabled" : ""} onclick="sendReport()">${S.loading.rep ? "Sending…" : "Send report"}</button>
+      <div class="xs muted2 mt8">Our team looks at every report. ${esc(nm)} isn't told who reported them.</div>
+    </div>
+    <div class="card mt16">
+      <div class="sm bold">${blocked ? "You've blocked " + esc(nm) : "Block " + esc(nm)}</div>
+      <div class="xs muted mt4">${blocked ? "You don't see each other's requests or quotes, and you can't message or call each other."
+        : "You'll stop seeing each other's requests and quotes, and neither of you can message or call the other. A shoot that's already booked isn't cancelled — cancel it from the booking if you need to."}</div>
+      <button class="btn block mt12 ${blocked ? "" : "danger"}" ${S.loading.blk ? "disabled" : ""} onclick="setUserBlock('${esc(p.uid)}',${!blocked})">${blocked ? "Unblock " : "Block "}${esc(nm)}</button>
+    </div>
+    <div class="note mt16">${icon("shield",18,"var(--red)")}<div class="xs">In danger right now? Call <a href="tel:112"><b>112</b></a> for police or an ambulance.</div></div>
+  </div>`;
+}
+async function sendReport(){
+  const top = S.stack[S.stack.length - 1], p = top && top.p; if(!p || !S.rep) return;
+  const reason = S.rep.reason, details = ((el("repDetails") || {}).value || "").trim(), block = !!(el("repBlock") && el("repBlock").checked);
+  if(!reason){ toast("Choose what's wrong", "", "flag"); return; }
+  if(reason === "other" && !details){ toast("Tell us what happened", "", "flag"); return; }
+  S.loading.rep = true; render();
+  try{
+    const { error } = await sb.rpc("report_user", { p_user: p.uid, p_reason: reason, p_details: details || null, p_context: p.ctx, p_context_id: p.cid, p_block: block });
+    if(error) throw new Error(dbMsg(error));
+    S.loading.rep = false; S.rep = null;
+    if(block) await loadUserBlocks();
+    toast("Thanks — we've got your report", block ? "You've also blocked " + (firstName(p.name) || "them") : "Our team will look into it", "check");
+    pop(); if(block) refresh(false);
+  }catch(e){ S.loading.rep = false; render(); toast("Couldn't send the report", e.message, "x"); }
+}
+async function setUserBlock(uid, on){
+  const t = (S.ublocks || []).find(b => b.id === uid), top = S.stack[S.stack.length - 1];
+  const nm = firstName((top && top.p && top.p.uid === uid && top.p.name) || (t && t.name)) || "them";
+  if(on && !confirm("Block " + nm + "? You'll stop seeing each other's requests and quotes, and you can't message or call each other.")) return;
+  S.loading.blk = true; render();
+  try{
+    const { error } = await sb.rpc("block_user", { p_user: uid, p_block: on });
+    if(error) throw new Error(dbMsg(error));
+    await loadUserBlocks();
+    toast(on ? "Blocked " + nm : "Unblocked " + nm, on ? "You can unblock them in Profile → Blocked people" : "", on ? "x" : "check");
+    refresh(false);
+  }catch(e){ toast("Couldn't update", e.message, "x"); }
+  S.loading.blk = false; render();
+}
+function vBlockedPeople(){
+  if(S.ublocks === undefined){ S.ublocks = null; loadUserBlocks().then(softRender); }
+  const list = S.ublocks;
+  return `${topbar("Blocked people")}
+  <div class="pad">
+    <div class="xs muted">People you've blocked can't see your requests or quotes, and you can't message or call each other.</div>
+    ${!list ? `<div class="skeleton mt16"></div>`
+      : list.length ? `<div class="card list mt16">${list.map(b => `<div class="li">${avatarHtml(b.id, b.name, "av-40")}
+          <div class="grow"><div class="sm bold">${esc(b.name)}</div><div class="xs muted2">${b.role === "photographer" ? "Photographer" : "Customer"} · blocked ${dayStr(b.at)}</div></div>
+          <button class="btn sm" ${S.loading.blk ? "disabled" : ""} onclick="setUserBlock('${esc(b.id)}',false)">Unblock</button></div>`).join("")}</div>`
+      : emptyState("shield", "No one blocked", "If someone bothers you, open their profile or your chat with them and tap “Report or block”.")}
+  </div>`;
+}
+
+/* ============================================================
    NAVIGATION
    ============================================================ */
 const AUTH_VIEWS = { welcome: vWelcome, signup: vSignup, otp: vOtp, login: vLogin, reset: vReset, newpw: vNewPw,
@@ -4310,7 +4451,8 @@ const STACK_VIEWS = { pg: vPgProfile, photo: vPhoto, newRequest: vNewRequest, re
                       booking: vBooking, rate: vRate, chat: vChat, editName: vEditName, editLoc: vEditLoc,
                       quote: vQuote, job: vJob, portfolio: vPortfolio, editPg: vEditPg,
                       payResult: vPayResult, editPayout: vEditPayout,
-                      pgEarnings: vPgEarnings, pgDone: vPgDone, pgReviews: vPgReviews, how: vHow, storage: vStorage, rewards: vRewards, invite: vInvite, kyc: vKyc, deleteAccount: vDeleteAccount };
+                      pgEarnings: vPgEarnings, pgDone: vPgDone, pgReviews: vPgReviews, how: vHow, storage: vStorage, rewards: vRewards, invite: vInvite, kyc: vKyc, deleteAccount: vDeleteAccount,
+                      report: vReport, blockedPeople: vBlockedPeople };
 const CUST_TABS = [ ["home","Home","home",vCustHome], ["explore","Explore","search",vExplore], ["activity","Shoots","calendar",vActivity], ["profile","Profile","user",vProfile] ];
 const PG_TABS   = [ ["home","Home","home",vPgHome], ["requests","Requests","bolt",vPgRequests], ["jobs","Shoots","calendar",vJobs], ["profile","Profile","user",vProfile] ];
 const tabsFor = () => isPg() ? PG_TABS : CUST_TABS;

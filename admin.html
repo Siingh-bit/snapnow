@@ -2610,8 +2610,11 @@ function vTrust(){
   const w = deptWait("trust", true); if(w) return w;
   const D = S.dept.trust;
   const T = D.data, m = T.money, ky = T.kyc || {};
+  const reps = T.reports || [], RS = { open: "red", reviewing: "accent", resolved: "green", dismissed: "" };
   return deptHead("trust", true) + `
   <div class="grid mt16">
+    ${ktile(n0(T.reports_open), "Reports to handle", "From customers and photographers", T.reports_open ? "hl" : "")}
+    ${ktile(n0((T.blocked_often || []).length), "Blocked by 2+ people", "Worth a look")}
     ${ktile(n0((T.restricted || []).length), "Suspended / blocked", "", (T.restricted || []).length ? "hl" : "")}
     ${ktile(n0(ky.submitted), "IDs to check", "", ky.submitted ? "hl" : "", "openTab('pros')")}
     ${ktile(n0(ky.verified), "IDs verified", "")}
@@ -2626,6 +2629,16 @@ function vTrust(){
     ${ktile(n0(T.chat_reads), "Chats read by staff", "Last 30 days", "", "openTab('activity')")}
   </div>
   <div class="grid2 mt16">
+    ${m ? dtable("trRep", "Reports from users", [["created_at","When","dt"],["status","Status", r => `<span class="chip ${RS[r.status] || ""}">${esc(r.status)}</span>`],
+        ["reason","Why", r => esc(REP_REASON[r.reason] || r.reason)],["reported","About", r => userLink(r.reported_id, r.reported, r.reported_pid) + ` <span class="xs muted2">${esc(r.reported_role || "")}${r.reported_status && r.reported_status !== "active" ? " · " + esc(r.reported_status) : ""}</span>`],
+        ["reports_against","Reports / blocks", r => num(r.reports_against) + " / " + num(r.blocked_by)],["reporter","By", r => userLink(r.reporter_id, r.reporter, r.reporter_pid)],
+        ["context","On", r => esc(r.context) + (r.booking_id ? " · " + bkLink(r.booking_id, "booking") : "")],
+        ["snapshot","What was said", r => r.snapshot ? `<div class="xs" style="white-space:pre-wrap;max-width:420px;max-height:140px;overflow:auto">${esc(r.snapshot)}</div>` : ""],["details","Their words"],
+        ["action_note","Outcome", r => r.action_note ? esc(r.action_note) + (r.handled_by ? ` <span class="xs muted2">— ${esc(r.handled_by)}</span>` : "") : ""],
+        ["a","", r => r.status === "open" || r.status === "reviewing" ? `${r.status === "open" ? `<button class="btn sm" onclick="event.stopPropagation();reportAction(${r.id},'reviewing')">Looking into it</button> ` : ""}<button class="btn sm" onclick="event.stopPropagation();reportAction(${r.id},'resolved')">Resolved</button> <button class="btn sm" onclick="event.stopPropagation();reportAction(${r.id},'dismissed')">Dismiss</button>`
+          : `<button class="btn sm" onclick="event.stopPropagation();reportAction(${r.id},'open')">Reopen</button>`]],
+        reps, { span: true, click: r => `openUser('${r.reported_id}')`, empty: "No reports yet." }) : ""}
+    ${dtable("trBlk", "Blocked by several people", [["name","Person", r => userLink(r.id, r.name, r.public_id)],["role","Type","chip"],["status","Account","chip"],["n","Blocked by","n"],["last_at","Last blocked","ago"]], T.blocked_often, { search: false, click: r => `openUser('${r.id}')`, empty: "No one." })}
     ${dtable("trRes", "Suspended & blocked accounts", [["status_at","Since","dt"],["name","Person", r => userLink(r.id, r.name, r.public_id)],["role","Type","chip"],["status","Status", r => `<span class="chip red">${esc(r.status)}</span>`],["status_reason","Reason"],["status_until","Until","dt"],
         ["a","", r => m ? `<button class="btn sm" onclick="event.stopPropagation();setUserStatus('${r.id}','active').then(()=>deptLoad('trust',true))">Restore</button>` : ""]], T.restricted, { span: true, click: r => `openUser('${r.id}')`, empty: "No restricted accounts." })}
     ${dtable("trLow", "Low reviews", [["created_at","When","dt"],["stars","Stars", r => "★".repeat(r.stars)],["photographer","Photographer", r => userLink(r.photographer_id, r.photographer)],["customer_name","Customer"],["body","What they said"],["booking_id","Booking", r => bkLink(r.booking_id)]], T.low_reviews, { span: true, empty: "No low reviews. 👍" })}
@@ -2639,6 +2652,19 @@ function vTrust(){
         ["login_closed","Login", r => r.login_closed ? '<span class="chip green">Closed</span>' : '<span class="chip red">Remove in Supabase → Authentication → Users</span>'],["user_id","Timeline", r => `<a class="lnk" onclick="S.tlR='30d';S.tlG='';S.tlQ='';S.tl=null;openTab('timeline')">view</a>`]], T.deletions, { span: true, empty: "No accounts deleted yet." }) : ""}
     ${dtable("trStaff", "Staff activity — last 30 days", [["staff","Staff"],["n","Actions","n"],["last_at","Last action","ago"]], T.staff_actions, { search: false, click: () => "openTab('activity')" })}
   </div>`;
+}
+
+const REP_REASON = { abuse: "Abusive / threatening", inappropriate: "Sexual / inappropriate", fraud: "Pay outside / scam", fake: "Fake profile", spam: "Spam", safety: "Feels unsafe", other: "Other" };
+/* act on a report: Resolved and Dismiss ask what was done (saved with the report) */
+async function reportAction(id, status){
+  let note = null;
+  if(status === "resolved" || status === "dismissed"){
+    note = prompt(status === "resolved" ? "What did you do? (for example: warned them, suspended 7 days, removed the review)" : "Why dismiss it? (for example: no rule broken)", "");
+    if(note === null) return;
+  }
+  const { error } = await sb.rpc("admin_report_action", { p_id: id, p_status: status, p_note: note });
+  if(error){ S.err = error.message; render(); return; }
+  S.note = "Report #" + id + ": " + status + "."; deptLoad("trust", true);
 }
 
 /* ===================== TIMELINE ===================== */
@@ -2701,6 +2727,8 @@ function evText(e, self){
     payment_failed: () => `${who}'s payment of ${a} failed${i.message ? ": " + esc(i.message) : ""}`,
     review_posted: () => `${who} gave ${oth} <b>${"★".repeat(Number(e.amount) || 0)}</b>`,
     chat_message: () => `${who} messaged ${oth}`,
+    user_reported: () => `${who} reported ${oth} — ${esc(REP_REASON[i.reason] || i.reason || "")}${i.context ? " (" + esc(i.context) + ")" : ""}`,
+    user_blocked: () => `${who} blocked ${oth}`, user_unblocked: () => `${who} unblocked ${oth}`,
     reward_given: () => `${who} got a reward: <b>${esc(i.title || i.kind)}</b> (${esc(i.source || "")})`,
     reward_used: () => `${who} used a reward: ${esc(i.title || i.kind)}`, reward_expired: () => `${who}'s reward expired: ${esc(i.title || "")}`, reward_revoked: () => `${who}'s reward was removed: ${esc(i.title || "")}`
   };
@@ -2713,7 +2741,7 @@ function evText(e, self){
   if(k.startsWith("storage_")) return `${who}'s storage plan${i.plan ? " (" + esc(i.plan) + ")" : ""}: ${esc(k.slice(8))}${a ? " — " + a : ""}`;
   return `${who}: ${esc(k)}`;
 }
-function evGroup(k){ return k.startsWith("admin:") ? "admin" : /^(signup|profile_setup|role_change|source_recorded|account_)/.test(k) ? "accounts" : /^referral_/.test(k) ? "referrals" : /^(pg_|kyc_)/.test(k) ? "photographers"
+function evGroup(k){ return k.startsWith("admin:") ? "admin" : /^(signup|profile_setup|role_change|source_recorded|account_|user_reported|user_blocked|user_unblocked)/.test(k) ? "accounts" : /^referral_/.test(k) ? "referrals" : /^(pg_|kyc_)/.test(k) ? "photographers"
   : /^(request_|quote_sent)/.test(k) ? "requests" : /^(booking_|balance_)/.test(k) ? "bookings" : /^(payment_|refund_|payout_|storage_)/.test(k) ? "money" : k === "review_posted" ? "reviews" : k === "chat_message" ? "chat" : /^reward_/.test(k) ? "rewards" : "other"; }
 function vTimeline(){
   if(!S.tl){ S.tl = { busy: true, rows: null }; setTimeout(() => loadTimeline(true)); }
@@ -2795,6 +2823,8 @@ function vUser360(){
       ${m && p.role !== "photographer" ? kpi(inr(spent), "Spent") : ""}
       ${m && p.role === "photographer" ? kpi(inr(bks.filter(b => b.status === "completed").reduce((t, b) => t + Number(b.photographer_amount || 0), 0)), "Earned") : ""}
       ${kpi(num((D.referred || []).length), "Friends invited")}
+      ${kpi(num(D.blocked_by), "Blocked by", num(D.blocks_made) + " blocked by them", D.blocked_by ? "hl" : "")}
+      ${m ? kpi(num((D.reports || []).filter(r => r.direction === "about them").length), "Reports about them", "", (D.reports || []).some(r => r.direction === "about them" && (r.status === "open" || r.status === "reviewing")) ? "hl" : "") : ""}
     </div>
     <div class="grid2 mt16">
       <div class="card"><div class="sec">Details</div>${kvs([["Email", m && p.email ? `<a href="mailto:${esc(p.email)}">${esc(p.email)}</a>` : ""], ["Phone", m && p.phone ? `<a href="tel:${esc(p.phone)}">${esc(p.phone)}</a>` : ""],
@@ -2824,6 +2854,7 @@ function vUser360(){
       ${sec("Rewards (" + num((D.rewards || []).length) + ")", mini([["created_at","Given","dt"],["title","Reward"],["source","From"],["status","Status","chip"],["uses_left","Uses left","n"],["expires_at","Expires","d"],["used_at","Used","dt"]], D.rewards))}
       ${sec("Friends they invited (" + num((D.referred || []).length) + ")", mini([["referral_at","Joined","dt"],["name","Friend", r => userLink(r.id, r.name, r.public_id)],["role","Type"],["referral_rewarded_at","Rewarded","dt"],["referral_flag","Held"]], D.referred))}
       ${(D.reviews_given || []).length || (D.reviews_received || []).length ? sec("Reviews", mini([["created_at","When","dt"],["stars","Stars", r => "★".repeat(r.stars)],["customer_name","From"],["body","Review"]], (D.reviews_received || []).concat(D.reviews_given || []), r => `openBooking('${r.booking_id}')`)) : ""}
+      ${m && (D.reports || []).length ? sec("Reports (" + num(D.reports.length) + ")", mini([["created_at","When","dt"],["direction","Report"],["other_name","Other person", r => userLink(r.other_id, r.other_name, r.other_pid)],["reason","Why", r => esc(REP_REASON[r.reason] || r.reason)],["context","On"],["snapshot","What was said", r => r.snapshot ? `<span class="xs" style="white-space:pre-wrap">${esc(String(r.snapshot).slice(0, 400))}</span>` : ""],["details","Their words"],["status","Status","chip"],["action_note","Outcome"]], D.reports), D.reports.some(r => r.status === "open")) : ""}
       ${m && (D.admin_actions || []).length ? sec("Staff actions on this account (" + num(D.admin_actions.length) + ")", mini([["at","When","dt"],["staff_email","Staff"],["action","Action"],["details","Details", r => r.details ? `<span class="xs mono">${esc(JSON.stringify(r.details)).slice(0, 200)}</span>` : ""]], D.admin_actions)) : ""}
     </div>`);
 }

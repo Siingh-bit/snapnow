@@ -2656,13 +2656,7 @@ create or replace function public.is_blocked(p_user uuid)
 returns boolean language sql stable security definer set search_path = public
 as $$ select exists (select 1 from public.profiles where id = p_user and status in ('suspended','blocked')
                        and (status = 'blocked' or status_until is null or status_until > now())) $$;
--- open requests: only approved photographers who aren't suspended or blocked can see them
-drop policy if exists requests_select on public.requests;
-create policy requests_select on public.requests for select to authenticated
-  using (customer_id = auth.uid()
-         or (status = 'broadcasting' and expires_at > now()
-             and exists (select 1 from public.photographers g where g.id = auth.uid() and g.approval_status = 'approved')
-             and not public.is_blocked(auth.uid())));
+-- (who can see open requests is set in 8f, once blocking between people exists)
 create or replace function public._check_not_blocked()
 returns void language plpgsql stable security definer set search_path = public
 as $$ begin
@@ -2834,17 +2828,7 @@ drop policy if exists settings_read on public.platform_settings;
 create policy settings_read on public.platform_settings for select using (key <> 'call_ice_servers');
 drop policy if exists settings_staff_read on public.platform_settings;
 create policy settings_staff_read on public.platform_settings for select to authenticated using (public.is_staff());
--- private Realtime channels "call:<token>": only the booking's two people may join (if Realtime is available)
-do $$ begin
-  execute 'drop policy if exists "snappro call parties read" on realtime.messages';
-  execute 'create policy "snappro call parties read" on realtime.messages for select to authenticated using (
-             exists (select 1 from public.bookings b where ''call:'' || b.call_token::text = realtime.topic()
-                      and (b.customer_id = auth.uid() or b.photographer_id = auth.uid())))';
-  execute 'drop policy if exists "snappro call parties send" on realtime.messages';
-  execute 'create policy "snappro call parties send" on realtime.messages for insert to authenticated with check (
-             exists (select 1 from public.bookings b where ''call:'' || b.call_token::text = realtime.topic()
-                      and (b.customer_id = auth.uid() or b.photographer_id = auth.uid())))';
-exception when others then raise notice 'Realtime policies skipped: %', sqlerrm; end $$;
+-- (the private call channel rules are set in 8f, once blocking between people exists)
 
 revoke all on function public.admin_audit_log(date, date, int)   from public, anon;
 revoke all on function public.admin_set_user_status(uuid, text, text, int) from public, anon;
@@ -3809,7 +3793,7 @@ end $$;
 create or replace function public._ev_group(k text)
 returns text language sql immutable as $$
   select case
-    when k in ('signup','profile_setup','role_change','source_recorded') or k like 'account_%' then 'accounts'
+    when k in ('signup','profile_setup','role_change','source_recorded','user_reported','user_blocked','user_unblocked') or k like 'account_%' then 'accounts'
     when k like 'referral_%' then 'referrals'
     when k like 'pg_%' or k like 'kyc_%' then 'photographers'
     when k like 'request_%' or k = 'quote_sent' then 'requests'
@@ -4336,6 +4320,21 @@ begin
         select p.id, p.public_id, p.name, p.referral_flag, r.public_id ref_id, r.name ref_name from public.profiles p
           left join public.profiles r on r.id = p.referred_by where p.referral_flag is not null) z),
     'chat_reads', (select count(*) from public.admin_audit where action ilike '%chat%' and at > now() - interval '30 days'),
+    'reports_open', (select count(*) from public.user_reports where status in ('open','reviewing')),
+    'reports', case when money then (select coalesce(jsonb_agg(z order by z.created_at desc), '[]') from (
+        select r.id, r.created_at, r.status, r.reason, r.details, r.context, r.snapshot, r.booking_id, r.action_note, r.handled_at,
+               (select s.email from public.staff s where s.id = r.handled_by) handled_by,
+               r.reporter_id, rp.name reporter, rp.public_id reporter_pid,
+               r.reported_id, coalesce(g.display_name, tp.name) reported, tp.public_id reported_pid, tp.role reported_role, tp.status reported_status,
+               (select count(*) from public.user_reports x where x.reported_id = r.reported_id) reports_against,
+               (select count(*) from public.user_blocks x where x.blocked_id = r.reported_id) blocked_by
+          from public.user_reports r join public.profiles rp on rp.id = r.reporter_id join public.profiles tp on tp.id = r.reported_id
+          left join public.photographers g on g.id = r.reported_id
+         order by (r.status in ('open','reviewing')) desc, r.created_at desc limit 1000) z) end,
+    'blocked_often', (select coalesce(jsonb_agg(z order by z.n desc), '[]') from (
+        select b.blocked_id id, coalesce(g.display_name, p.name) name, p.public_id, p.role, p.status, count(*) n, max(b.created_at) last_at
+          from public.user_blocks b join public.profiles p on p.id = b.blocked_id left join public.photographers g on g.id = b.blocked_id
+         group by 1, 2, 3, 4, 5 having count(*) >= 2) z),
     'deletions', case when money then (select coalesce(jsonb_agg(z order by z.deleted_at desc), '[]') from (
         select deleted_at, user_id, public_id, role, via, reason, login_closed from public.account_deletions order by deleted_at desc limit 1000) z) end,
     'staff_actions', (select coalesce(jsonb_agg(z order by z.n desc), '[]') from (
@@ -4431,6 +4430,14 @@ begin
                e.info, o.name other_name, o.public_id other_pid
           from public.event_log e left join public.profiles o on o.id = case when e.user_id = uid then e.other_id else e.user_id end
          where e.user_id = uid or e.other_id = uid order by e.at desc limit 1000) z),
+    'blocked_by', (select count(*) from public.user_blocks where blocked_id = uid),
+    'blocks_made', (select count(*) from public.user_blocks where blocker_id = uid),
+    'reports', case when money then (select coalesce(jsonb_agg(z order by z.created_at desc), '[]') from (
+        select r.id, r.created_at, case when r.reported_id = uid then 'about them' else 'made by them' end direction,
+               r.reason, r.context, r.details, r.snapshot, r.status, r.action_note, r.booking_id,
+               o.id other_id, o.name other_name, o.public_id other_pid
+          from public.user_reports r join public.profiles o on o.id = case when r.reported_id = uid then r.reporter_id else r.reported_id end
+         where r.reported_id = uid or r.reporter_id = uid limit 300) z) end,
     'admin_actions', case when money then (select coalesce(jsonb_agg(z order by z.at desc), '[]') from (
         select at, staff_email, action, details from public.admin_audit where target_id = uid::text order by at desc limit 200) z) end
   ) into res;
@@ -4848,6 +4855,254 @@ grant execute on function public.admin_delete_account(uuid, text)    to authenti
 grant execute on function public.admin_deletions()                   to authenticated;
 -- <<< 8e deletion
 
+-- >>> 8f moderation
+-- =====================================================================
+-- 8f. REPORT & BLOCK (required by Google Play for apps where people
+--     message each other)
+--     • Anyone can report a photographer or customer: their profile, a
+--       quote, a shoot request, a review or a booking's chat. A copy of
+--       what was reported is kept, so staff see it even if it's edited.
+--       Staff get an email and handle it in Admin → Trust & support.
+--     • Blocking works both ways: the two people stop seeing each
+--       other's requests and quotes, and can't message, call or book
+--       each other. It doesn't cancel a shoot that's already booked.
+-- =====================================================================
+
+create table if not exists public.user_blocks (
+  blocker_id uuid not null references public.profiles(id) on delete cascade,
+  blocked_id uuid not null references public.profiles(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (blocker_id, blocked_id),
+  constraint user_blocks_not_self check (blocker_id <> blocked_id)
+);
+create index if not exists idx_blocks_blocked on public.user_blocks(blocked_id);
+alter table public.user_blocks enable row level security;
+drop policy if exists blocks_own_read on public.user_blocks;
+create policy blocks_own_read on public.user_blocks for select to authenticated using (blocker_id = auth.uid());
+revoke insert, update, delete on public.user_blocks from anon, authenticated;
+
+create table if not exists public.user_reports (
+  id          bigserial primary key,
+  reporter_id uuid not null references public.profiles(id) on delete cascade,
+  reported_id uuid not null references public.profiles(id) on delete cascade,
+  reason      text not null check (reason in ('spam','abuse','inappropriate','fake','fraud','safety','other')),
+  details     text,
+  context     text not null default 'profile' check (context in ('profile','quote','request','review','booking')),
+  context_id  text,
+  snapshot    text,                 -- what was reported, as it was at the time
+  booking_id  uuid,
+  status      text not null default 'open' check (status in ('open','reviewing','resolved','dismissed')),
+  action_note text,
+  handled_by  uuid,
+  handled_at  timestamptz,
+  created_at  timestamptz not null default now()
+);
+create index if not exists idx_reports_status   on public.user_reports(status, created_at desc);
+create index if not exists idx_reports_reported on public.user_reports(reported_id);
+create index if not exists idx_reports_reporter on public.user_reports(reporter_id, created_at desc);
+alter table public.user_reports enable row level security;
+drop policy if exists reports_own_read on public.user_reports;
+create policy reports_own_read on public.user_reports for select to authenticated using (reporter_id = auth.uid());
+revoke insert, update, delete on public.user_reports from anon, authenticated;
+
+-- has either of these two blocked the other? (server only)
+create or replace function public._blocked_pair(a uuid, b uuid)
+returns boolean language sql stable security definer set search_path = public
+as $$ select a is not null and b is not null and exists (select 1 from public.user_blocks
+          where (blocker_id = a and blocked_id = b) or (blocker_id = b and blocked_id = a)) $$;
+revoke all on function public._blocked_pair(uuid, uuid) from public, anon, authenticated;
+-- the same question about the signed-in person and someone else (used by the access rules)
+create or replace function public.blocked_with(p_other uuid)
+returns boolean language sql stable security definer set search_path = public
+as $$ select public._blocked_pair(auth.uid(), p_other) $$;
+revoke all on function public.blocked_with(uuid) from public, anon;
+grant execute on function public.blocked_with(uuid) to authenticated;
+
+-- open requests: approved photographers who aren't suspended, and who haven't blocked (or been blocked by) the customer
+drop policy if exists requests_select on public.requests;
+create policy requests_select on public.requests for select to authenticated
+  using (customer_id = auth.uid()
+         or (status = 'broadcasting' and expires_at > now()
+             and exists (select 1 from public.photographers g where g.id = auth.uid() and g.approval_status = 'approved')
+             and not public.is_blocked(auth.uid())
+             and not public.blocked_with(customer_id)));
+-- quotes: customers don't see quotes from someone either of them has blocked
+drop policy if exists offers_select on public.offers;
+create policy offers_select on public.offers for select to authenticated
+  using (photographer_id = auth.uid()
+         or (exists (select 1 from public.requests r where r.id = offers.request_id and r.customer_id = auth.uid())
+             and not public.blocked_with(offers.photographer_id)));
+
+-- no quotes, bookings or messages between two people when one has blocked the other
+create or replace function public.pair_guard()
+returns trigger language plpgsql security definer set search_path = public
+as $$
+declare me uuid := auth.uid(); other uuid; b record;
+begin
+  if me is null then return new; end if;
+  if tg_table_name = 'offers' then
+    select customer_id into other from public.requests where id = new.request_id;
+    if public._blocked_pair(me, other) then raise exception 'This request isn''t available any more.'; end if;
+  elsif tg_table_name = 'bookings' then
+    select photographer_id into other from public.offers where id = new.offer_id;
+    if exists (select 1 from public.user_blocks where blocker_id = me and blocked_id = other) then
+      raise exception 'You blocked this photographer. Unblock them in Profile → Blocked people to book them.'; end if;
+    if public._blocked_pair(me, other) then raise exception 'This photographer isn''t available. Please pick another quote.'; end if;
+  elsif tg_table_name = 'messages' then
+    select customer_id, photographer_id into b from public.bookings where id = new.booking_id;
+    other := case when b.customer_id = me then b.photographer_id else b.customer_id end;
+    if exists (select 1 from public.user_blocks where blocker_id = me and blocked_id = other) then
+      raise exception 'You blocked this person. Unblock them to send messages.'; end if;
+    if public._blocked_pair(me, other) then raise exception 'You can''t send messages in this chat.'; end if;
+  end if;
+  return new;
+end $$;
+drop trigger if exists pair_guard on public.offers;
+create trigger pair_guard before insert on public.offers for each row execute function public.pair_guard();
+drop trigger if exists pair_guard on public.bookings;
+create trigger pair_guard before insert on public.bookings for each row execute function public.pair_guard();
+drop trigger if exists pair_guard on public.messages;
+create trigger pair_guard before insert on public.messages for each row execute function public.pair_guard();
+
+-- private Realtime channels "call:<token>" for in-app calls: only the booking's two people,
+-- and not if one of them has blocked the other (skipped if Realtime isn't available)
+do $$ begin
+  execute 'drop policy if exists "snappro call parties read" on realtime.messages';
+  execute 'create policy "snappro call parties read" on realtime.messages for select to authenticated using (
+             exists (select 1 from public.bookings b where ''call:'' || b.call_token::text = realtime.topic()
+                      and (b.customer_id = auth.uid() or b.photographer_id = auth.uid())
+                      and not public.blocked_with(case when b.customer_id = auth.uid() then b.photographer_id else b.customer_id end)))';
+  execute 'drop policy if exists "snappro call parties send" on realtime.messages';
+  execute 'create policy "snappro call parties send" on realtime.messages for insert to authenticated with check (
+             exists (select 1 from public.bookings b where ''call:'' || b.call_token::text = realtime.topic()
+                      and (b.customer_id = auth.uid() or b.photographer_id = auth.uid())
+                      and not public.blocked_with(case when b.customer_id = auth.uid() then b.photographer_id else b.customer_id end)))';
+exception when others then raise notice 'Realtime policies skipped: %', sqlerrm; end $$;
+
+-- block or unblock someone
+create or replace function public.block_user(p_user uuid, p_block boolean default true)
+returns jsonb language plpgsql security definer set search_path = public
+as $$
+declare me uuid := auth.uid(); city text;
+begin
+  if me is null then raise exception 'Please log in again'; end if;
+  if p_user is null or p_user = me then raise exception 'You can''t block yourself'; end if;
+  if not exists (select 1 from public.profiles where id = p_user) then raise exception 'Account not found'; end if;
+  select p.city into city from public.profiles p where p.id = me;
+  if coalesce(p_block, true) then
+    if exists (select 1 from public.staff where id = p_user) then raise exception 'You can''t block the SnapPro team. Write to snappro.support@gmail.com instead.'; end if;
+    insert into public.user_blocks (blocker_id, blocked_id) values (me, p_user) on conflict do nothing;
+    if found then perform public._ev('user_blocked', 'profile', p_user, me, p_user, city, null, null, null); end if;
+  else
+    delete from public.user_blocks where blocker_id = me and blocked_id = p_user;
+    if found then perform public._ev('user_unblocked', 'profile', p_user, me, p_user, city, null, null, null); end if;
+  end if;
+  return jsonb_build_object('blocked', coalesce(p_block, true));
+end $$;
+
+-- the people I've blocked
+create or replace function public.my_blocks()
+returns jsonb language sql stable security definer set search_path = public
+as $$ select coalesce(jsonb_agg(jsonb_build_object('id', b.blocked_id, 'name', coalesce(g.display_name, p.name, 'SnapPro user'),
+                                                   'role', p.role, 'at', b.created_at) order by b.created_at desc), '[]')
+         from public.user_blocks b join public.profiles p on p.id = b.blocked_id
+         left join public.photographers g on g.id = b.blocked_id
+        where b.blocker_id = auth.uid() $$;
+
+-- report someone (and optionally block them in the same step)
+create or replace function public.report_user(p_user uuid, p_reason text, p_details text default null,
+                                              p_context text default 'profile', p_context_id text default null, p_block boolean default false)
+returns jsonb language plpgsql security definer set search_path = public
+as $$
+declare me uuid := auth.uid(); ctx text := coalesce(nullif(trim(p_context), ''), 'profile'); cid uuid;
+        snap text; bk uuid; det text := nullif(left(trim(coalesce(p_details, '')), 1000), ''); rid bigint; r record; city text;
+begin
+  if me is null then raise exception 'Please log in again'; end if;
+  perform public._check_not_blocked();
+  if p_user is null or p_user = me then raise exception 'You can''t report yourself'; end if;
+  if not exists (select 1 from public.profiles where id = p_user) then raise exception 'Account not found'; end if;
+  if p_reason is null or p_reason not in ('spam','abuse','inappropriate','fake','fraud','safety','other') then raise exception 'Choose what''s wrong'; end if;
+  if p_reason = 'other' and det is null then raise exception 'Tell us what happened'; end if;
+  if ctx not in ('profile','quote','request','review','booking') then raise exception 'That can''t be reported'; end if;
+  if ctx <> 'profile' then
+    begin cid := p_context_id::uuid; exception when others then raise exception 'That can''t be reported'; end;
+    if cid is null then raise exception 'That can''t be reported'; end if;
+  end if;
+
+  if ctx = 'profile' then
+    select nullif(g.bio, '') into snap from public.photographers g where g.id = p_user;
+  elsif ctx = 'quote' then          -- a quote sent to one of my requests
+    select o.price, o.note into r from public.offers o join public.requests q on q.id = o.request_id
+     where o.id = cid and o.photographer_id = p_user and q.customer_id = me;
+    if not found then raise exception 'That can''t be reported'; end if;
+    snap := 'Quote ₹' || r.price || coalesce(' — ' || nullif(r.note, ''), '');
+  elsif ctx = 'request' then        -- a request a photographer could see
+    select q.notes, q.category, q.city into r from public.requests q where q.id = cid and q.customer_id = p_user;
+    if not found or not exists (select 1 from public.photographers g where g.id = me) then raise exception 'That can''t be reported'; end if;
+    snap := coalesce(r.category, '') || ' shoot in ' || coalesce(r.city, '') || coalesce(' — ' || nullif(r.notes, ''), '');
+  elsif ctx = 'review' then         -- reviews are public
+    select v.stars, v.body, v.booking_id into r from public.reviews v where v.id = cid and v.customer_id = p_user;
+    if not found then raise exception 'That can''t be reported'; end if;
+    snap := repeat('★', r.stars) || coalesce(' — ' || nullif(r.body, ''), ''); bk := r.booking_id;
+  elsif ctx = 'booking' then        -- a booking between us; keep the latest messages from both sides
+    if not exists (select 1 from public.bookings b where b.id = cid
+                    and ((b.customer_id = me and b.photographer_id = p_user) or (b.photographer_id = me and b.customer_id = p_user))) then
+      raise exception 'That can''t be reported'; end if;
+    bk := cid;
+    select string_agg(case when m.sender_id = p_user then 'Them: ' else 'Me: ' end || m.content, E'\n' order by m.created_at) into snap
+      from (select * from public.messages where booking_id = cid order by created_at desc limit 30) m;
+  end if;
+
+  if (select count(*) from public.user_reports where reporter_id = me and created_at > now() - interval '1 day') >= 10 then
+    raise exception 'You''ve sent a lot of reports today. Please email snappro.support@gmail.com and we''ll help.'; end if;
+
+  select id into rid from public.user_reports
+   where reporter_id = me and reported_id = p_user and context = ctx and coalesce(context_id, '') = coalesce(cid::text, '')
+     and status in ('open','reviewing') limit 1;
+  if rid is null then
+    insert into public.user_reports (reporter_id, reported_id, reason, details, context, context_id, snapshot, booking_id)
+    values (me, p_user, p_reason, det, ctx, cid::text, left(snap, 4000), bk) returning id into rid;
+    select p.city into city from public.profiles p where p.id = me;
+    perform public._ev('user_reported', 'profile', p_user, me, p_user, city, null, null, jsonb_build_object('reason', p_reason, 'context', ctx, 'report', rid));
+    begin
+      perform public._send_email('snappro.support@gmail.com', 'New report on SnapPro (#' || rid || ')',
+        public._email_shell('Someone reported a ' || coalesce((select role from public.profiles where id = p_user), 'member') || '.',
+          'Reason: ' || public._esc(p_reason) || '. Report #' || rid || '. Open Admin → Trust &amp; support to look into it.',
+          'Open admin', 'https://snappro.in/admin.html'));
+    exception when others then null; end;
+  end if;
+  if coalesce(p_block, false) then perform public.block_user(p_user, true); end if;
+  return jsonb_build_object('result', 'reported', 'id', rid, 'blocked', coalesce(p_block, false));
+end $$;
+
+-- staff: mark a report as being looked at, resolved or dismissed
+create or replace function public.admin_report_action(p_id bigint, p_status text, p_note text default null)
+returns text language plpgsql security definer set search_path = public
+as $$
+declare r record; nm text;
+begin
+  if not public._money_ok() then raise exception 'Only admins can handle reports'; end if;
+  if p_status not in ('open','reviewing','resolved','dismissed') then raise exception 'Unknown status'; end if;
+  update public.user_reports set status = p_status, action_note = coalesce(nullif(left(trim(coalesce(p_note, '')), 500), ''), action_note),
+         handled_by = auth.uid(), handled_at = now()
+   where id = p_id returning * into r;
+  if not found then raise exception 'Report not found'; end if;
+  select coalesce(public_id || ' ', '') || coalesce(name, '') into nm from public.profiles where id = r.reported_id;
+  perform public._audit('Report #' || p_id || ': ' || p_status, 'user', r.reported_id::text, nm, jsonb_build_object('reason', r.reason, 'note', p_note));
+  return p_status;
+end $$;
+
+revoke all on function public.pair_guard()                                      from public, anon, authenticated;
+revoke all on function public.block_user(uuid, boolean)                         from public, anon;
+revoke all on function public.my_blocks()                                       from public, anon;
+revoke all on function public.report_user(uuid, text, text, text, text, boolean) from public, anon;
+revoke all on function public.admin_report_action(bigint, text, text)           from public, anon;
+grant execute on function public.block_user(uuid, boolean)                      to authenticated;
+grant execute on function public.my_blocks()                                    to authenticated;
+grant execute on function public.report_user(uuid, text, text, text, text, boolean) to authenticated;
+grant execute on function public.admin_report_action(bigint, text, text)        to authenticated;
+-- <<< 8f moderation
+
 -- =====================================================================
 -- 9. ONE-OFF CLEAN-UP
 -- =====================================================================
@@ -4923,4 +5178,6 @@ select
     and exists (select 1 from storage.buckets where id = 'kyc' and not public)           as safety_ready,
   exists (select 1 from pg_proc where proname = 'admin_leads')
     and exists (select 1 from pg_trigger where tgname = 'ev_bookings')                   as departments_ready,
-  exists (select 1 from pg_proc where proname = 'delete_my_account')                   as deletion_ready;
+  exists (select 1 from pg_proc where proname = 'delete_my_account')                   as deletion_ready,
+  exists (select 1 from pg_proc where proname = 'report_user')
+    and exists (select 1 from pg_trigger where tgname = 'pair_guard')                    as moderation_ready;
