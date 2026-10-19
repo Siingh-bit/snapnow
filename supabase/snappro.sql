@@ -4965,19 +4965,18 @@ create trigger pair_guard before insert on public.bookings for each row execute 
 drop trigger if exists pair_guard on public.messages;
 create trigger pair_guard before insert on public.messages for each row execute function public.pair_guard();
 
--- private Realtime channels "call:<token>" for in-app calls: only the booking's two people,
--- and not if one of them has blocked the other (skipped if Realtime isn't available)
+-- private Realtime channels "call:<token>" for in-app calls: only the booking's two people may join
+-- (skipped if Realtime isn't available). Calls between people who blocked each other are stopped in
+-- the app, and call_notify() won't ring them.
 do $$ begin
   execute 'drop policy if exists "snappro call parties read" on realtime.messages';
   execute 'create policy "snappro call parties read" on realtime.messages for select to authenticated using (
              exists (select 1 from public.bookings b where ''call:'' || b.call_token::text = realtime.topic()
-                      and (b.customer_id = auth.uid() or b.photographer_id = auth.uid())
-                      and not public.blocked_with(case when b.customer_id = auth.uid() then b.photographer_id else b.customer_id end)))';
+                      and (b.customer_id = auth.uid() or b.photographer_id = auth.uid())))';
   execute 'drop policy if exists "snappro call parties send" on realtime.messages';
   execute 'create policy "snappro call parties send" on realtime.messages for insert to authenticated with check (
              exists (select 1 from public.bookings b where ''call:'' || b.call_token::text = realtime.topic()
-                      and (b.customer_id = auth.uid() or b.photographer_id = auth.uid())
-                      and not public.blocked_with(case when b.customer_id = auth.uid() then b.photographer_id else b.customer_id end)))';
+                      and (b.customer_id = auth.uid() or b.photographer_id = auth.uid())))';
 exception when others then raise notice 'Realtime policies skipped: %', sqlerrm; end $$;
 
 -- block or unblock someone

@@ -3968,12 +3968,16 @@ function acceptShot(key, blob){
 /* ============================================================
    IN-APP VOICE CALLS (over Wi-Fi / mobile data)
    Peer-to-peer audio with WebRTC. The two phones find each other
-   through a private Supabase Realtime channel that only the
-   customer and photographer on the booking can join. Works while
-   SnapPro is open on both phones.
+   through Supabase Realtime: a private channel only the customer and
+   photographer on the booking can join, plus a backup channel named
+   after the booking's secret call code (in case private channels are
+   unavailable). Every signal goes on both; repeats are ignored.
+   Works while SnapPro is open on both phones; when it's closed, the
+   other phone gets a "… is calling" notification.
    ============================================================ */
 const CALLABLE = ["confirmed","enroute","arrived","shooting","completed"];
-const callChans = {};                 // call_token -> channel
+const callChans = {};                 // call_token -> { priv, pub } channels
+const seenSig = new Set();            // signals already handled (each one arrives on both channels)
 let CALL = null;                      // the current call
 let callTone = null;                  // stops the ringtone / ring-back / hold beep that's playing
 const canCall = b => b && b.call_token && CALLABLE.includes(b.status) && !blockedOn(b) && !(b.status === "completed" && Date.now() - toMs(b.updated_at || b.start_at) > 7 * 864e5);
@@ -3982,28 +3986,38 @@ const canCall = b => b && b.call_token && CALLABLE.includes(b.status) && !blocke
 function syncCallChannels(){
   if(!sb || !sb.channel || !S.me) return;
   const want = new Set(S.d.bookings.filter(canCall).map(b => b.call_token));
-  Object.keys(callChans).forEach(t => { if(!want.has(t)){ try{ sb.removeChannel(callChans[t]); }catch(e){} delete callChans[t]; } });
-  want.forEach(t => { if(!callChans[t]) joinCallChannel(t, true); });
+  Object.keys(callChans).forEach(t => { if(!want.has(t)) leaveCallChannel(t); });
+  want.forEach(t => { if(!callChans[t]) joinCallChannel(t); });
+}
+function leaveCallChannel(t){
+  const c = callChans[t]; if(!c) return;
+  [c.priv, c.pub].forEach(ch => { if(ch) try{ sb && sb.removeChannel(ch); }catch(e){} });
+  delete callChans[t];
 }
 /* log out / delete account: stop listening for calls on this phone */
 function leaveCallChannels(){
   if(CALL) endCall(true, "ended");
-  Object.keys(callChans).forEach(t => { try{ sb && sb.removeChannel(callChans[t]); }catch(e){} delete callChans[t]; });
+  Object.keys(callChans).forEach(leaveCallChannel);
 }
-function joinCallChannel(token, priv){
-  const ch = sb.channel("call:" + token, { config: { private: !!priv, broadcast: { self: false } } });
-  ch.on("broadcast", { event: "sig" }, m => onSignal(token, m.payload || {}));
-  ch.subscribe(st => {
-    // projects without Realtime Authorization fall back to the secret channel name
-    if(priv && (st === "CHANNEL_ERROR" || st === "TIMED_OUT")){ try{ sb.removeChannel(ch); }catch(e){} joinCallChannel(token, false); }
-  });
-  callChans[token] = ch;
+function joinCallChannel(token){
+  const c = callChans[token] = { priv: null, pub: null };
+  const open = (name, priv) => {
+    const ch = sb.channel(name, { config: { private: priv, broadcast: { self: false } } });
+    ch.on("broadcast", { event: "sig" }, m => onSignal(token, m.payload || {}));
+    ch.subscribe(st => { if(priv && (st === "CHANNEL_ERROR" || st === "TIMED_OUT") && callChans[token] === c){ try{ sb.removeChannel(ch); }catch(e){} c.priv = null; } });
+    return ch;
+  };
+  c.priv = open("call:" + token, true);
+  c.pub = open("callp:" + token, false);
   if(sb.realtime && sb.realtime.setAuth){ sb.auth.getSession().then(r => { const t = r && r.data && r.data.session && r.data.session.access_token; if(t) sb.realtime.setAuth(t); }).catch(() => {}); }
 }
 function sig(token, payload){
-  const ch = callChans[token]; if(!ch) return;
-  ch.send({ type: "broadcast", event: "sig", payload: Object.assign({ from: S.me.id, cid: CALL && CALL.cid }, payload) });
+  const c = callChans[token]; if(!c || !S.me) return;
+  const msg = { type: "broadcast", event: "sig", payload: Object.assign({ from: S.me.id, cid: CALL && CALL.cid, mid: Math.random().toString(36).slice(2) }, payload) };
+  [c.priv, c.pub].forEach(ch => { if(ch) try{ Promise.resolve(ch.send(msg)).catch(() => {}); }catch(e){} });
 }
+/* phones only play sound after the person has touched the page once — wake the sound up on the first tap */
+["pointerdown", "touchstart", "keydown"].forEach(ev => document.addEventListener(ev, () => { try{ toneAC(); }catch(e){} }, { once: true, passive: true }));
 async function iceServers(){
   try{ const { data } = await sb.rpc("call_config"); if(Array.isArray(data) && data.length) return data; }catch(e){}
   return [{ urls: ["stun:stun.l.google.com:19302"] }];
@@ -4017,7 +4031,7 @@ async function startCall(bookingId){
   if(CALL){ toast("You're already on a call", "", "x"); return; }
   if(!window.RTCPeerConnection || !navigator.mediaDevices){ toast("Calling isn't supported in this browser", "Try Chrome or Safari", "x"); return; }
   syncCallChannels();
-  CALL = { cid: Math.random().toString(36).slice(2), token: b.call_token, booking: b.id, name: otherName(b), role: "caller", state: "calling", muted: false, held: false, speaker: false };
+  CALL = { cid: Math.random().toString(36).slice(2), token: b.call_token, booking: b.id, name: otherName(b), role: "caller", state: "calling", muted: false, held: false, speaker: false, at: Date.now() };
   paintCall();
   try{ await openCallAudio(); }
   catch(e){ toast("Microphone blocked", "Allow microphone access to call", "x"); endCall(false, "mic"); return; }
@@ -4031,11 +4045,13 @@ async function startCall(bookingId){
 /* ---------- receiving ---------- */
 async function onSignal(token, p){
   if(!p || !S.me || p.from === S.me.id) return;
+  if(p.mid){ if(seenSig.has(p.mid)) return; seenSig.add(p.mid); if(seenSig.size > 500) seenSig.clear(); }
   if(p.t === "ring"){
+    if(CALL && CALL.cid !== p.cid && (CALL.state === "incoming" || CALL.state === "calling") && Date.now() - (CALL.at || 0) > 60000) endCall(false, "stale");   // a call that never finished properly
     if(CALL && CALL.cid !== p.cid){ sig(token, { t: "busy", cid: p.cid }); return; }
     if(CALL) return;
     const b = S.d.bookings.find(x => x.call_token === token);
-    CALL = { cid: p.cid, token, booking: b && b.id, name: (b && otherName(b)) || p.name || "SnapPro call", role: "callee", state: "incoming", muted: false, held: false, speaker: false };
+    CALL = { cid: p.cid, token, booking: b && b.id, name: (b && otherName(b)) || p.name || "SnapPro call", role: "callee", state: "incoming", muted: false, held: false, speaker: false, at: Date.now() };
     playTone("ring"); paintCall();
     CALL.giveUp = setTimeout(() => { if(CALL && CALL.state === "incoming"){ endCall(false, "missed"); toast("Missed call", "", "x"); } }, 45000);
     return;
