@@ -5167,6 +5167,13 @@ create table if not exists public.push_subscriptions (
   fails      int not null default 0
 );
 create index if not exists idx_push_subs_user on public.push_subscriptions(user_id);
+-- what the phone itself reported back (proves a notification reached the phone and was shown)
+alter table public.push_subscriptions
+  add column if not exists last_received_at timestamptz,
+  add column if not exists last_shown_ok    boolean,
+  add column if not exists last_error       text,
+  add column if not exists sw_version       text,
+  add column if not exists permission       text;
 alter table public.push_subscriptions enable row level security;
 drop policy if exists push_subs_own on public.push_subscriptions;
 create policy push_subs_own on public.push_subscriptions for select to authenticated using (user_id = auth.uid());
@@ -5354,6 +5361,24 @@ begin
   return 'sent';
 end $$;
 
+-- the phone's service worker reports each notification it received and whether it could show it.
+-- Only works for someone who knows the phone's secret push address; it only records a timestamp.
+create or replace function public.push_ack(p_endpoint text, p_ok boolean, p_err text default null, p_ver text default null, p_perm text default null)
+returns void language sql security definer set search_path = public
+as $$ update public.push_subscriptions set last_received_at = now(), last_shown_ok = p_ok, last_error = left(p_err, 300),
+          sw_version = left(p_ver, 20), permission = left(p_perm, 20)
+     where endpoint = p_endpoint $$;
+revoke all on function public.push_ack(text, boolean, text, text, text) from public;
+grant execute on function public.push_ack(text, boolean, text, text, text) to anon, authenticated;
+-- my phones and what they last reported (for the in-app test)
+create or replace function public.my_push_status()
+returns jsonb language sql stable security definer set search_path = public
+as $$ select coalesce(jsonb_agg(jsonb_build_object('device', device, 'created_at', created_at, 'last_ok_at', last_ok_at,
+            'last_received_at', last_received_at, 'last_shown_ok', last_shown_ok, 'last_error', last_error, 'sw_version', sw_version, 'endpoint_tail', right(endpoint, 12))), '[]')
+     from public.push_subscriptions where user_id = auth.uid() $$;
+revoke all on function public.my_push_status() from public, anon;
+grant execute on function public.my_push_status() to authenticated;
+
 -- "Send me a test notification" (Profile → Notifications): checks the whole chain on this phone
 create or replace function public.push_test()
 returns jsonb language plpgsql security definer set search_path = public
@@ -5395,6 +5420,9 @@ begin
     'waiting', (select count(*) from public.push_outbox where taken_at is null and created_at > now() - interval '1 hour'),
     'delivered_last_day', (select coalesce(sum(sent), 0) from public.push_outbox where created_at > now() - interval '1 day'),
     'failed_last_day', (select coalesce(sum(failed), 0) from public.push_outbox where created_at > now() - interval '1 day'),
+    'phones_list', (select coalesce(jsonb_agg(z order by z.created_at desc), '[]') from (
+        select p.public_id, s.device, s.created_at, s.last_ok_at, s.last_received_at, s.last_shown_ok, s.last_error, s.sw_version, s.permission
+          from public.push_subscriptions s left join public.profiles p on p.id = s.user_id order by s.created_at desc limit 50) z),
     'recent', (select coalesce(jsonb_agg(z order by z.created_at desc), '[]') from (
         select o.created_at, o.kind, o.title, o.taken_at is not null taken, o.sent, o.failed, p.public_id
           from public.push_outbox o left join public.profiles p on p.id = o.user_id order by o.id desc limit 15) z),

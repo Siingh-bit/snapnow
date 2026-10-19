@@ -4497,7 +4497,7 @@ const PLAY_APP = (function(){ try{
 
 /* offline page for the installed app */
 if("serviceWorker" in navigator && location.protocol === "https:"){
-  window.addEventListener("load", () => { navigator.serviceWorker.register("/sw.js").catch(() => {}); });
+  window.addEventListener("load", () => { navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" }).then(r => { try{ r.update(); }catch(e){} }).catch(() => {}); });
 }
 
 /* ---------- delete my account ---------- */
@@ -4739,7 +4739,20 @@ async function testPush(){
     const { data, error } = await sb.rpc("push_test");
     if(error) throw new Error(dbMsg(error));
     if(!data || !data.phones){ toast("Notifications aren't on yet", "Tap Notifications to turn them on", "x"); return; }
-    toast("Test sent", "Close SnapPro now — a notification should arrive within a few seconds", "bellring");
+    toast("Test sent", "Watch the top of your screen…", "bellring");
+    const sentAt = Date.now();
+    for(let i = 0; i < 10; i++){                         // ask the server what this phone reported back
+      await new Promise(r => setTimeout(r, 2000));
+      const st = await sb.rpc("my_push_status").then(r => r.data || []).catch(() => []);
+      const got = st.filter(x => x.last_received_at && toMs(x.last_received_at) > sentAt - 5000);
+      if(got.length){
+        const bad = got.find(x => !x.last_shown_ok);
+        if(bad) toast("Your phone got it but couldn't show it", (bad.last_error || "") + " — check Settings → Apps → SnapPro → Notifications", "x");
+        else toast("✅ Your phone received the test", "If you didn't see it, check Settings → Apps → SnapPro → Notifications (all categories on), and Do Not Disturb", "check");
+        return;
+      }
+    }
+    toast("Google sent it, but this phone didn't receive it", "Reload SnapPro once (it updates the notification helper), then try again. Also set Chrome → Battery → Unrestricted.", "x");
   }catch(e){ toast("Couldn't send a test", e.message, "x"); }
 }
 

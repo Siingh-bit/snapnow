@@ -1,12 +1,15 @@
-/* SnapPro service worker.
+/* SnapPro service worker (v3).
    1. Shows a friendly page when there's no internet. It never stores the app
       itself, so every update reaches people at once.
    2. Shows phone notifications (quotes, bookings, messages, calls…) even when
-      SnapPro is closed, and opens the right screen when one is tapped. */
+      SnapPro is closed, opens the right screen when one is tapped, and tells
+      SnapPro the phone received it (so problems can be found from the admin). */
+const SW_VERSION = "3";
 const CACHE = "snappro-offline-v1";
 const OFFLINE = "/offline.html";
+const SB_URL = "https://eafudrjxjtenqoorjzsc.supabase.co", SB_KEY = "sb_publishable_n8ub8dzUbfa5uJqA_PHDXw_QLJJINCd";
 self.addEventListener("install", e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll([OFFLINE, "/icon-192.png"])).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll([OFFLINE, "/icon-192.png"])).catch(() => {}).then(() => self.skipWaiting()));
 });
 self.addEventListener("activate", e => {
   e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim()));
@@ -19,16 +22,26 @@ self.addEventListener("fetch", e => {
 });
 
 /* ---------- notifications ---------- */
+async function ack(ok, err){
+  try{
+    const sub = await self.registration.pushManager.getSubscription(); if(!sub) return;
+    const perm = (self.Notification && self.Notification.permission) || "";
+    await fetch(SB_URL + "/rest/v1/rpc/push_ack", { method: "POST", headers: { apikey: SB_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify({ p_endpoint: sub.endpoint, p_ok: ok, p_err: err || null, p_ver: SW_VERSION, p_perm: perm }) });
+  }catch(_){}
+}
 self.addEventListener("push", e => {
   let d = {};
   try{ d = e.data ? e.data.json() : {}; }catch(_){ d = { body: e.data ? e.data.text() : "" }; }
   const call = d.kind === "call";
   const url = typeof d.url === "string" && d.url.startsWith("/") ? d.url : "/app.html";
-  e.waitUntil(self.registration.showNotification(d.title || "SnapPro", {
-    body: d.body || "", icon: "/icon-192.png", badge: "/badge-72.png",
-    tag: d.tag || undefined, renotify: !!d.tag, data: { url },
-    requireInteraction: call, vibrate: call ? [600, 300, 600, 300, 600, 300, 600] : [150, 80, 150]
-  }));
+  const opts = { body: d.body || "", icon: "/icon-192.png", badge: "/badge-72.png", tag: d.tag || undefined, renotify: !!d.tag,
+                 data: { url }, requireInteraction: call, vibrate: call ? [600, 300, 600, 300, 600, 300, 600] : [150, 80, 150] };
+  e.waitUntil(
+    self.registration.showNotification(d.title || "SnapPro", opts)
+      .catch(() => self.registration.showNotification(d.title || "SnapPro", { body: d.body || "", icon: "/icon-192.png", data: { url } }))   // simplest form if a phone rejects an option
+      .then(() => ack(true), err => ack(false, String(err && err.message || err)))
+  );
 });
 self.addEventListener("notificationclick", e => {
   e.notification.close();
