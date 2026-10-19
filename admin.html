@@ -2840,7 +2840,7 @@ function vUser360(){
       ${g ? `<div class="card" style="grid-column:1/-1"><div class="sec">Photographer</div><div class="grid">
         ${kpi(esc(g.approval_status), "Approval", g.approved_at ? fmt(g.approved_at) : "")}${kpi(esc(g.kyc || "not sent"), "ID check")}${kpi(g.rating ? Number(g.rating).toFixed(1) + "★" : "—", "Rating", num(g.review_count) + " reviews")}
         ${kpi(num(g.jobs_done), "Shoots done")}${kpi(num(g.photos), "Portfolio items")}${kpi(g.is_online ? "Available" : "Off", "Right now")}${kpi(esc((g.categories || []).map(c => CAT_NAMES[c] || c).join(", ") || "—"), "Shoots offered")}
-        ${m ? kpi(g.commission_pct != null ? g.commission_pct + "%" : "Default", "Commission") : ""}${m && g.storage_quota ? kpi((Number(g.storage_quota) / 1048576).toFixed(0) + " MB", "Storage") : ""}${g.featured_until ? kpi(fmt(g.featured_until), "Featured until") : ""}</div></div>` : ""}
+        ${m ? kpi(g.commission_pct != null ? g.commission_pct + "%" : "Default", "Commission") : ""}${m && g.storage_quota ? kpi((Number(g.storage_quota) / 1048576).toFixed(0) + " MB", "Storage") : ""}${g.featured_until ? kpi(fmt(g.featured_until), "Featured until") : ""}${kpi(esc({ city: "Own city only", nearby: "Nearby cities", anywhere: "Anywhere in India" }[g.travel] || "Own city only"), "Travels for shoots")}</div></div>` : ""}
     </div>
     <div class="mt16">
       ${sec("Timeline — everything they did (" + num((D.timeline || []).length) + ")", `<div class="tl">${(D.timeline || []).map(e => { const gg = evGroup(e.kind);

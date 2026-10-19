@@ -4393,7 +4393,7 @@ begin
     'photographer', (select jsonb_build_object('display_name', g.display_name, 'approval_status', g.approval_status, 'approved_at', g.approved_at,
         'is_online', g.is_online, 'is_verified', g.is_verified, 'rating', g.rating, 'review_count', g.review_count, 'jobs_done', g.jobs_done,
         'categories', g.categories, 'city', g.city, 'years_exp', g.years_exp, 'photos', cardinality(g.portfolio), 'commission_pct', g.commission_pct,
-        'featured_until', g.featured_until, 'kyc', (select k.status from public.photographer_kyc k where k.id = g.id),
+        'featured_until', g.featured_until, 'travel', g.travel, 'kyc', (select k.status from public.photographer_kyc k where k.id = g.id),
         'storage_quota', case when money then public.storage_quota(g.id) end) from public.photographers g where g.id = uid),
     'requests', (select coalesce(jsonb_agg(z order by z.created_at desc), '[]') from (
         select r.id, r.category, r.city, r.status, r.budget, r.urgency, r.start_at, r.created_at, (select count(*) from public.offers o where o.request_id = r.id) quotes
@@ -4794,6 +4794,7 @@ begin
   update public.reviews set customer_name = 'Deleted user' where customer_id = p_user;
   update public.offers set photographer_name = 'Deleted photographer' where photographer_id = p_user;
   update public.site_visits set user_id = null where user_id = p_user;
+  delete from public.push_subscriptions where user_id = p_user;          -- stop notifications to their phones
   perform set_config('snappro.system', '', true);
 
   -- close the login: free the email and stop sign-in (skipped quietly if the database doesn't allow it)
@@ -5103,6 +5104,303 @@ grant execute on function public.report_user(uuid, text, text, text, text, boole
 grant execute on function public.admin_report_action(bigint, text, text)        to authenticated;
 -- <<< 8f moderation
 
+-- >>> 8g travel
+-- =====================================================================
+-- 8g. PHOTOGRAPHERS WHO TRAVEL
+--     Each photographer says how far they'll go for a shoot:
+--       city     — only their own city (everyone starts here)
+--       nearby   — their metro area (e.g. all of Delhi NCR), or their state
+--       anywhere — anywhere in India
+--     A customer in Noida then sees Delhi photographers who travel to
+--     NCR, and those photographers see (and are alerted about) Noida
+--     requests. The same areas are listed in the app (v3_data.js REGIONS).
+-- =====================================================================
+
+alter table public.photographers add column if not exists travel text not null default 'city';
+do $$ begin
+  alter table public.photographers add constraint photographers_travel_check check (travel in ('city','nearby','anywhere'));
+exception when duplicate_object then null; end $$;
+
+-- the metro area a city belongs to, or its state
+create or replace function public._region(p_city text, p_state text)
+returns text language sql immutable
+as $$ select case
+    when lower(trim(coalesce(p_city, ''))) in ('delhi','new delhi','noida','greater noida','gurugram','gurgaon','ghaziabad','faridabad','sonipat') then 'ncr'
+    when lower(trim(coalesce(p_city, ''))) in ('mumbai','thane','navi mumbai','kalyan','vasai-virar','panvel') then 'mumbai'
+    when lower(trim(coalesce(p_city, ''))) in ('chandigarh','mohali','panchkula') then 'tricity'
+    when lower(trim(coalesce(p_city, ''))) in ('hyderabad','secunderabad') then 'hyderabad'
+    when lower(trim(coalesce(p_city, ''))) in ('kolkata','howrah') then 'kolkata'
+    else 'state:' || lower(trim(coalesce(p_state, ''))) end $$;
+
+-- will a photographer (travel, city, state) take a shoot in this city?
+create or replace function public._pg_covers(p_travel text, p_city text, p_state text, r_city text, r_state text)
+returns boolean language sql immutable
+as $$ select case coalesce(p_travel, 'city')
+    when 'anywhere' then true
+    when 'nearby' then lower(trim(coalesce(p_city, ''))) = lower(trim(coalesce(r_city, '')))
+                       or public._region(p_city, p_state) = public._region(r_city, r_state)
+    else r_city is null or p_city is null or lower(trim(p_city)) = lower(trim(r_city)) end $$;
+-- <<< 8g travel
+
+-- >>> 8h notifications
+-- =====================================================================
+-- 8h. PHONE NOTIFICATIONS (web push) — even when SnapPro is closed
+--     • Each phone/browser that allows notifications saves a "push
+--       subscription" here (only to Google, Mozilla, Apple or Microsoft
+--       push servers).
+--     • Things that matter to someone (a new quote, being booked, the
+--       photographer on the way, a message, a call, a new request near a
+--       photographer…) are turned into notifications from the event log.
+--     • The Edge Function "push" sends them, signed with the VAPID key.
+--       The database wakes it up with a secret kept in Vault
+--       (push_hook_secret); nothing secret is in the website.
+-- =====================================================================
+
+create table if not exists public.push_subscriptions (
+  id         bigserial primary key,
+  user_id    uuid not null references public.profiles(id) on delete cascade,
+  endpoint   text not null unique,
+  p256dh     text not null,
+  auth       text not null,
+  device     text,
+  created_at timestamptz not null default now(),
+  last_ok_at timestamptz,
+  fails      int not null default 0
+);
+create index if not exists idx_push_subs_user on public.push_subscriptions(user_id);
+alter table public.push_subscriptions enable row level security;
+drop policy if exists push_subs_own on public.push_subscriptions;
+create policy push_subs_own on public.push_subscriptions for select to authenticated using (user_id = auth.uid());
+revoke insert, update, delete on public.push_subscriptions from anon, authenticated;
+
+create table if not exists public.push_outbox (
+  id         bigserial primary key,
+  user_id    uuid not null references public.profiles(id) on delete cascade,
+  kind       text not null,
+  title      text not null,
+  body       text,
+  url        text,
+  tag        text,
+  created_at timestamptz not null default now(),
+  taken_at   timestamptz,
+  sent       int,                 -- phones it reached
+  failed     int
+);
+create index if not exists idx_push_outbox_todo on public.push_outbox(created_at) where taken_at is null;
+alter table public.push_outbox enable row level security;
+revoke all on public.push_outbox from anon, authenticated;
+
+insert into public.platform_settings (key, value) values ('push_function_url', '"https://eafudrjxjtenqoorjzsc.supabase.co/functions/v1/push"')
+on conflict (key) do nothing;
+-- the public half of the VAPID key goes in 'push_public_key' (see SnapPro-Push-Keys.html on the Desktop)
+
+-- this phone wants notifications
+create or replace function public.push_subscribe(p_endpoint text, p_p256dh text, p_auth text, p_device text default null)
+returns text language plpgsql security definer set search_path = public
+as $$
+declare me uuid := auth.uid(); host text;
+begin
+  if me is null then raise exception 'Please log in again'; end if;
+  host := lower(substring(coalesce(p_endpoint, '') from '^https://([^/:]+)/'));
+  if host is null or not (host = 'fcm.googleapis.com' or host = 'android.googleapis.com' or host like '%.push.services.mozilla.com'
+                          or host = 'web.push.apple.com' or host like '%.push.apple.com' or host like '%.notify.windows.com') then
+    raise exception 'This browser''s notification service isn''t supported';
+  end if;
+  if length(p_endpoint) > 1000 or coalesce(p_p256dh, '') !~ '^[A-Za-z0-9_-]{80,100}$' or coalesce(p_auth, '') !~ '^[A-Za-z0-9_-]{16,30}$' then
+    raise exception 'Notification keys look wrong';
+  end if;
+  insert into public.push_subscriptions (user_id, endpoint, p256dh, auth, device)
+  values (me, p_endpoint, p_p256dh, p_auth, left(p_device, 80))
+  on conflict (endpoint) do update set user_id = me, p256dh = excluded.p256dh, auth = excluded.auth, device = excluded.device, fails = 0;
+  -- keep the newest 5 phones per person
+  delete from public.push_subscriptions where user_id = me and id not in
+    (select id from public.push_subscriptions where user_id = me order by created_at desc limit 5);
+  return 'on';
+end $$;
+
+create or replace function public.push_unsubscribe(p_endpoint text)
+returns text language sql security definer set search_path = public
+as $$ delete from public.push_subscriptions where endpoint = p_endpoint and user_id = auth.uid(); select 'off'::text $$;
+
+-- queue one notification (only for people with notifications on, never to the person who did it)
+create or replace function public._push(p_user uuid, p_kind text, p_title text, p_body text, p_url text, p_tag text)
+returns void language plpgsql security definer set search_path = public
+as $$
+begin
+  if p_user is null or p_user = auth.uid() then return; end if;
+  if not exists (select 1 from public.push_subscriptions where user_id = p_user) then return; end if;
+  insert into public.push_outbox (user_id, kind, title, body, url, tag)
+  values (p_user, p_kind, left(p_title, 120), left(p_body, 240), coalesce(p_url, '/app.html'), left(p_tag, 60));
+end $$;
+
+create or replace function public._cat_name(c text) returns text language sql immutable
+as $$ select case coalesce(c, '') when 'event' then 'event' when 'realestate' then 'real estate' when 'street' then 'candid'
+                  when '' then 'photo' else replace(c, '_', ' ') end $$;
+create or replace function public._when(t timestamptz) returns text language sql stable
+as $$ select to_char(t at time zone 'Asia/Kolkata', 'Dy DD Mon, FMHH12:MI AM') $$;
+create or replace function public._first(p uuid) returns text language sql stable security definer set search_path = public
+as $$ select coalesce(nullif(split_part(trim(coalesce((select display_name from public.photographers where id = p),
+                                                       (select name from public.profiles where id = p), '')), ' ', 1), ''), 'Someone') $$;
+
+-- turn events into notifications
+create or replace function public._push_for_event(e public.event_log)
+returns void language plpgsql security definer set search_path = public
+as $$
+declare b record; r record; who text; n int := 0; link text;
+begin
+  if e.kind = 'quote_sent' then
+    perform public._push(e.other_id, 'quote', 'New quote: ₹' || to_char(e.amount, 'FM99,99,99,999'),
+      public._first(e.user_id) || ' sent a quote for your ' || public._cat_name(e.category) || ' shoot. Tap to compare.',
+      '/app.html?open=request&id=' || e.entity_id, 'req-' || e.entity_id);
+
+  elsif e.kind = 'request_posted' then                    -- photographers who'd take it and are available
+    select * into r from public.requests where id = e.entity_id;
+    if not found then return; end if;
+    for b in select g.id from public.photographers g join public.profiles p on p.id = g.id
+              where g.approval_status = 'approved' and g.is_online and g.id <> r.customer_id
+                and not public.is_blocked(g.id) and not public._blocked_pair(g.id, r.customer_id)
+                and (cardinality(coalesce(g.categories, '{}')) = 0 or r.category = any(g.categories))
+                and public._pg_covers(g.travel, coalesce(g.city, p.city), coalesce(g.state, p.state), r.city, r.state)
+                and exists (select 1 from public.push_subscriptions s where s.user_id = g.id)
+              limit 300 loop
+      perform public._push(b.id, 'request', 'New ' || public._cat_name(r.category) || ' shoot in ' || coalesce(r.city, 'your area'),
+        'Budget ₹' || to_char(r.budget, 'FM99,99,99,999') || ' · ' || public._when(r.start_at) || '. Send your price before it closes.',
+        '/app.html?open=quote&id=' || r.id, 'req-' || r.id);
+    end loop;
+
+  elsif e.kind like 'booking_%' and e.entity = 'booking' then
+    select * into b from public.bookings where id = e.entity_id;
+    if not found then return; end if;
+    link := '/app.html?open=booking&id=' || b.id;
+    if e.kind = 'booking_confirmed' then
+      perform public._push(b.photographer_id, 'booking', 'You''re booked!',
+        public._first(b.customer_id) || ' booked you for a ' || public._cat_name(b.category) || ' shoot on ' || public._when(b.start_at) || '.', link, 'bk-' || b.id);
+    elsif e.kind in ('booking_enroute','booking_arrived','booking_shooting','booking_completed') then
+      who := public._first(b.photographer_id);
+      perform public._push(b.customer_id, 'booking',
+        case e.kind when 'booking_enroute' then who || ' is on the way' when 'booking_arrived' then who || ' has arrived'
+                    when 'booking_shooting' then 'Your shoot has started' else 'Your shoot is complete' end,
+        case e.kind when 'booking_completed' then 'Tap to rate ' || who || ' and see your booking.'
+                    when 'booking_shooting' then 'You can pay the balance in the app.' else 'Tap to see your booking.' end, link, 'bk-' || b.id);
+    elsif e.kind = 'booking_cancelled' then
+      if coalesce(e.info->>'cancelled_by', '') <> 'customer' then
+        perform public._push(b.customer_id, 'booking', 'Booking cancelled', public._first(b.photographer_id) || ' cancelled your ' || public._cat_name(b.category) || ' shoot. Your advance comes back to you.', link, 'bk-' || b.id); end if;
+      if coalesce(e.info->>'cancelled_by', '') <> 'photographer' and b.status <> 'pending_payment' then
+        perform public._push(b.photographer_id, 'booking', 'Booking cancelled', public._first(b.customer_id) || ' cancelled the ' || public._cat_name(b.category) || ' shoot on ' || public._when(b.start_at) || '.', link, 'bk-' || b.id); end if;
+    end if;
+
+  elsif e.kind = 'chat_message' then
+    select m.content into who from public.messages m where m.booking_id = e.entity_id and m.sender_id = e.user_id order by m.created_at desc limit 1;
+    perform public._push(e.other_id, 'message', public._first(e.user_id), coalesce(who, 'New message'),
+      '/app.html?open=chat&id=' || e.entity_id, 'chat-' || e.entity_id);
+
+  elsif e.kind = 'balance_due' then
+    perform public._push(e.user_id, 'payment', 'Balance due: ₹' || to_char(e.amount, 'FM99,99,99,999'), 'Pay the rest of your booking in SnapPro — no cash needed.',
+      '/app.html?open=booking&id=' || e.entity_id, 'bk-' || e.entity_id);
+  elsif e.kind = 'payout_paid' then
+    perform public._push(e.user_id, 'payment', '₹' || to_char(e.amount, 'FM99,99,99,999') || ' sent to you', 'Your payout for a completed shoot is on its way to your UPI.',
+      '/app.html?open=booking&id=' || e.entity_id, 'pay-' || e.entity_id);
+  elsif e.kind = 'review_posted' then
+    perform public._push(e.other_id, 'review', 'New review: ' || repeat('★', greatest(1, least(5, e.amount::int))), public._first(e.user_id) || ' rated your shoot.',
+      '/app.html?open=reviews', 'rev-' || e.entity_id);
+  elsif e.kind in ('pg_approved','pg_rejected','kyc_rejected') then
+    perform public._push(e.user_id, 'account',
+      case e.kind when 'pg_approved' then 'You''re approved on SnapPro' when 'pg_rejected' then 'Your profile needs a change' else 'Please re-do your ID check' end,
+      case e.kind when 'pg_approved' then 'Customers can see your profile now. Turn on Available to get requests.' else 'Open SnapPro to see what to fix.' end,
+      '/app.html', 'acct');
+  end if;
+end $$;
+
+create or replace function public.push_from_event()
+returns trigger language plpgsql security definer set search_path = public
+as $$ begin
+  begin perform public._push_for_event(new); exception when others then null; end;   -- never block the real action
+  return new;
+end $$;
+drop trigger if exists push_from_event on public.event_log;
+create trigger push_from_event after insert on public.event_log for each row execute function public.push_from_event();
+
+-- wake the "push" Edge Function (skipped quietly until the secret is set up)
+create or replace function public.push_kick()
+returns trigger language plpgsql security definer set search_path = public, extensions
+as $$
+declare secret text; url text;
+begin
+  begin select decrypted_secret into secret from vault.decrypted_secrets where name = 'push_hook_secret' limit 1;
+  exception when others then secret := null; end;
+  if coalesce(secret, '') = '' then return null; end if;
+  select value #>> '{}' into url from public.platform_settings where key = 'push_function_url';
+  begin
+    perform net.http_post(url := url, body := '{}'::jsonb,
+      headers := jsonb_build_object('content-type', 'application/json', 'x-push-secret', secret), timeout_milliseconds := 8000);
+  exception when others then null; end;
+  return null;
+end $$;
+drop trigger if exists push_kick on public.push_outbox;
+create trigger push_kick after insert on public.push_outbox for each statement execute function public.push_kick();
+
+-- someone is calling: ring the other phone even if SnapPro is closed
+create or replace function public.call_notify(p_booking uuid)
+returns text language plpgsql security definer set search_path = public
+as $$
+declare b record; me uuid := auth.uid(); other uuid;
+begin
+  select * into b from public.bookings where id = p_booking and (customer_id = me or photographer_id = me);
+  if not found then raise exception 'That isn''t your booking'; end if;
+  other := case when b.customer_id = me then b.photographer_id else b.customer_id end;
+  if public._blocked_pair(me, other) or public.is_blocked(me) then return 'off'; end if;
+  if exists (select 1 from public.push_outbox where user_id = other and tag = 'call-' || b.id and created_at > now() - interval '30 seconds') then return 'sent'; end if;
+  perform public._push(other, 'call', '📞 ' || public._first(me) || ' is calling', 'SnapPro voice call — tap to answer',
+    '/app.html?open=chat&id=' || b.id, 'call-' || b.id);
+  return 'sent';
+end $$;
+
+-- the Edge Function takes what's waiting (with the phones to send to), and reports back
+create or replace function public.push_take(p_limit int default 200)
+returns jsonb language plpgsql security definer set search_path = public
+as $$
+declare res jsonb;
+begin
+  delete from public.push_outbox where created_at < now() - interval '7 days';
+  with t as (
+    update public.push_outbox o set taken_at = now()
+     where o.id in (select id from public.push_outbox where taken_at is null and created_at > now() - interval '1 hour'
+                     order by id limit least(greatest(coalesce(p_limit, 200), 1), 1000) for update skip locked)
+    returning o.*)
+  select coalesce(jsonb_agg(jsonb_build_object('id', t.id, 'kind', t.kind, 'title', t.title, 'body', t.body, 'url', t.url, 'tag', t.tag,
+           'subs', (select coalesce(jsonb_agg(jsonb_build_object('endpoint', s.endpoint, 'p256dh', s.p256dh, 'auth', s.auth)), '[]')
+                      from public.push_subscriptions s where s.user_id = t.user_id))), '[]') into res from t;
+  return res;
+end $$;
+create or replace function public.push_done(p_results jsonb)
+returns void language plpgsql security definer set search_path = public
+as $$
+begin
+  update public.push_outbox o set sent = (x->>'sent')::int, failed = (x->>'failed')::int
+    from jsonb_array_elements(coalesce(p_results->'outbox', '[]')) x where o.id = (x->>'id')::bigint;
+  delete from public.push_subscriptions where endpoint in (select jsonb_array_elements_text(coalesce(p_results->'gone', '[]')));
+  update public.push_subscriptions set last_ok_at = now(), fails = 0 where endpoint in (select jsonb_array_elements_text(coalesce(p_results->'ok', '[]')));
+  update public.push_subscriptions set fails = fails + 1 where endpoint in (select jsonb_array_elements_text(coalesce(p_results->'bad', '[]')));
+  delete from public.push_subscriptions where fails >= 10;
+end $$;
+
+revoke all on function public._push(uuid, text, text, text, text, text)        from public, anon, authenticated;
+revoke all on function public._push_for_event(public.event_log)               from public, anon, authenticated;
+revoke all on function public.push_from_event()                               from public, anon, authenticated;
+revoke all on function public.push_kick()                                      from public, anon, authenticated;
+revoke all on function public._first(uuid)                                     from public, anon, authenticated;
+revoke all on function public.push_take(int)                                   from public, anon, authenticated;
+revoke all on function public.push_done(jsonb)                                 from public, anon, authenticated;
+revoke all on function public.push_subscribe(text, text, text, text)           from public, anon;
+revoke all on function public.push_unsubscribe(text)                           from public, anon;
+revoke all on function public.call_notify(uuid)                                from public, anon;
+grant execute on function public.push_take(int)                                to service_role;
+grant execute on function public.push_done(jsonb)                              to service_role;
+grant execute on function public.push_subscribe(text, text, text, text)        to authenticated;
+grant execute on function public.push_unsubscribe(text)                        to authenticated;
+grant execute on function public.call_notify(uuid)                             to authenticated;
+-- <<< 8h notifications
+
 -- =====================================================================
 -- 9. ONE-OFF CLEAN-UP
 -- =====================================================================
@@ -5180,4 +5478,6 @@ select
     and exists (select 1 from pg_trigger where tgname = 'ev_bookings')                   as departments_ready,
   exists (select 1 from pg_proc where proname = 'delete_my_account')                   as deletion_ready,
   exists (select 1 from pg_proc where proname = 'report_user')
-    and exists (select 1 from pg_trigger where tgname = 'pair_guard')                    as moderation_ready;
+    and exists (select 1 from pg_trigger where tgname = 'pair_guard')                    as moderation_ready,
+  exists (select 1 from information_schema.columns where table_name = 'photographers' and column_name = 'travel')   as travel_ready,
+  exists (select 1 from pg_trigger where tgname = 'push_from_event')   as notifications_ready;

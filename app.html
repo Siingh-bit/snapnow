@@ -171,9 +171,12 @@ input[type=datetime-local].input{color-scheme:light}
 
 /* OTP */
 .otp-row{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
-.otp-cell{aspect-ratio:1/1.2;border-radius:8px;background:var(--paper);border:1px solid var(--border);display:grid;place-items:center;font-size:24px;font-weight:600;font-variant-numeric:tabular-nums}
-.otp-cell.on{border-color:var(--text)}
-.otp-input{text-align:center;letter-spacing:8px;font-size:20px;font-weight:600}
+.otp-cell{width:100%;min-width:0;aspect-ratio:1/1.2;border-radius:8px;background:var(--paper);border:1px solid var(--border);color:var(--text);text-align:center;padding:0;font:inherit;font-size:24px;font-weight:600;font-variant-numeric:tabular-nums;caret-color:var(--accent)}
+.otp-cell:focus{outline:none;border-color:var(--text);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 22%,transparent)}
+.otp-cell.filled{border-color:var(--text)}
+.gbtn{display:flex;align-items:center;justify-content:center;gap:10px;background:var(--paper);border:1px solid var(--border);color:var(--text);font-weight:600}
+.or-line{display:flex;align-items:center;gap:10px;margin:16px 0 4px;color:var(--muted-2);font-size:12.5px}
+.or-line:before,.or-line:after{content:"";flex:1;height:1px;background:var(--border)}
 
 /* top bars */
 .topbar{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--paper);border-bottom:1px solid var(--border-soft)}
@@ -554,7 +557,9 @@ html[data-theme=dark] .feat{background:#3a2f15;color:#e8c46a}
 .call-name{font-size:24px;font-weight:700;margin-top:18px}
 .call-st{margin-top:6px;color:rgba(255,255,255,.75);font-variant-numeric:tabular-nums}
 .call-net{margin-top:14px;color:rgba(255,255,255,.55)}
-.call-btns{display:flex;justify-content:space-around;max-width:340px;margin:0 auto;width:100%}
+.call-btns{display:flex;flex-wrap:wrap;justify-content:space-around;max-width:340px;margin:0 auto;width:100%}
+.call-ctl{display:flex;justify-content:space-around;width:100%;margin-bottom:28px}
+.cbtn:disabled{opacity:.4}
 .cbtn{display:flex;flex-direction:column;align-items:center;gap:8px;font-size:12.5px;color:#fff}
 .cbtn svg{width:64px;height:64px;padding:19px;border-radius:50%;background:rgba(255,255,255,.14);box-sizing:border-box}
 .cbtn.on svg{background:#fff;stroke:#16130f}
@@ -677,7 +682,11 @@ function icon(name, size=20, color="currentColor", w=2){
     mic:'<rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v1a7 7 0 0 0 14 0v-1M12 18v4"/>',
     micoff:'<path d="M2 2l20 20M9 9v2a3 3 0 0 0 5.1 2.1M15 9.3V5a3 3 0 0 0-5.9-.6M17 16.9A7 7 0 0 1 5 11v-1m14 0v1c0 .6-.1 1.2-.2 1.8M12 18v4"/>',
     chevron:'<path d="M9 18l6-6-6-6"/>',
-    flag:'<path d="M5 22V4"/><path d="M5 4h13l-2.5 4.5L18 13H5"/>'
+    flag:'<path d="M5 22V4"/><path d="M5 4h13l-2.5 4.5L18 13H5"/>',
+    speaker:'<path d="M11 5L6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/>',
+    pause:'<rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/>',
+    google:'<path d="M21.6 12.2c0-.7-.1-1.4-.2-2H12v3.8h5.4a4.6 4.6 0 0 1-2 3v2.5h3.2c1.9-1.7 3-4.3 3-7.3z" fill="#4285F4" stroke="none"/><path d="M12 22c2.7 0 5-.9 6.6-2.4l-3.2-2.5c-.9.6-2 1-3.4 1-2.6 0-4.8-1.8-5.6-4.1H3.1v2.6A10 10 0 0 0 12 22z" fill="#34A853" stroke="none"/><path d="M6.4 14c-.2-.6-.3-1.3-.3-2s.1-1.4.3-2V7.4H3.1a10 10 0 0 0 0 9.2z" fill="#FBBC05" stroke="none"/><path d="M12 5.9c1.5 0 2.8.5 3.8 1.5l2.9-2.9A10 10 0 0 0 3.1 7.4L6.4 10C7.2 7.7 9.4 5.9 12 5.9z" fill="#EA4335" stroke="none"/>',
+    bellring:'<path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/><path d="M2 8c0-2.2.7-4.3 2-6M22 8c0-2.2-.7-4.3-2-6"/>'
   };
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[name]||""}</svg>`;
 }
@@ -1059,7 +1068,7 @@ async function q(promise){
   return res ? res.data : null;
 }
 
-const PG_COLS = "id,display_name,city,state,pincode,bio,categories,years_exp,price_multiplier,rating,review_count,jobs_done,is_online,is_verified,portfolio,created_at,approval_status,review_note,featured_until";
+const PG_COLS = "id,display_name,city,state,pincode,bio,categories,years_exp,price_multiplier,rating,review_count,jobs_done,is_online,is_verified,portfolio,created_at,approval_status,review_note,featured_until,travel";
 const REQ_COLS = "id,customer_id,customer_name,category,urgency,duration_hrs,city,state,pincode,budget,deliverables,notes,status,start_at,expires_at,created_at";
 const BK_COLS = "id,request_id,offer_id,customer_id,photographer_id,customer_name,photographer_name,category,start_at,duration_hrs,city,pincode,address,price,status,created_at,updated_at,commission_pct,commission_amount,photographer_amount,payment_status,paid_at,payout_status,payout_at,cancelled_from,cancelled_by,advance_amount,balance_amount,balance_status,balance_paid_at,discount_amount,call_token";
 
@@ -1228,6 +1237,7 @@ async function refresh(fromPoll){
   if(isPg() && S.kyc === undefined && !S.loading.kycl){ S.loading.kycl = true; loadKyc().then(() => { S.loading.kycl = false; softRender(); }); }
   if(S.ublocksFor !== S.me.id){ S.ublocksFor = S.me.id; S.ublocks = undefined; }
   if(S.ublocks === undefined){ S.ublocks = null; loadUserBlocks().then(softRender); }
+  pushSync();
   if(S.rewards === undefined && !S.loading.rewards){ S.loading.rewards = true; loadRewards().then(() => { S.loading.rewards = false; softRender(); }); }
   try{
     if(isCustomer()){
@@ -1292,9 +1302,30 @@ function signature(){
     d.bookings.map(b => b.id + b.status + (b.address||"")), d.openRequests.map(r => r.id), d.myOffers.map(o => o.id),
     Object.keys(d.reviewed).length, S.pg ? [S.pg.rating, S.pg.review_count, S.pg.jobs_done, S.pg.earnings] : null]);
 }
+/* how far a photographer travels: their city, nearby cities (metro area, else
+   their state) or anywhere. Keep REGIONS in step with public._region() in snappro.sql */
+const REGIONS = {
+  ncr: ["delhi","new delhi","noida","greater noida","gurugram","gurgaon","ghaziabad","faridabad","sonipat"],
+  mumbai: ["mumbai","thane","navi mumbai","kalyan","vasai-virar","panvel"],
+  tricity: ["chandigarh","mohali","panchkula"], hyderabad: ["hyderabad","secunderabad"], kolkata: ["kolkata","howrah"]
+};
+const TRAVEL = [["city","Only my city"],["nearby","Nearby cities"],["anywhere","Anywhere in India"]];
+const lc = v => String(v || "").trim().toLowerCase();
+function regionOf(city, state){ const c = lc(city); for(const k in REGIONS) if(REGIONS[k].includes(c)) return k; return "state:" + lc(state); }
+function nearbyText(city, state){ const k = regionOf(city, state); return k === "ncr" ? "Delhi NCR" : k === "mumbai" ? "Mumbai and around" : k === "tricity" ? "Chandigarh tricity"
+  : k === "hyderabad" ? "Hyderabad and Secunderabad" : k === "kolkata" ? "Kolkata and Howrah" : "anywhere in " + (state || "your state"); }
+function pgCovers(pg, city, state){
+  if(!pg) return false;
+  const t = pg.travel || "city";
+  if(t === "anywhere" || !city || !pg.city || lc(pg.city) === lc(city)) return true;
+  return t === "nearby" && regionOf(pg.city, pg.state) === regionOf(city, state);
+}
+/* a photographer from another city who'll come to this one */
+const travelsTo = (pg, city, state) => !!(pg && city && pg.city && lc(pg.city) !== lc(city) && pgCovers(pg, city, state));
+function myCover(){ return Object.assign({}, S.pg, { city: (S.pg && S.pg.city) || meCity(), state: (S.pg && S.pg.state) || (S.me && S.me.state) }); }
 function matchesMe(r){
   if(!S.pg) return false;
-  const cityOk = !meCity() || !r.city || r.city.toLowerCase() === meCity().toLowerCase();
+  const cityOk = !r.city || pgCovers(myCover(), r.city, r.state);
   const cats = S.pg.categories || [];
   return cityOk && (!cats.length || cats.includes(r.category));
 }
@@ -1590,13 +1621,34 @@ function vWelcome(){
   </div>`;
 }
 
+/* ---------- Sign up / log in with Google (Supabase Auth) ----------
+   Google sends the person back to app.html, where Supabase finishes the
+   sign-in; the role they picked is remembered across that round trip. */
+function googleBtn(label){
+  return `<button class="btn block gbtn" ${S.auth.busy ? "disabled" : ""} onclick="googleSignIn()">${icon("google",18)} ${label}</button>
+    <div class="or-line"><span>or use your email</span></div>`;
+}
+async function googleSignIn(){
+  if(!(await ensureSb())){ S.auth.err = NO_CONN; render(); return; }
+  try{ localStorage.setItem("snappro.oauthType", S.auth.type || ""); }catch(e){}
+  S.auth.busy = true; S.auth.err = null; render();
+  const { error } = await sb.auth.signInWithOAuth({ provider: "google",
+    options: { redirectTo: location.origin + "/app.html", queryParams: { prompt: "select_account" } } });
+  if(error){
+    S.auth.busy = false;
+    S.auth.err = /not enabled|unsupported provider|provider is not/i.test(error.message || "") ? "Google sign-in isn't switched on yet. Please use your email for now." : friendlyAuthError(error);
+    render();
+  }
+}
+
 function vSignup(){
   const a = S.auth, isPgType = a.type === "photographer";
   return `${authTop(isPgType ? "Join as a photographer" : "Create your account", "Step 1 of 2", "pwReset();authGo('welcome')")}
   <div class="pad">
     <div class="h2">Create your account</div>
-    <div class="sm muted mt4">We'll email you a 6-digit code to confirm it's you.</div>
-    <div class="field mt16"><label for="authEmail">Email address</label>
+    <div class="sm muted mt4">Fastest: continue with your Google account. Or use your email — we'll send a 6-digit code to confirm it's you.</div>
+    <div class="mt16">${googleBtn("Continue with Google")}</div>
+    <div class="field"><label for="authEmail">Email address</label>
       <input id="authEmail" class="input" type="email" inputmode="email" autocomplete="email" autocapitalize="off" spellcheck="false"
         placeholder="you@example.com" value="${esc(a.email)}" oninput="emailInput(this.value)" onblur="emailBlur()">
       <div id="emailErr">${emailErrHtml(a.email)}</div>
@@ -1626,27 +1678,58 @@ async function submitSignup(){
   toast("Check your email", "We sent a 6-digit code to " + email, "mail");
 }
 
+/* six boxes you can type in, tap into, delete from or paste a whole code into
+   (the first box also takes the code from the phone's autofill) */
+const OTP_IDS = ["authOtp","otp1","otp2","otp3","otp4","otp5"];
 function otpBoxesHtml(code){
-  return [0,1,2,3,4,5].map(i => `<div class="otp-cell ${code.length===i?'on':''}">${esc(code[i]||"")}</div>`).join("");
+  return OTP_IDS.map((id, i) => `<input id="${id}" class="otp-cell ${code[i] ? "filled" : ""}" inputmode="numeric" pattern="[0-9]*" ${i ? "" : `autocomplete="one-time-code"`}
+    aria-label="Digit ${i + 1} of 6" value="${esc(code[i] || "")}" data-v="${esc(code[i] || "")}" oninput="otpBox(${i},this.value)" onkeydown="otpKey(${i},event)" onfocus="this.select()">`).join("");
 }
-function otpInput(v){
-  const code = String(v).replace(/\D/g, "").slice(0, 6);
+function otpCode(){ return OTP_IDS.map(id => (el(id) || {}).value || "").join("").replace(/\D/g, "").slice(0, 6); }
+function otpBox(i, v){
+  const n = el(OTP_IDS[i]); if(!n) return;
+  const digits = String(v).replace(/\D/g, ""), old = n.dataset.v || "";
+  let next = i + 1;
+  if(digits.length > 1 && old && digits.startsWith(old)){        // typed into a box that already had a digit: carry on in the next empty one
+    n.value = old;
+    let j = i + 1;
+    for(const d of digits.slice(old.length)){ while(j < 6 && el(OTP_IDS[j]).value) j++; if(j >= 6) break; el(OTP_IDS[j]).value = d; j++; }
+    next = j;
+  } else if(digits.length > 1){                                    // pasted or autofilled: spread over the boxes from here
+    digits.slice(0, 6 - i).split("").forEach((d, k) => { const m = el(OTP_IDS[i + k]); if(m) m.value = d; });
+    next = i + digits.length;
+  } else n.value = digits;
+  OTP_IDS.forEach(id => { const m = el(id); if(m) m.dataset.v = m.value; });
+  otpSync();
+  const f = el(OTP_IDS[Math.min(5, next)]);
+  if(digits.length && f && document.activeElement !== f) f.focus();
+}
+function otpKey(i, e){
+  const n = el(OTP_IDS[i]);
+  if(e.key === "Backspace" && n && !n.value && i > 0){ e.preventDefault(); const p = el(OTP_IDS[i - 1]); p.value = ""; p.dataset.v = ""; p.focus(); otpSync(); }
+  else if(e.key === "ArrowLeft" && i > 0){ e.preventDefault(); el(OTP_IDS[i - 1]).focus(); }
+  else if(e.key === "ArrowRight" && i < 5){ e.preventDefault(); el(OTP_IDS[i + 1]).focus(); }
+  else if(e.key === "Enter"){ e.preventDefault(); verifyOtp(); }
+}
+function otpSync(){
+  const code = otpCode();
   S.auth.otp = code; clearAuthErr();
-  const inp = el("authOtp"); if(inp && inp.value !== code) inp.value = code;
-  setHtml("otpBoxes", otpBoxesHtml(code));
+  OTP_IDS.forEach(id => { const n = el(id); if(n) n.classList.toggle("filled", !!n.value); });
   const b = el("otpVerify"); if(b) b.disabled = !(code.length === 6 && !S.auth.busy);
+  if(code.length === 6 && !S.auth.busy && !otpSync.sent){ otpSync.sent = code; setTimeout(() => { otpSync.sent = null; if(S.auth.otp === code && S.auth.step === "otp" && !S.auth.busy) verifyOtp(); }, 250); }
 }
 function vOtp(){
   const a = S.auth, code = String(a.otp || "");
   const back = a.mode === "reset" ? "authGo('reset')" : "authGo('signup')";
+  setTimeout(() => { const n = el(OTP_IDS[Math.min(code.length, 5)]); const f = document.activeElement;
+    if(n && !(f && /^(INPUT|TEXTAREA)$/.test(f.tagName))) try{ n.focus(); }catch(e){} }, 60);
   return `${authTop(a.mode === "reset" ? "Reset your password" : "Confirm your email", a.email, back)}
   <div class="pad">
     <div class="h2">Enter your code</div>
     <div class="sm muted mt4">We sent a 6-digit code to <b>${esc(a.email)}</b>. It can take a minute to arrive — check spam too.</div>
     <div class="otp-row mt20" id="otpBoxes">${otpBoxesHtml(code)}</div>
-    <input id="authOtp" class="input mt16 otp-input" inputmode="numeric" maxlength="6" autocomplete="one-time-code"
-      placeholder="6-digit code" value="${esc(code)}" oninput="otpInput(this.value)" onkeydown="if(event.key==='Enter')verifyOtp()">
-    <button id="otpVerify" class="btn primary block mt12" ${code.length===6&&!a.busy?"":"disabled"} onclick="verifyOtp()">
+    <div class="xs muted2 mt8">Tap the first box and type the code, or paste it.</div>
+    <button id="otpVerify" class="btn primary block mt16" ${code.length===6&&!a.busy?"":"disabled"} onclick="verifyOtp()">
       ${a.busy ? "Checking…" : icon("cam",16,"var(--on-text)") + " Verify &amp; continue"}</button>
     <div id="authErr">${errHtml(a.err)}</div>
     <div class="center mt16"><button class="linkish" onclick="resendCode()">Didn't get it? <b>Send a new code</b></button></div>
@@ -1663,6 +1746,7 @@ async function resendCode(){
 }
 async function verifyOtp(){
   const a = S.auth, code = String(a.otp || "").trim();
+  if(a.busy) return;
   if(code.length !== 6){ S.auth.err = "Enter the 6-digit code."; render(); return; }
   if(!(await ensureSb())){ S.auth.err = NO_CONN; render(); return; }
   S.auth.busy = true; S.auth.err = null; render();
@@ -1681,6 +1765,7 @@ function vLogin(){
   return `${authTop("Log in", "Welcome back", "pwReset();authGo('welcome')")}
   <div class="pad">
     <div class="center mb16"><div class="logo-md">${icon("cam",26,"var(--on-text)",2)}</div><div class="h2 mt12">Welcome back</div></div>
+    ${googleBtn("Log in with Google")}
     <div class="field"><label for="authEmail">Email address</label>
       <input id="authEmail" class="input" type="email" inputmode="email" autocomplete="email" autocapitalize="off" spellcheck="false"
         placeholder="you@example.com" value="${esc(a.email)}" oninput="emailInput(this.value)" onblur="emailBlur()">
@@ -1780,7 +1865,8 @@ async function afterAuth(withFlash){
     try{ await api.loadMe(); }catch(e){ toast("Couldn't load your account", e.message, "x"); }
     if(!S.me){ S.auth = { step:"welcome" }; render(); return; }
     if(needsSetup()){
-      const type = S.auth.type || (S.me.role === "photographer" ? "photographer" : null);
+      let picked = null; try{ picked = localStorage.getItem("snappro.oauthType") || null; localStorage.removeItem("snappro.oauthType"); }catch(e){}
+      const type = S.auth.type || picked || (S.me.role === "photographer" ? "photographer" : null);
       const nm = S.me.name && S.me.name !== (S.email||"").split("@")[0] ? S.me.name : "";
       S.auth = { step: type ? (type === "photographer" ? "setupPg" : "setupCust") : "setupRole", type, email: S.email,
                  draft: { name: nm, bio:"", years: 2, cats: [], priceMult: 1, step: 1 } };
@@ -1792,9 +1878,10 @@ async function afterAuth(withFlash){
   if(withFlash) triggerCameraFlashTransition(go, typeof withFlash === "object" ? withFlash : null); else await go();
 }
 function enterApp(){
+  try{ localStorage.removeItem("snappro.oauthType"); }catch(e){}
   S.tab = "home"; S.stack = []; S.auth = { step:"welcome" };
   render(); scrollTop();
-  refresh(false).then(() => render());
+  refresh(false).then(() => { render(); if(S.openAfter){ const t = S.openAfter; S.openAfter = null; openTarget(t); } });
   if(isCustomer()) api.photographers().then(() => softRender()).catch(() => {});
   api.commission().then(() => softRender()).catch(() => {});
   if(isPg() && S.payout === undefined) api.payoutDetails().then(r => { S.payout = r || {}; }).catch(() => {});
@@ -1873,8 +1960,9 @@ function vSetupPg(){
       <button class="btn primary block mt16" onclick="pgSetupNext(2)">Continue</button>
     ` : `
       <div class="h2">Where you work</div>
-      <div class="sm muted mt4">You'll see requests from customers in your city.</div>
+      <div class="sm muted mt4">You'll see requests from customers in your city — and further, if you travel.</div>
       <div class="mt16">${locFieldsHtml("setup")}</div>
+      ${travelField(d.travel || "city", "S.auth.draft.travel", (locValue("setup") || {}).city, (locValue("setup") || {}).state)}
       <div class="field"><label>Your rates vs typical — <span id="pmVal">${Math.round(d.priceMult*100)}</span>%</label>
         <input type="range" min="0.6" max="2" step="0.05" value="${d.priceMult}" oninput="S.auth.draft.priceMult=+this.value;setHtml('pmVal',Math.round(this.value*100));setHtml('pmPrices',pgPricePreview())">
         <div class="between xs muted2"><span>Budget</span><span>Typical</span><span>Premium</span></div></div>
@@ -1904,7 +1992,7 @@ async function saveSetupPg(){
   try{
     await api.saveProfile(Object.assign({ name, role: "photographer" }, loc));
     await api.savePg({ display_name: name, bio: (d.bio||"").trim(), categories: d.cats, years_exp: d.years,
-                       price_multiplier: d.priceMult, city: loc.city, state: loc.state, pincode: loc.pincode, is_online: true }, !S.pg);
+                       price_multiplier: d.priceMult, city: loc.city, state: loc.state, pincode: loc.pincode, travel: d.travel || "city", is_online: true }, !S.pg);
     S.auth.busy = false;
     toast("Profile sent for review", "Add photos of your work while you wait", "cam");
     enterApp();
@@ -1913,7 +2001,8 @@ async function saveSetupPg(){
 
 async function logout(){
   if(!confirm("Log out of SnapPro?")) return;
-  stopPolling();
+  stopPolling(); leaveCallChannels();
+  await pushForget();
   S.me = null; S.pg = null;
   try{ if(sb) await sb.auth.signOut(); }catch(e){}
   pwReset(); S.stack = []; S.tab = "home"; S.draft = null; S.payout = undefined; S.payState = null;
@@ -1950,6 +2039,7 @@ function pgCardHtml(pg, extra){
         <div class="row gap6"><span class="bold truncate">${esc(pg.display_name)}</span>${pg.is_verified ? `<span class="verified" title="Verified by SnapPro">${icon("shield",13,"var(--blue)")}</span>` : ""}${isFeatured(pg) ? `<span class="feat">★ Featured</span>` : ""}</div>
         <div class="xs muted mt2">${ratingHtml(pg)}</div>
         <div class="xs muted2 mt2">${pgMeta(pg)}</div>
+        ${isCustomer() && travelsTo(pg, meCity(), S.me.state) ? `<div class="xs accent bold mt2">${icon("pin",11)} Travels to ${esc(meCity())}</div>` : ""}
       </div>
       <div class="stack right"><div class="bold sm">${inr(fromPrice(pg))}</div><div class="xs muted2">from, 2 hrs</div></div>
     </div>
@@ -1972,8 +2062,8 @@ function vCustHome(){
   const city = meCity();
   const active = S.d.bookings.filter(activeBk);
   const open = S.d.requests.filter(reqIsOpen);
-  const local = S.d.pgList.filter(p => p.city && city && p.city.toLowerCase() === city.toLowerCase())
-    .sort((a,b) => (isFeatured(b) - isFeatured(a)) || (b.is_online - a.is_online) || ((b.rating||0) - (a.rating||0)) || ((b.jobs_done||0) - (a.jobs_done||0)));
+  const local = S.d.pgList.filter(p => !iBlocked(p.id) && city && pgCovers(p, city, S.me.state))
+    .sort((a,b) => (lc(b.city) === lc(city)) - (lc(a.city) === lc(city)) || (isFeatured(b) - isFeatured(a)) || (b.is_online - a.is_online) || ((b.rating||0) - (a.rating||0)) || ((b.jobs_done||0) - (a.jobs_done||0)));
   return `<div class="pad">
     <div class="between">
       <div><div class="h2">Hi, ${esc(firstName(S.me.name) || "there")}</div>
@@ -1997,13 +2087,13 @@ function vCustHome(){
     <div class="sec-title mt20">What are you shooting?</div>
     <div class="chips">${CATEGORIES.map(c => `<button class="chip lg" onclick="startRequest(null,'${c.id}')">${esc(c.name)}</button>`).join("")}</div>
 
-    <div class="between mt20 mb12"><div class="sec-title" style="margin:0">Photographers in ${esc(city || "your city")}</div>
+    <div class="between mt20 mb12"><div class="sec-title" style="margin:0">Photographers for ${esc(city || "your city")}</div>
       <button class="xs accent bold" onclick="go('explore')">See all</button></div>
     ${!S.d.pgListAt ? `<div class="skeleton"></div><div class="skeleton"></div>`
       : local.length ? `<div class="stack gap10">${local.slice(0,6).map(p => pgCardHtml(p)).join("")}</div>`
       : emptyState("📷", "No photographers in " + (city || "your city") + " yet",
-          "Post your shoot anyway — photographers who join in your city will see it and can send you a quote.",
-          `<button class="btn sm mt12" onclick="startRequest()">Post a shoot</button>`)}
+          "Post your shoot anyway — photographers in " + esc(city || "your city") + " and those who travel there will see it and can send you a quote.",
+          `<button class="btn sm primary mt12" onclick="startRequest()">Post a shoot</button> <button class="btn sm mt12" onclick="S.prefs.ex=Object.assign(S.prefs.ex||{q:'',cat:'all',sort:'rated'},{scope:'all'});savePrefs();go('explore')">See photographers in other cities</button>`)}
 
     <div class="note mt20">${icon("shield",18,"var(--green)")}<div><b>Pay ${S.advance}% to book, the rest after the shoot.</b> UPI, Google Pay, cards or net banking. Cancel before your photographer sets off and get your advance back.</div></div>
   </div>`;
@@ -2036,7 +2126,7 @@ function exFilter(){
   const f = S.prefs.ex || (S.prefs.ex = { q:"", scope:"city", cat:"all", sort:"rated" });
   const city = meCity().toLowerCase();
   let list = S.d.pgList.filter(p => !iBlocked(p.id));
-  if(f.scope === "city" && city) list = list.filter(p => (p.city||"").toLowerCase() === city);
+  if(f.scope === "city" && city) list = list.filter(p => pgCovers(p, meCity(), S.me.state));
   if(f.cat !== "all") list = list.filter(p => (p.categories||[]).includes(f.cat));
   const qv = (f.q||"").trim().toLowerCase();
   if(qv) list = list.filter(p => (p.display_name||"").toLowerCase().includes(qv) || (p.bio||"").toLowerCase().includes(qv) || (p.city||"").toLowerCase().includes(qv));
@@ -2050,7 +2140,7 @@ function exResultsHtml(){
   const list = exFilter(), f = S.prefs.ex;
   if(!S.d.pgListAt) return `<div class="skeleton"></div><div class="skeleton"></div>`;
   if(!list.length) return emptyState("🔍", "No photographers found",
-    f.scope === "city" && meCity() ? `Nobody matches in ${esc(meCity())} yet. <button class="linkish accent" onclick="exSet('scope','all')"><b>Search all cities</b></button>` : "Try clearing your filters.");
+    f.scope === "city" && meCity() ? `No one in ${esc(meCity())}, or travelling there, matches yet. <button class="linkish accent" onclick="exSet('scope','all')"><b>Search all cities</b></button>` : "Try clearing your filters.");
   return `<div class="xs muted2 mb8">${list.length} photographer${list.length===1?"":"s"}</div><div class="stack gap10">${list.map(p => pgCardHtml(p)).join("")}</div>`;
 }
 function exSet(k, v){ S.prefs.ex[k] = v; savePrefs(); render(); }
@@ -2091,6 +2181,7 @@ function vPgProfile(p){
     <div class="row gap6 mt12"><span class="h2">${esc(pg.display_name)}</span>${pg.is_verified ? icon("shield",16,"var(--blue)") : ""}${isFeatured(pg) ? `<span class="feat">★ Featured</span>` : ""}</div>
     <div class="sm mt4">${ratingHtml(pg)} ${pg.is_online ? `<span class="chip green">Available</span>` : `<span class="chip">Away</span>`}</div>
     <div class="xs muted2 mt4">${pgMeta(pg)}</div>
+    ${(pg.travel || "city") !== "city" ? `<div class="xs mt4">${icon("pin",11,"var(--accent)")} Travels for shoots: <b>${pg.travel === "anywhere" ? "anywhere in India" : esc(nearbyText(pg.city, pg.state))}</b></div>` : ""}
     ${blocked ? `<div class="card soft mt12 sm">You've blocked ${esc(firstName(pg.display_name))}. <button class="linkish accent" onclick="push('blockedPeople')"><b>Manage blocked people</b></button></div>` : ""}
     ${pg.bio ? `<p class="sm muted mt12 prose">${esc(pg.bio)}</p>` : ""}
     <div class="chips mt12">${(pg.categories||[]).map(c => `<span class="chip accent">${esc(catById(c).name)}</span>`).join("")}</div>
@@ -2562,6 +2653,7 @@ function vProfile(){
     <div class="card mt16 list">
       <button class="li" onclick="push('editName')">${icon("user",18,"var(--muted)")}<div class="grow"><div class="sm bold">Name</div><div class="xs muted2">${esc(me.name)}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
       <button class="li" onclick="push('editLoc')">${icon("pin",18,"var(--muted)")}<div class="grow"><div class="sm bold">Location</div><div class="xs muted2">${esc([me.city, me.state, me.pincode].filter(Boolean).join(", ") || "Not set")}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
+      ${pushRow()}
       <button class="li" onclick="push('blockedPeople')">${icon("shield",18,"var(--muted)")}<div class="grow"><div class="sm bold">Blocked people</div><div class="xs muted2">${(S.ublocks || []).length ? S.ublocks.length + " blocked" : "No one blocked"}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
       <a class="li" href="mailto:${SUPPORT_EMAIL}">${icon("mail",18,"var(--muted)")}<div class="grow"><div class="sm bold">Help and support</div><div class="xs muted2">${SUPPORT_EMAIL}</div></div>${icon("chevron",16,"var(--muted-2)")}</a>
     </div>
@@ -2657,6 +2749,11 @@ function vPgHome(){
       <button class="stat tap" onclick="push('pgReviews')"><div class="s-v">${pg.review_count ? "★ " + Number(pg.rating).toFixed(1) : "New"}</div><div class="s-l">${pg.review_count ? pg.review_count + " review" + (pg.review_count>1?"s":"") : "No reviews yet"} ${icon("chevron",11,"var(--muted-2)")}</div></button>
     </div>
 
+    ${(pg.travel || "city") === "city" && !S.prefs.travelAsked ? `<div class="card mt16">
+      <div class="bold sm">${icon("pin",14,"var(--accent)")} Do you travel for shoots?</div>
+      <div class="xs muted mt4">Get requests from customers outside ${esc(meCity() || "your city")} too — for example ${esc(nearbyText(pg.city || meCity(), pg.state || S.me.state))}. You can change this any time.</div>
+      <div class="row gap8 mt12" style="flex-wrap:wrap"><button class="btn sm primary" onclick="setTravel('nearby')">Nearby cities</button><button class="btn sm" onclick="setTravel('anywhere')">Anywhere in India</button>
+        <button class="btn sm" onclick="S.prefs.travelAsked=1;savePrefs();render()">Only ${esc(meCity() || "my city")}</button></div></div>` : ""}
     ${actionsHtml(photographerActions())}
     ${howCard()}
     ${active.length ? `<div class="between mt20"><div class="sec-title" style="margin:0">Upcoming shoots</div><button class="xs accent bold" onclick="go('jobs')">See all</button></div>${active.map(bookingCard).join("")}` : ""}
@@ -2671,23 +2768,23 @@ function vPgHome(){
 
 function vPgRequests(){
   const mode = S.prefs.reqMode || "match";
-  const city = meCity().toLowerCase();
   let list = S.d.openRequests.filter(r => !myOfferFor(r.id));
   if(mode === "match") list = list.filter(r => matchesMe(r) && !isPassed(r.id));
-  else list = list.filter(r => !city || (r.city||"").toLowerCase() === city);
+  else list = list.filter(r => !r.city || pgCovers(myCover(), r.city, r.state));
   const quoted = S.d.myOffers.map(o => ({ o, r: S.d.openRequests.find(r => r.id === o.request_id) }));
   return `<div class="pad">
     <div class="h2">Requests</div>
     <div class="chips mt12">
       <button class="chip ${mode==='match'?'accent':''}" onclick="S.prefs.reqMode='match';savePrefs();render()">For you</button>
-      <button class="chip ${mode==='city'?'accent':''}" onclick="S.prefs.reqMode='city';savePrefs();render()">Everything in ${esc(meCity()||"your city")}</button>
+      <button class="chip ${mode==='city'?'accent':''}" onclick="S.prefs.reqMode='city';savePrefs();render()">Everything ${(S.pg && S.pg.travel || "city") === "city" ? "in " + esc(meCity()||"your city") : "you cover"}</button>
       <button class="chip ${mode==='quoted'?'accent':''}" onclick="S.prefs.reqMode='quoted';savePrefs();render()">Your quotes${S.d.myOffers.length ? " (" + S.d.myOffers.length + ")" : ""}</button>
     </div>
     ${mode === "quoted"
       ? (quoted.length ? quoted.map(({o, r}) => r ? reqCardPg(r) : quoteStateCard(o)).join("")
         : emptyState("💬", "No quotes yet", "Quotes you send appear here until the customer decides."))
       : (list.length ? list.map(r => reqCardPg(r)).join("")
-        : emptyState("📭", "Nothing open right now", mode === "match" ? "Try “Everything in " + esc(meCity()||"your city") + "” to see other types of shoot." : "New requests appear here automatically."))}
+        : emptyState("📭", "Nothing open right now", (mode === "match" ? "Try “Everything” to see other types of shoot. " : "New requests appear here automatically. ")
+            + ((S.pg && S.pg.travel || "city") === "city" ? `Travel for shoots? <button class="linkish accent" onclick="push('editPg')"><b>Get requests from nearby cities</b></button>` : "")))}
     ${mode === "match" && S.prefs.passed.length ? `<div class="center mt16"><button class="linkish xs" onclick="S.prefs.passed=[];savePrefs();render()">Show requests you passed on</button></div>` : ""}
   </div>`;
 }
@@ -2934,7 +3031,7 @@ function vPortfolio(){
 }
 function vEditPg(){
   const pg = S.pg || {};
-  if(!S.editPg) S.editPg = { bio: pg.bio || "", cats: (pg.categories||[]).slice(), years: pg.years_exp || 0, pm: Number(pg.price_multiplier) || 1 };
+  if(!S.editPg) S.editPg = { bio: pg.bio || "", cats: (pg.categories||[]).slice(), years: pg.years_exp || 0, pm: Number(pg.price_multiplier) || 1, travel: pg.travel || "city" };
   const d = S.editPg;
   return `${topbar("Your details")}
   <div class="pad">
@@ -2946,6 +3043,7 @@ function vEditPg(){
       <div class="grid3">${CATEGORIES.map(c => `<button class="u-card ${d.cats.includes(c.id)?'on':''}" onclick="epCat('${c.id}')"><div class="u-t">${esc(c.name)}</div></button>`).join("")}</div></div>
     <div class="field"><label>Your rates vs typical — <span id="epPm">${Math.round(d.pm*100)}</span>%</label>
       <input type="range" min="0.6" max="2" step="0.05" value="${d.pm}" oninput="S.editPg.pm=+this.value;setHtml('epPm',Math.round(this.value*100))"></div>
+    ${travelField(d.travel, "S.editPg.travel", pg.city || meCity(), pg.state || S.me.state)}
     <button class="btn primary block" onclick="saveEditPg()">Save</button>
     <div id="formErr"></div>
   </div>`;
@@ -2955,10 +3053,20 @@ function epCat(c){
   if(i >= 0) a.splice(i,1); else a.push(c);
   render();
 }
+/* "How far will you travel?" — used in sign-up and when editing the profile */
+function travelField(cur, target, city, state){
+  return `<div class="field"><label>How far will you travel for a shoot?</label>
+    <div class="stack gap8">${TRAVEL.map(([k, l]) => `<button type="button" class="u-card row gap8 ${cur === k ? "on" : ""}" style="text-align:left" onclick="${target}='${k}';render()">
+      <div class="grow"><div class="u-t">${l}</div><div class="xs muted2">${k === "city" ? "Requests from " + esc(city || "your city") + " only" : k === "nearby" ? "Also " + esc(nearbyText(city, state)) : "Requests from every city"}</div></div></button>`).join("")}</div></div>`;
+}
+async function setTravel(v){
+  try{ await api.savePg({ travel: v }); S.prefs.travelAsked = 1; savePrefs(); toast("Travel range saved", v === "anywhere" ? "You'll see requests from all over India" : "You'll see requests from nearby cities too", "pin"); refresh(false); render(); }
+  catch(e){ toast("Couldn't save", e.message, "x"); }
+}
 async function saveEditPg(){
   const d = S.editPg;
   if(!d.cats.length){ setHtml("formErr", errHtml("Pick at least one type of shoot.")); return; }
-  try{ await api.savePg({ bio: d.bio.trim(), categories: d.cats, years_exp: d.years, price_multiplier: d.pm }); S.editPg = null; toast("Profile updated", "", "check"); pop(); }
+  try{ await api.savePg({ bio: d.bio.trim(), categories: d.cats, years_exp: d.years, price_multiplier: d.pm, travel: d.travel || "city" }); S.editPg = null; toast("Profile updated", "", "check"); pop(); }
   catch(e){ setHtml("formErr", errHtml(e.message)); }
 }
 
@@ -3867,7 +3975,7 @@ function acceptShot(key, blob){
 const CALLABLE = ["confirmed","enroute","arrived","shooting","completed"];
 const callChans = {};                 // call_token -> channel
 let CALL = null;                      // the current call
-let ringTone = null;
+let callTone = null;                  // stops the ringtone / ring-back / hold beep that's playing
 const canCall = b => b && b.call_token && CALLABLE.includes(b.status) && !blockedOn(b) && !(b.status === "completed" && Date.now() - toMs(b.updated_at || b.start_at) > 7 * 864e5);
 
 /* join (or leave) the call channel of every booking we can call on */
@@ -3876,6 +3984,11 @@ function syncCallChannels(){
   const want = new Set(S.d.bookings.filter(canCall).map(b => b.call_token));
   Object.keys(callChans).forEach(t => { if(!want.has(t)){ try{ sb.removeChannel(callChans[t]); }catch(e){} delete callChans[t]; } });
   want.forEach(t => { if(!callChans[t]) joinCallChannel(t, true); });
+}
+/* log out / delete account: stop listening for calls on this phone */
+function leaveCallChannels(){
+  if(CALL) endCall(true, "ended");
+  Object.keys(callChans).forEach(t => { try{ sb && sb.removeChannel(callChans[t]); }catch(e){} delete callChans[t]; });
 }
 function joinCallChannel(token, priv){
   const ch = sb.channel("call:" + token, { config: { private: !!priv, broadcast: { self: false } } });
@@ -3904,29 +4017,32 @@ async function startCall(bookingId){
   if(CALL){ toast("You're already on a call", "", "x"); return; }
   if(!window.RTCPeerConnection || !navigator.mediaDevices){ toast("Calling isn't supported in this browser", "Try Chrome or Safari", "x"); return; }
   syncCallChannels();
-  CALL = { cid: Math.random().toString(36).slice(2), token: b.call_token, booking: b.id, name: otherName(b), role: "caller", state: "calling", muted: false };
+  CALL = { cid: Math.random().toString(36).slice(2), token: b.call_token, booking: b.id, name: otherName(b), role: "caller", state: "calling", muted: false, held: false, speaker: false };
   paintCall();
-  try{ CALL.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true }, video: false }); }
+  try{ await openCallAudio(); }
   catch(e){ toast("Microphone blocked", "Allow microphone access to call", "x"); endCall(false, "mic"); return; }
+  if(!CALL || CALL.state !== "calling") return;
+  playTone("ringback"); paintCall();
+  Promise.resolve(sb.rpc("call_notify", { p_booking: b.id })).catch(() => {});   // rings their phone even if SnapPro is closed
   const ring = () => { if(CALL && CALL.state === "calling") sig(CALL.token, { t: "ring", name: S.me.name || "" }); };
   ring(); CALL.ringTimer = setInterval(ring, 2500);
   CALL.giveUp = setTimeout(() => { if(CALL && CALL.state === "calling"){ toast("No answer", CALL.name + " didn't pick up", "x"); endCall(true, "missed"); } }, 40000);
 }
 /* ---------- receiving ---------- */
 async function onSignal(token, p){
-  if(!p || p.from === S.me.id) return;
+  if(!p || !S.me || p.from === S.me.id) return;
   if(p.t === "ring"){
     if(CALL && CALL.cid !== p.cid){ sig(token, { t: "busy", cid: p.cid }); return; }
     if(CALL) return;
     const b = S.d.bookings.find(x => x.call_token === token);
-    CALL = { cid: p.cid, token, booking: b && b.id, name: (b && otherName(b)) || p.name || "SnapPro call", role: "callee", state: "incoming", muted: false };
-    startRingtone(); paintCall();
+    CALL = { cid: p.cid, token, booking: b && b.id, name: (b && otherName(b)) || p.name || "SnapPro call", role: "callee", state: "incoming", muted: false, held: false, speaker: false };
+    playTone("ring"); paintCall();
     CALL.giveUp = setTimeout(() => { if(CALL && CALL.state === "incoming"){ endCall(false, "missed"); toast("Missed call", "", "x"); } }, 45000);
     return;
   }
   if(!CALL || p.cid !== CALL.cid) return;
   if(p.t === "accept" && CALL.role === "caller" && CALL.state === "calling"){
-    clearInterval(CALL.ringTimer); CALL.state = "connecting"; paintCall();
+    clearInterval(CALL.ringTimer); stopTone(); CALL.state = "connecting"; paintCall();
     const pc = await makePeer();
     const offer = await pc.createOffer(); await pc.setLocalDescription(offer);
     sig(CALL.token, { t: "sdp", sdp: pc.localDescription });
@@ -3941,12 +4057,14 @@ async function onSignal(token, p){
   } else if(p.t === "decline"){ toast("Call declined", CALL.name + " can't talk right now", "x"); endCall(true, "declined", true); }
   else if(p.t === "busy"){ toast(CALL.name + " is on another call", "", "x"); endCall(true, "busy", true); }
   else if(p.t === "hangup"){ endCall(false, "ended", true); }
+  else if(p.t === "hold"){ CALL.remoteHeld = !!p.on; if(CALL.remoteHeld && !CALL.held) playTone("hold"); else if(!CALL.held) stopTone(); applyCallAudio(); paintCall(); }
 }
 async function acceptCall(){
   if(!CALL || CALL.state !== "incoming") return;
-  stopRingtone();
-  try{ CALL.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true }, video: false }); }
+  stopTone();
+  try{ await openCallAudio(); }
   catch(e){ toast("Microphone blocked", "Allow microphone access to answer", "x"); declineCall(); return; }
+  if(!CALL) return;
   clearTimeout(CALL.giveUp);
   CALL.state = "connecting"; paintCall();
   await makePeer();
@@ -3969,14 +4087,68 @@ async function makePeer(){
 function hangUp(){ if(CALL) endCall(true, CALL.state === "live" ? "ended" : "cancelled"); }
 function toggleMute(){
   if(!CALL || !CALL.stream) return;
-  CALL.muted = !CALL.muted; CALL.stream.getAudioTracks().forEach(t => t.enabled = !CALL.muted); paintCall();
+  CALL.muted = !CALL.muted; applyCallAudio(); paintCall();
+}
+/* hold: neither side hears the other; the other phone shows "on hold" and hears a soft beep */
+function toggleHold(){
+  if(!CALL || CALL.state !== "live") return;
+  CALL.held = !CALL.held; applyCallAudio();
+  sig(CALL.token, { t: "hold", on: CALL.held });
+  if(CALL.held || CALL.remoteHeld) playTone("hold"); else stopTone();
+  paintCall();
+}
+/* mic on/off and whether we play the other person's voice */
+function applyCallAudio(){
+  if(!CALL) return;
+  (CALL.stream ? CALL.stream.getAudioTracks() : []).forEach(t => t.enabled = !(CALL.muted || CALL.held));
+  const a = el("callAudio"); if(a) a.muted = !!(CALL.held || CALL.remoteHeld);
+}
+
+/* ---------- earpiece or speaker ----------
+   Chrome on Android lists the phone's call outputs as microphones named
+   "Headset earpiece", "Speakerphone", "Wired headset" and "Bluetooth headset".
+   Opening the microphone through one of them sends the call's sound there
+   too — so a call starts on the earpiece, like a normal phone call. */
+const MIC = { echoCancellation: true, noiseSuppression: true, autoGainControl: true };
+const openMic = id => navigator.mediaDevices.getUserMedia({ audio: id ? Object.assign({ deviceId: { exact: id } }, MIC) : MIC, video: false });
+async function callRoutes(){
+  try{
+    const list = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === "audioinput");
+    const find = re => (list.find(d => re.test(d.label || "")) || {}).deviceId || null;
+    return { speaker: find(/speakerphone/i), earpiece: find(/earpiece/i), headset: find(/bluetooth|wired|usb/i) };
+  }catch(e){ return {}; }
+}
+async function openCallAudio(){
+  CALL.stream = await openMic(null);                     // asks for the microphone first (names appear after that)
+  const R = CALL.routes = await callRoutes();
+  CALL.canSpeaker = !!(R.speaker && (R.earpiece || R.headset));
+  const quiet = R.headset || R.earpiece;
+  if(quiet){ try{ await switchMic(quiet); }catch(e){} }
+  CALL.speaker = false;
+}
+async function switchMic(id){
+  const c = CALL; if(!c) return;
+  const ns = await openMic(id);
+  if(CALL !== c){ ns.getTracks().forEach(t => t.stop()); return; }
+  const old = c.stream, track = ns.getAudioTracks()[0];
+  c.stream = ns; applyCallAudio();
+  const snd = c.pc && c.pc.getSenders ? c.pc.getSenders().find(x => x.track && x.track.kind === "audio") : null;
+  if(snd && track) await snd.replaceTrack(track);
+  if(old && old !== ns) old.getTracks().forEach(t => t.stop());
+}
+async function toggleSpeaker(){
+  if(!CALL || !CALL.stream) return;
+  if(!CALL.canSpeaker){ toast("Speaker isn't available here", "Your device chooses where call sound plays", "x"); return; }
+  const R = CALL.routes, on = !CALL.speaker;
+  try{ await switchMic(on ? R.speaker : (R.headset || R.earpiece)); if(CALL){ CALL.speaker = on; paintCall(); } }
+  catch(e){ toast("Couldn't switch the speaker", "", "x"); }
 }
 /* tidy up, tell the other phone, and note the call in the chat (caller writes it) */
 function endCall(notify, why, remote){
   const c = CALL; if(!c) return;
   CALL = null;
   if(notify && !remote) sig(c.token, { t: "hangup", cid: c.cid });
-  clearInterval(c.ringTimer); clearTimeout(c.giveUp); clearInterval(c.tick); stopRingtone();
+  clearInterval(c.ringTimer); clearTimeout(c.giveUp); clearInterval(c.tick); stopTone();
   try{ c.pc && c.pc.close(); }catch(e){}
   (c.stream ? c.stream.getTracks() : []).forEach(t => t.stop());
   const secs = c.startAt ? Math.round((Date.now() - c.startAt) / 1000) : 0;
@@ -3990,11 +4162,13 @@ function endCall(notify, why, remote){
 /* ---------- call screen ---------- */
 function callLayer(){ let n = el("callLayer"); if(!n){ n = document.createElement("div"); n.id = "callLayer"; document.body.appendChild(n); } return n; }
 function callTime(){ if(!CALL || !CALL.startAt) return ""; const s = Math.round((Date.now() - CALL.startAt) / 1000); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); }
-function paintCallTime(){ const n = el("callStatus"); if(n && CALL && CALL.state === "live") n.textContent = callTime(); }
+function liveStatus(){ return CALL.held ? "On hold · " + callTime() : CALL.remoteHeld ? CALL.name.split(" ")[0] + " put you on hold" : callTime(); }
+function paintCallTime(){ const n = el("callStatus"); if(n && CALL && CALL.state === "live") n.textContent = liveStatus(); }
 function paintCall(){
   const L = callLayer();
   if(!CALL){ L.innerHTML = ""; return; }
-  const st = { calling: "Calling…", incoming: "Incoming voice call", connecting: "Connecting…", live: callTime() }[CALL.state] || "";
+  const st = { calling: "Ringing…", incoming: "Incoming voice call", connecting: "Connecting…", live: liveStatus() }[CALL.state] || "";
+  const btn = (fn, ic, label, on, dis) => `<button class="cbtn ${on ? "on" : ""}" ${dis ? "disabled" : ""} onclick="${fn}" aria-label="${label}" aria-pressed="${!!on}">${icon(ic,24,"#fff")}<span>${label}</span></button>`;
   L.innerHTML = `<div class="callscr ${CALL.state}">
     <div class="call-who"><div class="call-av">${avatarHtml(CALL.booking || CALL.name, CALL.name, "av-96")}<i class="pulse"></i></div>
       <div class="call-name">${esc(CALL.name)}</div><div class="call-st" id="callStatus">${st}</div>
@@ -4004,25 +4178,50 @@ function paintCall(){
       ${CALL.state === "incoming"
         ? `<button class="cbtn red" onclick="declineCall()" aria-label="Decline">${icon("phone",26,"#fff")}<span>Decline</span></button>
            <button class="cbtn green" onclick="acceptCall()" aria-label="Accept">${icon("phone",26,"#fff")}<span>Accept</span></button>`
-        : `<button class="cbtn ${CALL.muted ? "on" : ""}" onclick="toggleMute()" aria-label="Mute">${icon(CALL.muted ? "micoff" : "mic",24,"#fff")}<span>${CALL.muted ? "Unmute" : "Mute"}</span></button>
-           <button class="cbtn red" onclick="hangUp()" aria-label="End call">${icon("phone",26,"#fff")}<span>End</span></button>`}
+        : `<div class="call-ctl">${btn("toggleMute()", CALL.muted ? "micoff" : "mic", CALL.muted ? "Unmute" : "Mute", CALL.muted)}
+             ${btn("toggleSpeaker()", "speaker", "Speaker", CALL.speaker, !CALL.stream)}
+             ${btn("toggleHold()", "pause", CALL.held ? "Resume" : "Hold", CALL.held, CALL.state !== "live")}</div>
+           <button class="cbtn red" onclick="hangUp()" aria-label="End call">${icon("phone",26,"#fff")}<span>${CALL.state === "live" ? "End" : "Cancel"}</span></button>`}
     </div></div>`;
   if(CALL.pc){ const a = el("callAudio"); const r = CALL.pc.getReceivers ? CALL.pc.getReceivers() : []; if(a && r.length && r[0].track){ try{ a.srcObject = new MediaStream(r.map(x => x.track)); }catch(e){} } }
+  applyCallAudio();
 }
-/* a simple two-tone ring made in the browser (no sound file needed) */
-function startRingtone(){
+/* ---------- sounds, made in the browser (no sound files) ----------
+   ring:     a soft marimba phrase for an incoming call (with vibration)
+   ringback: the familiar Indian "tring-tring" the caller hears while it rings
+   hold:     a gentle double beep every few seconds while a call is on hold */
+let toneCtx = null;
+function toneAC(){
+  const AC = window.AudioContext || window.webkitAudioContext; if(!AC) return null;
+  if(!toneCtx || toneCtx.state === "closed") toneCtx = new AC();
+  if(toneCtx.state === "suspended") toneCtx.resume().catch(() => {});
+  return toneCtx;
+}
+function tone(ctx, f, t, dur, vol, attack){
+  const o = ctx.createOscillator(), g = ctx.createGain();
+  o.type = "sine"; o.frequency.value = f;
+  g.gain.setValueAtTime(0.0001, t);
+  if(attack){ g.gain.linearRampToValueAtTime(vol, t + attack); g.gain.setValueAtTime(vol, t + dur - 0.03); g.gain.linearRampToValueAtTime(0.0001, t + dur); }
+  else { g.gain.exponentialRampToValueAtTime(vol, t + 0.012); g.gain.exponentialRampToValueAtTime(0.0001, t + dur); }
+  o.connect(g).connect(ctx.destination); o.start(t); o.stop(t + dur + 0.05);
+}
+const marimba = (ctx, f, t, v) => { tone(ctx, f, t, 0.9, v); tone(ctx, f * 2, t, 0.35, v * 0.2); tone(ctx, f * 4, t, 0.12, v * 0.12); };
+const TONES = {
+  ring:     { every: 2800, play: (ctx, t) => { [[0, 659.25], [0.15, 830.61], [0.3, 987.77], [0.45, 1318.51], [0.85, 987.77], [1.0, 1318.51]].forEach(([d, f]) => marimba(ctx, f, t + d, 0.2));
+                                                if(navigator.vibrate) navigator.vibrate([450, 250, 450]); } },
+  ringback: { every: 3000, play: (ctx, t) => { [0, 0.6].forEach(d => { tone(ctx, 400, t + d, 0.4, 0.06, 0.02); tone(ctx, 450, t + d, 0.4, 0.05, 0.02); }); } },
+  hold:     { every: 4000, play: (ctx, t) => { [0, 0.25].forEach(d => tone(ctx, 523.25, t + d, 0.16, 0.05, 0.01)); } }
+};
+function playTone(kind){
+  stopTone();
   try{
-    const AC = window.AudioContext || window.webkitAudioContext; if(!AC) return;
-    const ctx = new AC(); let on = true;
-    const beep = () => { if(!on) return; [0, .45].forEach(t => { const o = ctx.createOscillator(), g = ctx.createGain(); o.frequency.value = 440 + (t ? 40 : 0);
-      g.gain.setValueAtTime(.0001, ctx.currentTime + t); g.gain.exponentialRampToValueAtTime(.2, ctx.currentTime + t + .05); g.gain.exponentialRampToValueAtTime(.0001, ctx.currentTime + t + .4);
-      o.connect(g).connect(ctx.destination); o.start(ctx.currentTime + t); o.stop(ctx.currentTime + t + .42); }); };
-    beep(); const iv = setInterval(beep, 2000);
-    ringTone = () => { on = false; clearInterval(iv); try{ ctx.close(); }catch(e){} };
-    if(navigator.vibrate) navigator.vibrate([400, 200, 400]);
+    const T = TONES[kind], ctx = toneAC(); if(!T || !ctx) return;
+    let on = true; const run = () => { if(on) T.play(ctx, ctx.currentTime + 0.05); };
+    run(); const iv = setInterval(run, T.every);
+    callTone = () => { on = false; clearInterval(iv); if(navigator.vibrate) navigator.vibrate(0); };
   }catch(e){}
 }
-function stopRingtone(){ if(ringTone){ ringTone(); ringTone = null; } }
+function stopTone(){ if(callTone){ callTone(); callTone = null; } }
 
 /* ============================================================
    GUIDANCE — "what do I do next?"
@@ -4033,6 +4232,7 @@ const soonMs = b => toMs(b.start_at) - Date.now();
 /* ---------- things the customer should do now ---------- */
 function customerActions(){
   const out = [];
+  pushTodo(out);
   S.d.bookings.forEach(b => {
     const pgn = esc(firstName(b.photographer_name || "your photographer"));
     if(b.status === "pending_payment")
@@ -4067,6 +4267,7 @@ function customerActions(){
 /* ---------- things the photographer should do now ---------- */
 function photographerActions(){
   const out = [], pg = S.pg || {};
+  pushTodo(out);
   S.d.bookings.filter(activeBk).sort((a,b) => toMs(a.start_at) - toMs(b.start_at)).forEach(b => {
     const nx = NEXT_STEP[b.status], cn = esc(firstName(b.customer_name || "the customer"));
     if(!nx) return;
@@ -4324,7 +4525,7 @@ async function deleteMyAccount(){
     if((f.kyc || []).length) await Promise.resolve(sb.storage.from("kyc").remove(f.kyc)).catch(() => {});
     const legacy = (f.portfolio_bucket || []).map(u => { const m = /\/object\/public\/portfolio\/(.+)$/.exec(String(u).split("?")[0]); return m ? decodeURIComponent(m[1]) : null; }).filter(Boolean);
     if(legacy.length) await Promise.resolve(sb.storage.from("portfolio").remove(legacy)).catch(() => {});
-    stopPolling();
+    stopPolling(); leaveCallChannels();
     S.me = null; S.pg = null; S.blocked = null; S.delChk = undefined;
     try{ await sb.auth.signOut(); }catch(e){}
     try{ Object.keys(localStorage).filter(k => /^snappro\.(ft|lt)$/.test(k)).forEach(k => localStorage.removeItem(k)); }catch(e){}
@@ -4440,6 +4641,104 @@ function vBlockedPeople(){
           <button class="btn sm" ${S.loading.blk ? "disabled" : ""} onclick="setUserBlock('${esc(b.id)}',false)">Unblock</button></div>`).join("")}</div>`
       : emptyState("shield", "No one blocked", "If someone bothers you, open their profile or your chat with them and tap “Report or block”.")}
   </div>`;
+}
+
+/* ============================================================
+   PHONE NOTIFICATIONS — quotes, bookings, messages, calls and new
+   requests reach the phone even when SnapPro is closed.
+   The phone's push address is saved with push_subscribe(); the
+   server sends through the "push" Edge Function; sw.js shows them.
+   Tapping one opens app.html?open=…&id=… (handled by openTarget).
+   ============================================================ */
+const pushOK = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window && location.protocol === "https:";
+let PUSH_KEY;                                      // VAPID public key (undefined = not loaded, null = not set up)
+async function pushKey(){
+  if(PUSH_KEY !== undefined) return PUSH_KEY;
+  try{ const { data } = await sb.from("platform_settings").select("value").eq("key", "push_public_key").maybeSingle(); PUSH_KEY = (data && data.value) || null; }
+  catch(e){ PUSH_KEY = null; }
+  return PUSH_KEY;
+}
+function keyBytes(s){ s = String(s).replace(/-/g, "+").replace(/_/g, "/"); while(s.length % 4) s += "="; const b = atob(s), u = new Uint8Array(b.length); for(let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u; }
+const keyText = buf => btoa(String.fromCharCode.apply(null, new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+const pushDevice = () => { const ua = navigator.userAgent || ""; return (PLAY_APP ? "Android app" : /Android/i.test(ua) ? "Android" : /iPhone|iPad/i.test(ua) ? "iPhone" : "Computer") + " · " + (/Edg\//.test(ua) ? "Edge" : /Chrome/.test(ua) ? "Chrome" : /Firefox/.test(ua) ? "Firefox" : /Safari/.test(ua) ? "Safari" : "Browser"); };
+const pushPerm = () => pushOK() ? Notification.permission : "unsupported";
+
+/* ask = true when the person tapped "Turn on"; false = quietly keep an existing permission in sync */
+async function pushSubscribe(ask){
+  if(!pushOK() || !S.me || !sb) return false;
+  const key = await pushKey(); if(!key) return false;
+  if(Notification.permission === "denied") return false;
+  if(Notification.permission !== "granted"){
+    if(!ask) return false;
+    const p = await Notification.requestPermission();
+    if(p !== "granted"){ render(); return false; }
+  }
+  const reg = await navigator.serviceWorker.ready;
+  let sub = await reg.pushManager.getSubscription();
+  if(sub && sub.options && sub.options.applicationServerKey && keyText(sub.options.applicationServerKey) !== key){ try{ await sub.unsubscribe(); }catch(e){} sub = null; }
+  if(!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(key) });
+  const j = sub.toJSON();
+  const { error } = await sb.rpc("push_subscribe", { p_endpoint: j.endpoint, p_p256dh: j.keys.p256dh, p_auth: j.keys.auth, p_device: pushDevice() });
+  if(error) throw new Error(dbMsg(error));
+  S.pushFor = S.me.id;
+  return true;
+}
+async function enablePush(){
+  try{
+    if(pushPerm() === "denied"){ toast("Notifications are blocked", "Allow them for SnapPro in your phone's Settings → Apps → SnapPro → Notifications", "x"); return; }
+    if(await pushSubscribe(true)){ toast("Notifications are on", "We'll let you know about quotes, bookings, messages and calls", "bellring"); }
+    else if(pushPerm() !== "granted") toast("Notifications are off", "You can turn them on any time in Profile", "x");
+  }catch(e){ toast("Couldn't turn on notifications", e.message, "x"); }
+  render();
+}
+/* this phone stops getting this account's notifications (log out) */
+async function pushForget(){
+  try{ if(!pushOK()) return; const reg = await navigator.serviceWorker.getRegistration(); const sub = reg && await reg.pushManager.getSubscription();
+       if(sub && sb) await sb.rpc("push_unsubscribe", { p_endpoint: sub.endpoint }); }catch(e){}
+  S.pushFor = null;
+}
+/* once per session: keep this phone's subscription saved for whoever is signed in */
+function pushSync(){
+  if(!S.me || S.pushFor === S.me.id || S.pushSyncing || !pushOK()) return;
+  S.pushSyncing = true;
+  pushKey().then(k => k && Notification.permission === "granted" ? pushSubscribe(false) : null).catch(() => {}).then(() => { S.pushSyncing = false; softRender(); });
+}
+/* the to-do card that offers notifications */
+function pushTodo(out){
+  if(!pushOK() || !PUSH_KEY || Notification.permission !== "default" || S.prefs.pushLater) return;
+  out.push({ key: "push", ic: "bellring", tone: "accent", urgent: false, title: "Turn on notifications",
+    sub: isPg() ? "Hear about new shoots near you, bookings, messages and calls — even when SnapPro is closed" : "Know the moment you get a quote, a message or a call — even when SnapPro is closed",
+    btn: "Turn on", go: "enablePush()" });
+}
+function pushRow(){
+  if(!pushOK()) return "";
+  const p = pushPerm(), on = p === "granted" && S.pushFor === (S.me && S.me.id);
+  return `<button class="li" onclick="${on ? "toast('Notifications are on','To turn them off, use your phone\\'s Settings → Apps → SnapPro → Notifications','bellring')" : "enablePush()"}">${icon("bellring",18,on ? "var(--green)" : "var(--muted)")}
+    <div class="grow"><div class="sm bold">Notifications</div><div class="xs muted2">${on ? "On for this phone" : p === "denied" ? "Blocked — allow them in your phone's Settings" : !PUSH_KEY ? "Coming soon" : "Off — tap to turn on"}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>`;
+}
+
+/* ---------- opening the right screen from a notification ---------- */
+function openTarget(t){
+  if(!t || !S.me) return;
+  const id = t.id;
+  S.stack = [];
+  if(t.open === "request" && id && isCustomer()) push("request", { id });
+  else if(t.open === "quote" && id && isPg()) push("quote", { id });
+  else if(t.open === "booking" && id) push(isPg() ? "job" : "booking", { id });
+  else if(t.open === "chat" && id) push("chat", { id });
+  else if(t.open === "reviews" && isPg()) push("pgReviews");
+  else render();
+}
+function openTargetFromUrl(u){
+  try{ const q = new URL(u, location.href).searchParams, open = q.get("open"), id = q.get("id");
+       if(open && /^[a-z]{3,10}$/.test(open)) return { open, id: id && /^[0-9a-f-]{36}$/i.test(id) ? id : null }; }catch(e){}
+  return null;
+}
+if("serviceWorker" in navigator){
+  navigator.serviceWorker.addEventListener("message", ev => {
+    const d = ev.data || {};
+    if(d.type === "snappro-open"){ const t = openTargetFromUrl(d.url); if(t && S.me) refresh(false).then(() => openTarget(t)); }
+  });
 }
 
 /* ============================================================
@@ -4589,7 +4888,9 @@ async function boot(){
   /* app.html?payment=<order id> opens the payment result for that order */
   const back = new URLSearchParams(location.search).get("payment");
   if(back && /^[A-Za-z0-9_-]{3,45}$/.test(back)) S.returnOrder = back;
-  if(want || back){ try{ history.replaceState(null, "", location.pathname); }catch(e){} }
+  /* app.html?open=booking&id=… — from a notification */
+  S.openAfter = openTargetFromUrl(location.href);
+  if(want || back || S.openAfter){ try{ history.replaceState(null, "", location.pathname); }catch(e){} }
   if(session){ await afterAuth(false); }
   else if(want === "signup"){ pwReset(); S.auth = { step: "signup", type: "customer", email: "" }; navMark(false); render(); }
   else if(want === "join"){ pwReset(); S.auth = { step: "signup", type: "photographer", email: "" }; navMark(false); render(); }

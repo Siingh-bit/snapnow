@@ -16,7 +16,7 @@ commission and pays the photographer their share after the shoot. See [PAYMENTS.
 | `app.html` | The app for customers and photographers (opens at `#signup`, `#join` or `#login`) |
 | `admin.html` | Staff console at snappro.in/admin.html (super admin, admin, manager) |
 | `supabase/snappro.sql` | Complete database set-up: tables, security rules, triggers, storage, invite emails, payments. Safe to run again. |
-| `supabase/functions/` | Server functions (Supabase Edge Functions) for Razorpay payments and webhooks |
+| `supabase/functions/` | Server functions (Supabase Edge Functions): Razorpay payments and webhooks, portfolio media on S3, and `push` (phone notifications, Web Push with VAPID) |
 | `terms.html`, `privacy.html`, `refunds.html`, `delivery.html`, `contact.html`, `delete-account.html` | Policy pages (delete-account is the account-deletion page Google Play links to) |
 | `site.webmanifest`, `sw.js`, `offline.html`, `icon-*.png` | Makes the app installable; the service worker only shows the offline page and never caches the app |
 | `.well-known/assetlinks.json` | (added after the first Play upload) proves the Android app `in.snappro.app` belongs to snappro.in |
@@ -26,6 +26,13 @@ commission and pays the photographer their share after the shoot. See [PAYMENTS.
 
 - **Accounts** — email and password, confirmed with a 6-digit code (Supabase Auth, emails sent
   through Brevo from noreply@snappro.in).
+- **Google sign-in** — "Continue with Google" (Supabase Auth, Google provider); new people pick customer or photographer first.
+- **Notifications** — quotes, bookings, booking updates, messages, calls and new requests reach the phone even when the app is
+  closed (Web Push). The database queues them (`push_outbox`), the `push` Edge Function sends them. Keys: VAPID pair + hook
+  secret, made once with SnapPro-Push-Keys.html (kept off the website).
+- **Travel range** — photographers choose their city only, nearby cities (Delhi NCR, Mumbai area, Chandigarh tricity,
+  Hyderabad, Kolkata — else their state) or anywhere in India; customers see who travels to them.
+- **Report & block** — in chats, profiles, quotes, requests and reviews; staff handle reports in Admin → Trust & support.
 - **Data** — everything lives in Supabase. Row-level security means people only see their own
   requests, quotes, bookings and messages; open requests are visible to photographers until they
   close. Prices, ratings and booking status are enforced in the database, not the browser.
