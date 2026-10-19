@@ -198,6 +198,105 @@ details.u3 summary{cursor:pointer;font-weight:750;font-size:14px}
 .lbgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
 .lbgrid label{display:block}.lbgrid .input{margin-top:5px}
 @media(max-width:700px){.tlt{flex-basis:96px}.tglabel{min-width:0}}
+/* ---------- easy console: layout ---------- */
+.wrap{max-width:none;padding:0}
+.shell{display:grid;grid-template-columns:268px 1fr;min-height:100vh}
+.side{position:sticky;top:0;height:100vh;overflow-y:auto;background:var(--surface);border-right:1px solid var(--border-soft);padding:18px 12px 24px;display:flex;flex-direction:column;gap:6px}
+.side-brand{padding:0 8px 10px}
+.nvg{margin-top:8px}
+.nvt{font-size:10.5px;letter-spacing:1.3px;text-transform:uppercase;color:var(--muted-2);font-weight:800;padding:8px 12px 4px}
+.nvi{display:flex;align-items:center;gap:11px;width:100%;padding:10px 12px;border-radius:11px;font-size:14.5px;font-weight:650;color:var(--muted);text-align:left}
+.nvi:hover{background:var(--surface-2);color:var(--text)}
+.nvi.on{background:var(--accent-soft);color:var(--text)}
+.nvi.on svg{stroke:var(--accent)}
+.nvn{background:var(--accent);color:#fff;font-size:11px;border-radius:9px;padding:1px 7px;font-weight:800}
+.side-foot{margin-top:auto;padding:16px 10px 0;line-height:1.5}
+.side-bg{display:none}
+.main{min-width:0;padding:0 28px 60px}
+.topbar{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:12px;padding:14px 0;background:var(--bg);border-bottom:1px solid var(--border-soft)}
+.tsearch{flex:1;display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:0 14px;color:var(--muted)}
+.tsearch input{flex:1;background:none;border:0;outline:none;padding:12px 0;font-size:14.5px;color:var(--text)}
+.tsearch:focus-within{border-color:var(--accent)}
+.iconb{width:40px;height:40px;border-radius:11px;display:grid;place-items:center;border:1px solid var(--border);background:var(--surface);flex:0 0 40px}
+.iconb.mob{display:none}
+.pmenu-wrap{position:relative}
+.avatar-b{width:42px;height:42px;border-radius:50%;background:linear-gradient(135deg,var(--accent),#ff8a3d);color:#fff;font-weight:800;font-size:14px;display:grid;place-items:center}
+.pmenu{position:absolute;right:0;top:50px;width:290px;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:12px;box-shadow:0 20px 50px -12px rgba(0,0,0,.45);z-index:40}
+.pm-me{padding:4px 6px 12px;border-bottom:1px solid var(--border-soft)}
+.pm-sec{font-size:10.5px;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted-2);font-weight:800;margin:12px 6px 8px}
+.seg{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;background:var(--surface-2);border-radius:11px;padding:4px}
+.seg button{display:flex;align-items:center;justify-content:center;gap:5px;padding:8px 4px;border-radius:8px;font-size:12.5px;font-weight:700;color:var(--muted)}
+.seg button.on{background:var(--surface);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.2)}
+.pm-row{display:flex;align-items:center;gap:10px;width:100%;padding:10px 8px;border-radius:9px;font-size:14px;font-weight:650;margin-top:6px}
+.pm-row:hover{background:var(--surface-2)}.pm-row.red{color:var(--red)}
+.phead{padding:22px 0 6px}
+.ptitle{display:flex;align-items:center;gap:10px;font-size:26px;font-weight:800;letter-spacing:-.7px}
+.ptitle svg{stroke:var(--accent)}
+.pdesc{font-size:15px;color:var(--muted);margin-top:6px;max-width:820px}
+.ptip{display:flex;gap:8px;align-items:flex-start;margin-top:10px;font-size:13px;color:var(--muted);background:var(--surface);border:1px dashed var(--border);border-radius:11px;padding:9px 12px;max-width:820px}
+.ptip svg{flex:0 0 auto;margin-top:1px;stroke:var(--blue)}
+.okbar,.errbar{margin-top:12px;padding:11px 14px;border-radius:11px;font-size:13.5px;font-weight:600}
+.okbar{background:rgba(40,199,111,.12);border:1px solid rgba(40,199,111,.35);color:var(--green)}
+.errbar{background:rgba(255,77,94,.1);border:1px solid rgba(255,77,94,.35);color:var(--red)}
+.pbody{margin-top:16px}
+/* Home: needs you now */
+.att{margin-bottom:22px}
+.att-t{font-size:12px;letter-spacing:1.3px;text-transform:uppercase;font-weight:800;color:var(--accent);margin-bottom:10px}
+.att-g{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:12px}
+.att-i{display:flex;align-items:center;gap:14px;text-align:left;padding:16px;border-radius:14px;background:var(--surface);border:1px solid rgba(255,90,31,.35);transition:transform .12s,border-color .12s}
+.att-i:hover{transform:translateY(-1px);border-color:var(--accent)}
+.att-i>svg:first-child{stroke:var(--accent);flex:0 0 auto}
+.att-n{font-size:24px;font-weight:800;letter-spacing:-.6px}
+.att-ok{display:flex;align-items:center;gap:10px;padding:14px 16px;border-radius:14px;background:rgba(40,199,111,.1);border:1px solid rgba(40,199,111,.3);color:var(--green);font-weight:700}
+/* commission */
+.big-card .bigv,.bigv{font-size:40px;font-weight:850;letter-spacing:-1.2px;margin:4px 0 6px}
+/* click-through trail inside detail sheets */
+.trail{position:sticky;top:-20px;z-index:5;display:flex;align-items:center;gap:10px;margin:-20px -20px 14px;padding:12px 16px;background:var(--surface-2);border-bottom:1px solid var(--border);border-radius:var(--r) var(--r) 0 0}
+.crumbs{flex:1;min-width:0;font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.crumbs i{font-style:normal;margin:0 7px;color:var(--muted-2)}.crumbs .cur{color:var(--text);font-weight:750}
+a.idl{color:var(--accent)!important;text-decoration-color:currentColor!important;font-weight:700}
+/* every row and number is clickable */
+.dt tr.rowlink td:first-child{position:relative}
+button.stat.tap{cursor:pointer}
+/* phones and small screens */
+@media(max-width:900px){
+  .shell{grid-template-columns:1fr}
+  .side{position:fixed;left:0;top:0;bottom:0;width:286px;z-index:80;transform:translateX(-105%);transition:transform .2s;box-shadow:0 0 40px rgba(0,0,0,.4)}
+  .nav-open .side{transform:none}
+  .nav-open .side-bg{display:block;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:70}
+  .iconb.mob{display:grid}
+  .main{padding:0 14px 50px}
+  .ptitle{font-size:21px}
+  .tsearch input{font-size:14px}
+}
+/* ---------- light appearance ---------- */
+html[data-theme=light]{
+  --bg:#f5f4f0; --surface:#ffffff; --surface-2:#f0eee9; --surface-3:#e6e3dc;
+  --border:#dcd8cf; --border-soft:#e8e5de; --text:#1d1a16; --muted:#5f5a52; --muted-2:#8a857c;
+  --accent:#e8501a; --accent-soft:rgba(232,80,26,.10);
+  --green:#168a4c; --red:#d1303f; --blue:#2c66d6; --purple:#7a4fd6;
+}
+html[data-theme=light] body{background:var(--bg)}
+html[data-theme=light] .chip.super{background:rgba(232,80,26,.12);border-color:rgba(232,80,26,.35);color:#b33a0d}
+html[data-theme=light] .chip.admin{background:rgba(44,102,214,.1);border-color:rgba(44,102,214,.35);color:#2252b3}
+html[data-theme=light] .chip.manager{background:rgba(122,79,214,.1);border-color:rgba(122,79,214,.35);color:#5b36ad}
+html[data-theme=light] .chip.green{background:rgba(22,138,76,.1);border-color:rgba(22,138,76,.35);color:#11713e}
+html[data-theme=light] .chip.red{background:rgba(209,48,63,.08);border-color:rgba(209,48,63,.35);color:#b52231}
+html[data-theme=light] .chip.amber,html[data-theme=light] .warn{background:#fff6e0;border-color:#efc56a;color:#7a5200}
+html[data-theme=light] .sheet-bg{background:rgba(30,25,20,.45)}
+html[data-theme=light] .sheet,html[data-theme=light] .pmenu{box-shadow:0 30px 70px -20px rgba(40,30,20,.35)}
+html[data-theme=light] a.lnk{text-decoration-color:rgba(0,0,0,.25)}
+html[data-theme=light] .stat.hl{border-color:rgba(232,80,26,.35);background:linear-gradient(145deg,rgba(232,80,26,.08),var(--surface))}
+html[data-theme=light] .cl.photographer{background:rgba(232,80,26,.10)}
+html[data-theme=light] .kycbox{background:rgba(44,102,214,.05)}
+html[data-theme=light] .preset{color:#fff}
+html[data-theme=light] .okbar{background:rgba(22,138,76,.08)}
+html[data-theme=light] .errbar{background:rgba(209,48,63,.06)}
+html[data-theme=light] input[type=date]{color-scheme:light}
+html[data-theme=dark] input[type=date]{color-scheme:dark}
+.main{overflow-x:clip}
+.pbody .tabs{flex-wrap:wrap;max-width:100%}
+.pbody .card,.pbody .grid2>*,.pbody .grid3>*{min-width:0}
 </style>
 </head>
 <body>
@@ -2854,7 +2953,7 @@ function vUser360(){
       ${g ? `<div class="card" style="grid-column:1/-1"><div class="sec">Photographer</div><div class="grid">
         ${kpi(esc(g.approval_status), "Approval", g.approved_at ? fmt(g.approved_at) : "")}${kpi(esc(g.kyc || "not sent"), "ID check")}${kpi(g.rating ? Number(g.rating).toFixed(1) + "★" : "—", "Rating", num(g.review_count) + " reviews")}
         ${kpi(num(g.jobs_done), "Shoots done")}${kpi(num(g.photos), "Portfolio items")}${kpi(g.is_online ? "Available" : "Off", "Right now")}${kpi(esc((g.categories || []).map(c => CAT_NAMES[c] || c).join(", ") || "—"), "Shoots offered")}
-        ${m ? kpi(g.commission_pct != null ? g.commission_pct + "%" : "Default", "Commission") : ""}${m && g.storage_quota ? kpi((Number(g.storage_quota) / 1048576).toFixed(0) + " MB", "Storage") : ""}${g.featured_until ? kpi(fmt(g.featured_until), "Featured until") : ""}${kpi(esc({ city: "Own city only", nearby: "Nearby cities", anywhere: "Anywhere in India" }[g.travel] || "Own city only"), "Travels for shoots")}</div></div>` : ""}
+        ${m ? `<button class="stat tap" onclick="editPgRate('${p.id}', ${JSON.stringify(g.display_name || p.name || "").replace(/"/g, "&quot;")}, ${g.commission_pct == null ? "null" : Number(g.commission_pct)})" title="Change this photographer's commission"><div class="v">${g.commission_pct != null ? Number(g.commission_pct) + "%" : "Standard"}</div><div class="l">Commission · change <span class="go">›</span></div></button>` : ""}${m && g.storage_quota ? kpi((Number(g.storage_quota) / 1048576).toFixed(0) + " MB", "Storage") : ""}${g.featured_until ? kpi(fmt(g.featured_until), "Featured until") : ""}${kpi(esc({ city: "Own city only", nearby: "Nearby cities", anywhere: "Anywhere in India" }[g.travel] || "Own city only"), "Travels for shoots")}</div></div>` : ""}
     </div>
     <div class="mt16">
       ${sec("Timeline — everything they did (" + num((D.timeline || []).length) + ")", `<div class="tl">${(D.timeline || []).map(e => { const gg = evGroup(e.kind);
@@ -2886,6 +2985,397 @@ async function adminDeleteAccount(id){
   if(S.dept.trust) deptLoad("trust", true);
   openUser(id);
 }
+
+/* ===================== EASY CONSOLE =====================
+   A simple layout on top of everything above:
+   • a side menu in plain words, grouped (People, Shoots, Money…)
+   • every page says what it's for in one line
+   • "Needs you now" on Home: the things waiting for a decision
+   • light / dark appearance from the profile menu
+   • everything clickable: SnapPro IDs, booking references, table rows and
+     number tiles open the details behind them, with Back to retrace steps
+   • Commission page: standard rate and each photographer's own rate */
+
+/* ---------- appearance ---------- */
+const THEME_KEY = "snappro.admin.theme";
+function themePref(){ try{ return localStorage.getItem(THEME_KEY) || "dark"; }catch(e){ return "dark"; } }
+function themeNow(){ const p = themePref(); return p === "system" ? (window.matchMedia && matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark") : p; }
+function applyTheme(){ document.documentElement.setAttribute("data-theme", themeNow()); }
+function setTheme(p){ try{ localStorage.setItem(THEME_KEY, p); }catch(e){} applyTheme(); S.menuOpen = false; render(); }
+applyTheme();
+try{ matchMedia("(prefers-color-scheme: light)").addEventListener("change", () => { if(themePref() === "system"){ applyTheme(); render(); } }); }catch(e){}
+/* charts are drawn with dark-theme colours; repaint their grid and labels for light */
+function themeCharts(){
+  if(!window.Chart || !Chart.instances) return;
+  const light = themeNow() === "light", grid = light ? "rgba(0,0,0,.08)" : "rgba(255,255,255,.06)", tick = light ? "#5b5b6b" : "#8b8b9e", leg = light ? "#33333f" : "#c9c9d6";
+  Object.values(Chart.instances).forEach(c => { try{
+    const o = c.options; let changed = false;
+    Object.values(o.scales || {}).forEach(sc => { if(sc.grid && sc.grid.color !== grid){ sc.grid.color = grid; changed = true; } if(sc.ticks && sc.ticks.color !== tick){ sc.ticks.color = tick; changed = true; } });
+    if(o.plugins && o.plugins.legend && o.plugins.legend.labels && o.plugins.legend.labels.color !== leg){ o.plugins.legend.labels.color = leg; changed = true; }
+    if(changed) c.update("none");
+  }catch(e){} });
+}
+
+/* ---------- small icons ---------- */
+const ICO = {
+  home: '<path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/>',
+  users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7"/><path d="M18 14a6 6 0 0 1 3.5 6"/>',
+  cam: '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>',
+  heart: '<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8z"/>',
+  funnel: '<path d="M3 4h18l-7 8.5V19l-4 2v-8.5z"/>',
+  gift: '<rect x="3" y="8" width="18" height="13" rx="1"/><path d="M12 8v13M3 12h18"/><path d="M12 8C10 4 6.5 4 6.5 6.2S9 8 12 8c3 0 5.5 0 5.5-1.8S14 4 12 8z"/>',
+  bolt: '<path d="M13 2L4.5 13.5H11l-1 8.5 8.5-11.5H12z"/>',
+  cal: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 11h18"/>',
+  gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>',
+  card: '<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/>',
+  chart: '<path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/>',
+  pct: '<path d="M19 5L5 19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/>',
+  tag: '<path d="M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L2 12V2h10l8.6 8.6a2 2 0 0 1 0 2.8z"/><circle cx="7" cy="7" r="1.5"/>',
+  mega: '<path d="M3 11v2a1 1 0 0 0 1 1h3l5 4V6L7 10H4a1 1 0 0 0-1 1z"/><path d="M16 8a5 5 0 0 1 0 8"/>',
+  shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
+  list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
+  team: '<circle cx="12" cy="7" r="4"/><path d="M5 21a7 7 0 0 1 14 0"/>',
+  search: '<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>',
+  menu: '<path d="M3 6h18M3 12h18M3 18h18"/>',
+  back: '<path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/>',
+  x: '<path d="M18 6L6 18"/><path d="M6 6l12 12"/>',
+  sun: '<circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+  moon: '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>',
+  monitor: '<rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/>',
+  out: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/>',
+  help: '<circle cx="12" cy="12" r="9"/><path d="M9.6 9.2a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.2-2.4 3.6"/><path d="M12 17h.01"/>',
+  chev: '<path d="M9 18l6-6-6-6"/>',
+  alert: '<path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/>'
+};
+const ic = (n, s, c) => `<svg width="${s || 18}" height="${s || 18}" viewBox="0 0 24 24" fill="none" stroke="${c || "currentColor"}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICO[n] || ""}</svg>`;
+
+/* ---------- the menu: every page in plain words ---------- */
+function navGroups(){
+  const role = S.me.role, money = role !== "manager", sup = role === "super_admin";
+  const waiting = (S.photographers || []).filter(p => p.approval_status === "pending").length;
+  const refunds = S.pay ? S.pay.payments.filter(p => ["refund_due","refund_failed"].includes(p.refund_status)).length : 0;
+  const reports = S.dept && S.dept.trust && S.dept.trust.data ? S.dept.trust.data.reports_open || 0 : 0;
+  const g = [
+    { t: "", items: [["overview", "home", "Home", "Today at a glance and what needs you"]] },
+    { t: "People", items: [
+      money && ["users", "users", "Everyone", "All customers and photographers"],
+      ["pros", "cam", "Photographers", "Approve new ones, check IDs", waiting],
+      ["customers", "heart", "Customer insights", "Who books, who comes back"],
+      ["leads", "funnel", "Leads", "Where new people come from"],
+      ["referrals", "gift", "Invites & referrals", "Friends inviting friends"] ] },
+    { t: "Shoots", items: [
+      ["requests", "bolt", "Shoot requests", "What customers have asked for"],
+      ["bookings", "cal", "Bookings", "Every booked shoot"],
+      ["ops", "gear", "Operations", "Speed, cancellations, cities"],
+      ["timeline", "clock", "Live timeline", "Everything that happens, as it happens"] ] },
+    { t: "Money", items: [
+      money && ["payments", "card", "Payments & refunds", "Money in, refunds, payouts", refunds],
+      money && ["finance", "chart", "Profit & finance", "Revenue, commission, profit"],
+      money && ["commission", "pct", "Commission", "Standard rate and each photographer's rate"],
+      money && ["offers", "tag", "Offers & promo codes", "Discounts and rewards"] ] },
+    { t: "Grow", items: [["marketing", "mega", "Marketing", "Campaigns, sources, conversion"]] },
+    { t: "Safety", items: [
+      ["trust", "shield", "Trust & support", "Reports, blocks, suspensions", reports],
+      money && ["activity", "list", "Staff activity", "Who on the team did what"],
+      sup && ["team", "team", "Team", "Invite staff and set their access"] ] }
+  ];
+  g.forEach(x => x.items = x.items.filter(Boolean));
+  return g.filter(x => x.items.length);
+}
+const navItem = k => { for(const g of navGroups()) for(const it of g.items) if(it[0] === k) return it; return null; };
+function goPage(k){ S.navOpen = false; S.menuOpen = false; S.trail = []; S.drill = null; S.u360 = null; S.bk = null; openTab(k); try{ window.scrollTo(0, 0); }catch(e){} }
+
+/* ---------- the page frame ---------- */
+vConsole = function(){
+  const me = S.me, cur = navItem(S.tab) || navItem("overview");
+  const nav = navGroups().map(g => `<div class="nvg">${g.t ? `<div class="nvt">${g.t}</div>` : ""}${g.items.map(([k, i, l, d, n]) =>
+      `<button class="nvi ${S.tab === k ? "on" : ""}" onclick="goPage('${k}')" title="${esc(d)}">${ic(i, 18)}<span class="grow">${l}</span>${n ? `<b class="nvn">${n}</b>` : ""}</button>`).join("")}</div>`).join("");
+  const initials = String(me.name || me.email || "?").trim().split(/[\s@.]+/).map(w => w[0] || "").slice(0, 2).join("").toUpperCase();
+  const pref = themePref();
+  return `<div class="shell ${S.navOpen ? "nav-open" : ""}">
+    <aside class="side" aria-label="Menu">
+      <div class="side-brand">${brand.replace('margin-bottom:26px', 'margin:0')}</div>
+      <nav>${nav}</nav>
+      <div class="side-foot xs muted2">Tip: click any name, SnapPro ID, booking or number to see everything behind it.</div>
+    </aside>
+    <div class="side-bg" onclick="S.navOpen=false;render()"></div>
+    <main class="main">
+      <header class="topbar">
+        <button class="iconb mob" aria-label="Menu" onclick="S.navOpen=true;render()">${ic("menu", 20)}</button>
+        <div class="tsearch">${ic("search", 17)}<input id="findQ" placeholder="Find anyone — name, phone, email, SnapPro ID or booking ref" onkeydown="if(event.key==='Enter')findAnything()"></div>
+        <div class="pmenu-wrap">
+          <button class="avatar-b" onclick="S.menuOpen=!S.menuOpen;render()" aria-label="Profile and settings"><span>${esc(initials)}</span></button>
+          ${S.menuOpen ? `<div class="pmenu" role="menu">
+            <div class="pm-me"><div class="sm" style="font-weight:800">${esc(me.name || me.email)}</div><div class="xs muted2">${esc(me.email)}</div>
+              <span class="chip ${me.role === "super_admin" ? "super" : me.role} mt8">${roleLabel(me.role)}</span></div>
+            <div class="pm-sec">Appearance</div>
+            <div class="seg">${[["light","sun","Light"],["dark","moon","Dark"],["system","monitor","Device"]].map(([v, i, l]) =>
+              `<button class="${pref === v ? "on" : ""}" onclick="setTheme('${v}')">${ic(i, 15)} ${l}</button>`).join("")}</div>
+            <button class="pm-row" onclick="S.menuOpen=false;S.hideTips=!S.hideTips;render()">${ic("help", 16)} ${S.hideTips ? "Show" : "Hide"} page tips</button>
+            <button class="pm-row red" onclick="signOut()">${ic("out", 16)} Sign out</button>
+          </div>` : ""}
+        </div>
+      </header>
+      <div class="phead">
+        <div class="ptitle">${ic(cur[1], 24)} <span>${cur[2]}</span></div>
+        <div class="pdesc">${esc(PAGE_HELP[S.tab] ? PAGE_HELP[S.tab][0] : cur[3])}</div>
+        ${!S.hideTips && PAGE_HELP[S.tab] && PAGE_HELP[S.tab][1] ? `<div class="ptip">${ic("help", 15)} <span>${PAGE_HELP[S.tab][1]}</span></div>` : ""}
+      </div>
+      ${S.note ? `<div class="okbar">${esc(S.note)}</div>` : ""}
+      ${S.err ? `<div class="errbar">${esc(S.err)}</div>` : ""}
+      <div class="pbody">${
+        S.tab === "commission" ? vCommission() :
+        S.tab === "overview" ? vAttention() + vOverview() :
+        tabContent()
+      }</div>
+    </main>
+  </div>`;
+};
+function tabContent(){
+  const V = { users: vUsers, bookings: vBookings, payments: vPayments, requests: vRequests, pros: vPros, offers: vOffers, activity: vActivity, team: vTeam,
+              leads: vLeads, marketing: vMarketing, finance: vFinance, ops: vOps, customers: vCustomers, referrals: vReferrals, trust: vTrust, timeline: vTimeline };
+  return V[S.tab] ? V[S.tab]() : vAttention() + vOverview();
+}
+/* one line about every page, and a tip */
+const PAGE_HELP = {
+  overview: ["Today at a glance. Anything that needs a decision is at the top.", "Click any number to see the people, bookings or payments behind it."],
+  users: ["Every customer and photographer. Click a row to see everything about that person.", "Search by name, phone, email, city or SnapPro ID (SPC… customers, SPP… photographers)."],
+  pros: ["Photographers waiting for approval, their ID checks, and everyone already approved.", "Approve or send back a profile here. Click a name to see their full history."],
+  customers: ["Who your customers are, how often they come back and how much they spend.", "Click a name or a row to open that customer."],
+  leads: ["Where new sign-ups come from — Google, Instagram, invites, ads — and how many turn into bookings.", "Change the period at the top. Click a source or a person to dig in."],
+  referrals: ["Friends inviting friends: who invited whom, who got rewarded, and anything held for checking.", "Change the rewards on Offers & promo codes."],
+  requests: ["Every shoot a customer has posted, and what happened to it.", "Click a request to see its quotes and booking."],
+  bookings: ["Every booked shoot — status, money, people.", "Click a booking for the full story: payments, chat, quotes and review."],
+  ops: ["How smoothly shoots run: how fast quotes come, cancellations, busy cities and times.", "Click any number or row to see the shoots behind it."],
+  timeline: ["Everything that happens on SnapPro, newest first — sign-ups, quotes, bookings, payments, chats.", "Turn on Live to watch it update. Click any name or booking."],
+  payments: ["Money in from customers, refunds to send, and payouts to photographers.", "Refunds and payouts waiting for you are highlighted."],
+  finance: ["Revenue, SnapPro's commission, discounts and profit over time.", "Click a number to see the payments behind it."],
+  commission: ["What SnapPro keeps from each booking. One standard rate for everyone, and a special rate for any photographer.", "Changes apply to new bookings only. Bookings already made keep their rate."],
+  offers: ["Promo codes, offers and the referral reward settings.", "Start from a ready-made offer, then change the amount or dates."],
+  marketing: ["Which campaigns, websites and channels bring visitors, sign-ups and bookings.", "Use the link builder to make trackable links for ads and posts."],
+  trust: ["Reports from users, blocked and suspended accounts, ID checks, low reviews and deleted accounts.", "Open reports are at the top. Click a person to see everything about them before deciding."],
+  activity: ["Every action by your team — approvals, refunds, payouts, suspensions, chats opened.", "Use it to check who changed what, and when."],
+  team: ["Invite staff and choose what they can see.", "Managers can't see money or contact details. Only super admins can manage the team."]
+};
+
+/* ---------- Home: things waiting for a decision ---------- */
+function vAttention(){
+  const k = S.insights && S.insights.kpis || {}, money = S.me.role !== "manager", T = S.dept && S.dept.trust && S.dept.trust.data;
+  if(money && S.dept && !S.dept.trust && !S.attLoading){ S.attLoading = true; setTimeout(() => deptLoad("trust", true)); }
+  const waiting = (S.photographers || []).filter(p => p.approval_status === "pending").length;
+  const items = [
+    [waiting || k.photographers_pending, "Photographers waiting for approval", "Check their profile and photos, then approve", "goPage('pros')", "cam"],
+    [T && T.kyc && T.kyc.submitted, "ID checks to review", "Government ID + face photo sent in", "goPage('pros')", "shield"],
+    [T && T.reports_open, "Reports from users", "Someone reported a person or a chat", "goPage('trust')", "alert"],
+    money && [k.refunds_due, "Refunds to send", "Customers waiting for their money back", "openDrill('refunds_due','Refunds to do')", "card"],
+    money && [k.payouts_due || 0, "Owed to photographers", "Payouts due now", "openDrill('payouts_due','Payouts due to photographers')", "card", true],
+    money && [k.balances_due, "Balances customers still owe", "Shoot started, balance not paid", "openDrill('balances_due','Balances owed by customers',null,true)", "clock"],
+    [k.now_open_requests, "Requests waiting for quotes", "Customers waiting — photographers can quote now", "openDrill('open_requests','Requests waiting for quotes',null,true)", "bolt"]
+  ].filter(x => x && Number(x[0]) > 0);
+  return `<div class="att">${items.length ? `<div class="att-t">Needs you now</div><div class="att-g">${items.map(([n, t, s, go, i, isMoney]) =>
+      `<button class="att-i" onclick="${go}">${ic(i, 20)}<div class="grow"><div class="att-n">${isMoney ? inr(n) : num(n)}</div><div class="sm" style="font-weight:700">${t}</div><div class="xs muted2">${s}</div></div>${ic("chev", 18)}</button>`).join("")}</div>`
+    : `<div class="att-ok">${ic("shield", 18)} All clear — nothing is waiting for you right now.</div>`}</div>`;
+}
+
+/* ---------- Commission ---------- */
+async function loadCommission(){
+  const { data, error } = await sb.rpc("admin_commission_overview");
+  S.comm = error ? { err: /function/i.test(error.message) ? "Run the latest supabase/snappro.sql first." : error.message } : data;
+  render();
+}
+function vCommission(){
+  if(!S.comm){ loadCommission(); return `<div class="empty">Loading…</div>`; }
+  const C = S.comm; if(C.err) return `<div class="warn">${esc(C.err)}</div>`;
+  const std = Number(C.standard), list = C.photographers || [], custom = list.filter(p => p.custom);
+  const q = (S.commQ || "").trim().toLowerCase(), f = S.commF || "all";
+  const rows = list.filter(p => (f === "all" || (f === "custom" ? p.custom : !p.custom)) && (!q || [p.name, p.public_id, p.city].some(v => v && String(v).toLowerCase().includes(q))));
+  return `<div class="grid2">
+    <div class="card big-card"><div class="sec">Standard commission — everyone</div>
+      <div class="bigv">${std}%</div>
+      <div class="sm muted">SnapPro keeps <b>${std}%</b> of every booking. On a ₹10,000 booking that's <b>${inr(10000 * std / 100)}</b>; the photographer gets <b>${inr(10000 - 10000 * std / 100)}</b>.</div>
+      ${C.can_change_standard ? `<div class="row mt16"><input id="stdPct" class="input" type="number" min="0" max="50" step="0.5" value="${std}" style="max-width:120px"><span class="muted">%</span>
+        <button class="btn primary" onclick="saveStandardCommission()">Save new standard rate</button></div>
+        <div class="xs muted2 mt8">Between 0% and 50%. Applies to new bookings only.</div>`
+        : `<div class="xs muted2 mt12">Only a super admin can change the standard rate.</div>`}</div>
+    <div class="card big-card"><div class="sec">Special rates</div>
+      <div class="bigv">${num(custom.length)}</div>
+      <div class="sm muted">photographer${custom.length === 1 ? "" : "s"} on their own rate. Everyone else pays the standard ${std}%.</div>
+      <div class="xs muted2 mt12">Give a lower rate to reward top photographers, or a higher one where agreed. You can also give a time-limited “lower commission” reward from Offers & promo codes.</div></div>
+  </div>
+  <div class="card mt16">
+    <div class="between" style="flex-wrap:wrap;gap:10px"><div class="sec" style="margin:0">Each photographer's rate <span class="cnt">${num(rows.length)}</span></div>
+      <div class="row" style="flex-wrap:wrap">
+        <div class="tabs">${[["all","All"],["custom","Special rate"],["standard","Standard rate"]].map(([k, l]) => `<button class="tab ${f === k ? "on" : ""}" onclick="S.commF='${k}';render()">${l}</button>`).join("")}</div>
+        <input id="commQ" class="input" style="width:220px;padding:8px 11px" placeholder="Search name, ID or city" value="${esc(S.commQ || "")}" oninput="S.commQ=this.value;clearTimeout(tbTimer);tbTimer=setTimeout(render,200)">
+      </div></div>
+    <div class="tblwrap mt12"><table class="dt"><thead><tr><th>Photographer</th><th>City</th><th>Status</th><th>Shoots</th><th>Booking value</th><th>Commission earned</th><th>Their rate</th><th style="min-width:250px">Change</th></tr></thead><tbody>
+      ${rows.map(p => `<tr>
+        <td>${userLink(p.id, p.name, p.public_id)}</td><td>${esc(p.city || "—")}</td><td><span class="chip ${p.approval_status === "approved" ? "green" : ""}">${esc(p.approval_status)}</span></td>
+        <td>${num(p.jobs_done)}</td><td>${inr(p.booking_value)}</td><td>${inr(p.commission_earned)}</td>
+        <td>${p.custom ? `<b>${Number(p.commission_pct)}%</b> <span class="chip amber">special</span>` : `<span class="muted">${std}% standard</span>`}${p.active_rewards ? ` <span class="chip green" title="A lower-commission reward is active">reward</span>` : ""}</td>
+        <td><div class="row"><input id="pc_${p.id}" class="input" type="number" min="0" max="50" step="0.5" placeholder="${std}" value="${p.custom ? Number(p.commission_pct) : ""}" style="width:90px;padding:7px 9px">
+          <button class="btn sm primary" onclick="savePgRate('${p.id}')">Save</button>${p.custom ? `<button class="btn sm" onclick="resetPgRate('${p.id}')">Use standard</button>` : ""}</div></td></tr>`).join("")
+        || `<tr><td colspan="8"><div class="empty">No photographers match.</div></td></tr>`}
+    </tbody></table></div></div>
+  <div class="mt16">${dtable("commHist", "Who changed commission, and when", [["at","When","dt"],["staff_email","By"],["action","What"],["target_name","For", r => r.target_id && /^[0-9a-f-]{36}$/.test(r.target_id) ? userLink(r.target_id, r.target_name) : esc(r.target_name || "Everyone")],
+      ["details","Change", r => r.details ? esc((r.details.from != null ? r.details.from + "% → " : "") + (r.details.to != null ? r.details.to + "%" : "standard")) : ""]], C.history, { search: false, empty: "No changes yet." })}</div>`;
+}
+async function saveStandardCommission(){
+  const v = Number((el("stdPct") || {}).value);
+  if(!(v >= 0 && v <= 50)){ S.err = "Enter a commission between 0 and 50%."; render(); return; }
+  if(!confirm("Change the standard commission to " + v + "% for all new bookings?")) return;
+  const { error } = await sb.rpc("admin_set_commission", { p_pct: v });
+  if(error){ S.err = error.message; render(); return; }
+  S.err = ""; S.note = "Standard commission is now " + v + "% for new bookings."; S.comm = null; if(S.pay) loadPayments(true); render();
+}
+async function savePgRate(id, value){
+  const raw = value !== undefined ? value : ((el("pc_" + id) || {}).value || "").trim();
+  const v = raw === "" || raw === null ? null : Number(raw);
+  if(v !== null && !(v >= 0 && v <= 50)){ S.err = "Enter a commission between 0 and 50%, or leave it empty for the standard rate."; render(); return; }
+  const { error } = await sb.rpc("admin_set_pg_commission", { p_pg: id, p_pct: v });
+  if(error){ S.err = error.message; render(); return; }
+  S.err = ""; S.note = v === null ? "Back to the standard rate for new bookings." : "Special rate of " + v + "% saved for new bookings.";
+  S.comm = null; loadData(); if(S.u360 && S.u360.data && S.u360.data.profile.id === id) openUserQuiet(id); render();
+}
+function resetPgRate(id){ if(confirm("Put this photographer back on the standard rate?")) savePgRate(id, null); }
+/* from the person view */
+function editPgRate(id, name, cur){
+  const v = prompt("Commission for " + (name || "this photographer") + " in %.\nLeave empty to use the standard rate.", cur == null ? "" : String(cur));
+  if(v === null) return;
+  savePgRate(id, v.trim());
+}
+
+/* ---------- click through: Back between people, bookings and lists ---------- */
+S.trail = [];
+const trailTop = () => S.trail[S.trail.length - 1];
+function trailShow(item){ S.drill = item.t === "drill" ? item.st : null; S.u360 = item.t === "user" ? item.st : null; S.bk = item.t === "bk" ? item.st : null; }
+function trailPush(t, st){ const top = trailTop(); if(top && top.st === st) return; S.trail.push({ t, st }); if(S.trail.length > 30) S.trail.shift(); trailShow(trailTop()); }
+const _openUser = openUser, _openBooking = openBooking, _openDrill = openDrill;
+openUser = function(key){ const p = _openUser(key); if(S.u360) trailPush("user", S.u360); render(); return p; };
+openBooking = function(id){ const p = _openBooking(id); if(S.bk) trailPush("bk", S.bk); render(); return p; };
+openDrill = function(kind, title, arg, allTime){ S.trail = S.u360 || S.bk ? S.trail : []; const p = _openDrill(kind, title, arg, allTime); if(S.drill) trailPush("drill", S.drill); render(); return p; };
+function openUserQuiet(id){ const keep = S.trail.slice(0, -1); _openUser(id); S.trail = keep; trailPush("user", S.u360); }
+function navBack(){
+  S.trail.pop(); const top = trailTop();
+  if(!top){ S.drill = null; S.u360 = null; S.bk = null; render(); return; }
+  trailShow(top);
+  /* reload anything that hadn't finished loading when we left it */
+  if(top.t === "user" && !top.st.data && !top.st.err){ S.trail.pop(); openUser(top.st.key); return; }
+  if(top.t === "bk" && !top.st.data && !top.st.err){ S.trail.pop(); openBooking(top.st.id); return; }
+  if(top.t === "drill" && !top.st.rows && !top.st.err){ S.trail.pop(); openDrill(top.st.kind, top.st.title, top.st.arg); return; }
+  render();
+}
+function closeAll(){ S.trail = []; S.drill = null; S.u360 = null; S.bk = null; render(); }
+closeUser = navBack; closeDrill = navBack;
+const trailLabel = it => it.t === "user" ? (it.st.data && it.st.data.profile ? it.st.data.profile.name || it.st.data.profile.public_id : it.st.key)
+  : it.t === "bk" ? "Booking " + payRef(it.st.id) : it.st.title;
+function trailBar(){
+  if(!S.trail.length) return "";
+  return `<div class="trail"><button class="btn sm" onclick="navBack()">${ic("back", 15)} ${S.trail.length > 1 ? "Back" : "Close"}</button>
+    <div class="crumbs">${S.trail.map((it, i) => `<span class="${i === S.trail.length - 1 ? "cur" : ""}">${esc(trailLabel(it))}</span>`).join(`<i>›</i>`)}</div>
+    <button class="iconb" onclick="closeAll()" aria-label="Close all">${ic("x", 18)}</button></div>`;
+}
+/* the booking sheet's own Close/Back goes back one step too */
+const _vBooking = vBooking;
+vBooking = function(){ return _vBooking().replace(/S\.bk=null;render\(\)/g, "navBack()"); };
+document.addEventListener("keydown", e => { if(e.key === "Escape" && S.trail && S.trail.length && !S.chatView){ e.stopImmediatePropagation(); navBack(); } }, true);
+
+/* ---------- click through: IDs and booking refs anywhere become links ---------- */
+const ID_RE = /\b(SP[CP]\d{4,}|SP-[0-9A-F]{8})\b/g;
+function linkify(root){
+  if(!root) return;
+  const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, { acceptNode: n => {
+    if(!n.nodeValue || !/SP[CP-]/.test(n.nodeValue)) return NodeFilter.FILTER_REJECT;
+    for(let p = n.parentNode; p && p !== root; p = p.parentNode){ if(/^(A|BUTTON|INPUT|TEXTAREA|SELECT|SCRIPT|STYLE|OPTION|TH)$/.test(p.tagName) || (p.classList && p.classList.contains("nolink"))) return NodeFilter.FILTER_REJECT; }
+    return NodeFilter.FILTER_ACCEPT; } });
+  const nodes = []; while(w.nextNode()) nodes.push(w.currentNode);
+  nodes.forEach(n => {
+    const s = n.nodeValue; ID_RE.lastIndex = 0; if(!ID_RE.test(s)) return; ID_RE.lastIndex = 0;
+    const f = document.createDocumentFragment(); let last = 0, m;
+    while((m = ID_RE.exec(s))){
+      if(m.index > last) f.appendChild(document.createTextNode(s.slice(last, m.index)));
+      const a = document.createElement("a"); a.className = "lnk idl"; a.textContent = m[1]; a.title = m[1].startsWith("SP-") ? "Open this booking" : "Open this person";
+      a.setAttribute("onclick", `event.stopPropagation();${m[1].startsWith("SP-") ? "openBookingRef" : "openUser"}('${m[1]}')`);
+      f.appendChild(a); last = m.index + m[1].length;
+    }
+    if(last < s.length) f.appendChild(document.createTextNode(s.slice(last)));
+    n.parentNode.replaceChild(f, n);
+  });
+}
+async function openBookingRef(ref){
+  const { data, error } = await sb.rpc("admin_find_booking", { p_ref: ref });
+  if(error || !data){ S.err = "Couldn't find booking " + ref + "."; render(); return; }
+  openBooking(data);
+}
+async function findAnything(){
+  const t = ((el("findQ") || {}).value || "").trim(); if(!t) return;
+  if(/^SP-[0-9A-F]{8}$/i.test(t)) return openBookingRef(t.toUpperCase());
+  S.trail = []; return findAnyone();
+}
+
+/* ---------- click through: table rows and number tiles ---------- */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function rowTarget(r){
+  if(!r || typeof r !== "object") return "";
+  if(r.booking_id && UUID.test(r.booking_id)) return `openBooking('${r.booking_id}')`;
+  if(r.id && UUID.test(r.id) && (r.public_id || r.role || r.name && (r.email || r.city))) return `openUser('${r.id}')`;
+  for(const k of ["user_id","reported_id","customer_id","photographer_id","reporter_id"]) if(r[k] && UUID.test(r[k])) return `openUser('${r[k]}')`;
+  if(r.public_id && /^SP[CP]\d+$/.test(r.public_id)) return `openUser('${r.public_id}')`;
+  return "";
+}
+const _dtable = dtable;
+dtable = function(id, title, cols, rows, o){ o = Object.assign({}, o || {}); if(!o.click) o.click = r => rowTarget(r); return _dtable(id, title, cols, rows, o); };
+/* number tiles that didn't open anything now open the matching list, or explain themselves */
+const KPI_MAP = [[/visitor|visits|page views/i, "visitors"], [/sign.?ups?|joined|new customers/i, "signups"], [/new photographers/i, "signups_photographers"],
+  [/completed|shoots done/i, "completed"], [/cancel/i, "cancelled"], [/booking value|gmv|revenue|booked/i, "booking_value"], [/bookings?$/i, "bookings"],
+  [/requests?/i, "requests"], [/quote/i, "quotes"], [/review|rating/i, "reviews"], [/refund/i, "refunds"], [/payout|owed to photographers|paid to photographers/i, "payouts_paid"],
+  [/commission/i, "commission"], [/collected|payments?/i, "collected"], [/repeat|came back|returning/i, "repeat_customers"], [/customers?/i, "customers"],
+  [/photographers?/i, "photographers"], [/messages?|chats?/i, "messages"]];
+const _kpi = kpi;
+kpi = function(v, l, sub, cls){
+  const label = String(l || "").replace(/<[^>]+>/g, "");
+  return `<button class="stat tap ${cls || ""}" onclick="kpiClick(this)" data-l="${esc(label)}" data-v="${esc(String(v).replace(/<[^>]+>/g, ""))}" data-s="${esc(String(sub || "").replace(/<[^>]+>/g, ""))}">
+    <div class="v">${v}</div><div class="l">${l} <span class="go">›</span></div>${sub ? `<div class="xs muted2 mt8">${sub}</div>` : ""}</button>`;
+};
+function kpiClick(b){
+  const l = b.getAttribute("data-l"), v = b.getAttribute("data-v"), s = b.getAttribute("data-s");
+  if(S.u360 && b.closest(".sheet")){            // inside a person: open the matching section below
+    const d = [...b.closest(".sheet").querySelectorAll("details.u3")].find(x => x.querySelector("summary").textContent.toLowerCase().includes(l.split(" ")[0].toLowerCase()));
+    if(d){ d.open = true; d.scrollIntoView({ behavior: "smooth", block: "start" }); return; }
+  }
+  const hit = KPI_MAP.find(([re]) => re.test(l));
+  if(hit && canDrill(hit[1])){ openDrill(hit[1], l); return; }
+  S.kpiInfo = { l, v, s }; render();
+}
+function vKpiInfo(){
+  const k = S.kpiInfo; if(!k) return "";
+  return `<div class="sheet-bg top" style="z-index:65" onclick="if(event.target===this){S.kpiInfo=null;render()}"><div class="sheet narrow" style="max-width:520px">
+    <div class="between"><div class="h2">${esc(k.l)}</div><button class="btn sm" onclick="S.kpiInfo=null;render()">Close</button></div>
+    <div class="bigv mt12">${esc(k.v)}</div>${k.s ? `<div class="sm muted mt8">${esc(k.s)}</div>` : ""}
+    <div class="sm mt16">This number is worked out from the tables on this page — scroll down to see the rows behind it, or download them as CSV.
+      For people, bookings and payments, the <b>Timeline</b> shows every single event.</div>
+    <div class="row mt16"><button class="btn sm" onclick="S.kpiInfo=null;goPage('timeline')">Open the timeline</button><button class="btn sm" onclick="S.kpiInfo=null;render()">Back to the page</button></div>
+  </div></div>`;
+}
+
+/* ---------- put it together after every render ---------- */
+const _render = render;
+render = function(){
+  _render();
+  if(S.view !== "console") return;
+  const app = el("app");
+  if(S.trail && S.trail.length){
+    const sheets = app.querySelectorAll(".sheet-bg"); const sh = sheets[sheets.length - 1];
+    if(sh && !sh.querySelector(".trail")){ const s = sh.querySelector(".sheet"); if(s) s.insertAdjacentHTML("afterbegin", trailBar()); }
+  }
+  if(S.kpiInfo) app.insertAdjacentHTML("beforeend", vKpiInfo());
+  linkify(app);
+  themeCharts();
+};
+document.addEventListener("click", e => { if(S.menuOpen && !e.target.closest(".pmenu-wrap")){ S.menuOpen = false; render(); } });
+const _openTabOld = openTab;
+openTab = function(k){ if(k === "commission"){ S.tab = k; S.err = ""; S.note = ""; S.comm = null; render(); return; } return _openTabOld(k); };
 
 /* ============================ render ========================== */
 

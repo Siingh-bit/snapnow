@@ -5478,6 +5478,53 @@ grant execute on function public.push_unsubscribe(text)                        t
 grant execute on function public.call_notify(uuid)                             to authenticated;
 -- <<< 8h notifications
 
+-- >>> 8i admin tools
+-- =====================================================================
+-- 8i. ADMIN CONSOLE HELPERS
+--     • Any booking reference shown in the console ("SP-1A2B3C4D") can be
+--       clicked: this turns it back into the booking.
+--     • The Commission page: standard rate, every photographer's rate,
+--       and who changed what.
+-- =====================================================================
+
+create or replace function public.admin_find_booking(p_ref text)
+returns uuid language sql stable security definer set search_path = public
+as $$ select b.id from public.bookings b
+       where public.is_staff()
+         and upper(left(b.id::text, 8)) = upper(regexp_replace(coalesce(p_ref, ''), '^SP-', '', 'i'))
+       order by b.created_at desc limit 1 $$;
+
+create or replace function public.admin_commission_overview()
+returns jsonb language plpgsql stable security definer set search_path = public
+as $$
+declare res jsonb;
+begin
+  if not public._money_ok() then raise exception 'Only admins can see commission'; end if;
+  select jsonb_build_object(
+    'standard', (select (value #>> '{}')::numeric from public.platform_settings where key = 'commission_pct'),
+    'can_change_standard', public.is_super(),
+    'photographers', (select coalesce(jsonb_agg(z order by z.custom desc, z.name), '[]') from (
+        select g.id, p.public_id, g.display_name name, g.city, g.approval_status, g.jobs_done, g.commission_pct,
+               g.commission_pct is not null custom,
+               (select coalesce(sum(b.commission_amount), 0) from public.bookings b where b.photographer_id = g.id and b.status = 'completed') commission_earned,
+               (select coalesce(sum(b.total_amount), 0) from public.bookings b where b.photographer_id = g.id and b.status = 'completed') booking_value,
+               (select count(*) from public.user_benefits u where u.user_id = g.id and u.kind = 'commission_cut' and u.status = 'active') active_rewards
+          from public.photographers g join public.profiles p on p.id = g.id
+         where p.name is distinct from 'Deleted user') z),
+    'history', (select coalesce(jsonb_agg(z order by z.at desc), '[]') from (
+        select at, staff_email, action, target_id, target_name, details from public.admin_audit
+         where action ilike '%commission%' or (action ilike 'Changed setting%' and target_id = 'commission_pct')
+         order by at desc limit 200) z)
+  ) into res;
+  return res;
+end $$;
+
+revoke all on function public.admin_find_booking(text)      from public, anon;
+revoke all on function public.admin_commission_overview()   from public, anon;
+grant execute on function public.admin_find_booking(text)    to authenticated;
+grant execute on function public.admin_commission_overview() to authenticated;
+-- <<< 8i admin tools
+
 -- =====================================================================
 -- 9. ONE-OFF CLEAN-UP
 -- =====================================================================
@@ -5557,4 +5604,5 @@ select
   exists (select 1 from pg_proc where proname = 'report_user')
     and exists (select 1 from pg_trigger where tgname = 'pair_guard')                    as moderation_ready,
   exists (select 1 from information_schema.columns where table_name = 'photographers' and column_name = 'travel')   as travel_ready,
-  exists (select 1 from pg_trigger where tgname = 'push_from_event')   as notifications_ready;
+  exists (select 1 from pg_trigger where tgname = 'push_from_event')   as notifications_ready,
+  exists (select 1 from pg_proc where proname = 'admin_commission_overview')   as admin_tools_ready;
