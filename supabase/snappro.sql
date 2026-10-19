@@ -5354,6 +5354,56 @@ begin
   return 'sent';
 end $$;
 
+-- "Send me a test notification" (Profile → Notifications): checks the whole chain on this phone
+create or replace function public.push_test()
+returns jsonb language plpgsql security definer set search_path = public
+as $$
+declare me uuid := auth.uid(); n int;
+begin
+  if me is null then raise exception 'Please log in again'; end if;
+  select count(*) into n from public.push_subscriptions where user_id = me;
+  if n = 0 then return jsonb_build_object('phones', 0); end if;
+  if exists (select 1 from public.push_outbox where user_id = me and kind = 'test' and created_at > now() - interval '20 seconds') then
+    raise exception 'Wait a few seconds before sending another test'; end if;
+  insert into public.push_outbox (user_id, kind, title, body, url, tag)
+  values (me, 'test', 'SnapPro notifications are working ✅', 'You''ll hear about quotes, bookings, messages and calls here.', '/app.html', 'test');
+  return jsonb_build_object('phones', n);
+end $$;
+revoke all on function public.push_test() from public, anon;
+grant execute on function public.push_test() to authenticated;
+
+-- staff: is the notification chain healthy? (phones saved, what was sent, what the push function answered)
+create or replace function public.admin_push_health()
+returns jsonb language plpgsql security definer set search_path = public, extensions
+as $$
+declare res jsonb; hook boolean; resp jsonb;
+begin
+  if not public._money_ok() then raise exception 'Only admins'; end if;
+  begin select exists (select 1 from vault.decrypted_secrets where name = 'push_hook_secret') into hook; exception when others then hook := null; end;
+  begin
+    select coalesce(jsonb_agg(z order by z.created desc), '[]') into resp from (
+      select status_code, left(coalesce(content, error_msg, ''), 200) answer, created from net._http_response
+       where created > now() - interval '1 day' and (content like '%"sent"%' or content like '%Notifications%' or content like '%Not allowed%' or content like '%went wrong%')
+       order by created desc limit 15) z;
+  exception when others then resp := null; end;
+  select jsonb_build_object(
+    'public_key_set', exists (select 1 from public.platform_settings where key = 'push_public_key'),
+    'hook_secret_set', hook,
+    'phones', (select count(*) from public.push_subscriptions),
+    'people_with_notifications', (select count(distinct user_id) from public.push_subscriptions),
+    'queued_last_day', (select count(*) from public.push_outbox where created_at > now() - interval '1 day'),
+    'waiting', (select count(*) from public.push_outbox where taken_at is null and created_at > now() - interval '1 hour'),
+    'delivered_last_day', (select coalesce(sum(sent), 0) from public.push_outbox where created_at > now() - interval '1 day'),
+    'failed_last_day', (select coalesce(sum(failed), 0) from public.push_outbox where created_at > now() - interval '1 day'),
+    'recent', (select coalesce(jsonb_agg(z order by z.created_at desc), '[]') from (
+        select o.created_at, o.kind, o.title, o.taken_at is not null taken, o.sent, o.failed, p.public_id
+          from public.push_outbox o left join public.profiles p on p.id = o.user_id order by o.id desc limit 15) z),
+    'function_answers', resp) into res;
+  return res;
+end $$;
+revoke all on function public.admin_push_health() from public, anon;
+grant execute on function public.admin_push_health() to authenticated;
+
 -- the Edge Function takes what's waiting (with the phones to send to), and reports back
 create or replace function public.push_take(p_limit int default 200)
 returns jsonb language plpgsql security definer set search_path = public

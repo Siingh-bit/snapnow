@@ -2650,10 +2650,21 @@ function vTrust(){
         ["a","", r => m ? `<button class="btn sm" onclick="event.stopPropagation();refAction('${r.id}','reward')">Reward</button> <button class="btn sm" onclick="event.stopPropagation();refAction('${r.id}','remove')">Remove</button>` : ""]], T.referral_flags, { search: false, empty: "None." })}
     ${m ? dtable("trDel", "Deleted accounts", [["deleted_at","Deleted","dt"],["public_id","SnapPro ID"],["role","Type","chip"],["via","How", r => r.via === "admin" ? "By staff (email request)" : "By the person, in the app"],["reason","Reason"],
         ["login_closed","Login", r => r.login_closed ? '<span class="chip green">Closed</span>' : '<span class="chip red">Remove in Supabase → Authentication → Users</span>'],["user_id","Timeline", r => `<a class="lnk" onclick="S.tlR='30d';S.tlG='';S.tlQ='';S.tl=null;openTab('timeline')">view</a>`]], T.deletions, { span: true, empty: "No accounts deleted yet." }) : ""}
+    ${m ? `<div class="card" style="grid-column:1/-1"><div class="between"><div class="sec" style="margin:0">Phone notifications</div><button class="btn sm" onclick="loadPushHealth()">${S.pushH ? "Refresh" : "Check"}</button></div>
+      ${!S.pushH ? `<div class="xs muted2 mt8">Checks the whole chain: keys saved, phones signed up, what was sent and what the push function answered.</div>` : S.pushH.err ? `<div class="warn mt8">${esc(S.pushH.err)}</div>` : (H => `<div class="grid mt12">
+        ${kpi(H.public_key_set ? "Yes" : "No", "Public key saved", "", H.public_key_set ? "" : "hl")}${kpi(H.hook_secret_set ? "Yes" : H.hook_secret_set === false ? "No" : "?", "Hook secret in Vault", "", H.hook_secret_set ? "" : "hl")}
+        ${kpi(n0(H.people_with_notifications), "People with notifications on", n0(H.phones) + " phones")}${kpi(n0(H.queued_last_day), "Queued (24 h)", n0(H.waiting) + " still waiting", H.waiting ? "hl" : "")}
+        ${kpi(n0(H.delivered_last_day), "Delivered (24 h)")}${kpi(n0(H.failed_last_day), "Failed (24 h)", "", H.failed_last_day ? "hl" : "")}</div>
+        <div class="grid2 mt12">${dtable("pushRecent", "Latest notifications", [["created_at","When","dt"],["public_id","To"],["kind","Kind","chip"],["title","Title"],["taken","Picked up", r => r.taken ? "Yes" : '<span class="chip red">No</span>'],["sent","Delivered","n"],["failed","Failed","n"]], H.recent, { search: false, empty: "Nothing queued yet." })}
+        ${dtable("pushAns", "What the push function answered", [["created","When","dt"],["status_code","Status"],["answer","Answer"]], H.function_answers || [], { search: false, empty: "No answers yet — the function hasn't been called." })}</div>`)(S.pushH)}</div>` : ""}
     ${dtable("trStaff", "Staff activity — last 30 days", [["staff","Staff"],["n","Actions","n"],["last_at","Last action","ago"]], T.staff_actions, { search: false, click: () => "openTab('activity')" })}
   </div>`;
 }
 
+async function loadPushHealth(){
+  const { data, error } = await sb.rpc("admin_push_health");
+  S.pushH = error ? { err: /function/i.test(error.message) ? "Run the latest supabase/snappro.sql first." : error.message } : data; render();
+}
 const REP_REASON = { abuse: "Abusive / threatening", inappropriate: "Sexual / inappropriate", fraud: "Pay outside / scam", fake: "Fake profile", spam: "Spam", safety: "Feels unsafe", other: "Other" };
 /* act on a report: Resolved and Dismiss ask what was done (saved with the report) */
 async function reportAction(id, status){

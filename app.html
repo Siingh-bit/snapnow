@@ -2646,6 +2646,7 @@ function vProfile(){
       <div class="grow"><div class="h2">${esc(me.name)}</div><div class="sm muted">${esc(S.email)}</div>
         <div class="chips mt8"><span class="chip">${isPg() ? "Photographer" : "Customer"}</span>${me.public_id ? `<button class="chip" title="Copy" onclick="navigator.clipboard&&navigator.clipboard.writeText('${esc(me.public_id)}');toast('SnapPro ID copied','${esc(me.public_id)}','check')">ID ${esc(me.public_id)}</button>` : ""}</div></div></div>
     <div class="card mt16 list">
+      ${pushRow()}
       <button class="li" onclick="push('rewards')">${icon("star",18,"var(--accent)")}<div class="grow"><div class="sm bold">Offers &amp; rewards</div><div class="xs muted2">${S.rewards ? ((S.rewards.offers||[]).length ? (S.rewards.offers.length + " offer" + (S.rewards.offers.length === 1 ? "" : "s") + " to claim · ") : "") + ((S.rewards.benefits||[]).length) + " active reward" + ((S.rewards.benefits||[]).length === 1 ? "" : "s") : "Promo codes and rewards"}</div></div>${S.rewards && (S.rewards.offers||[]).length ? `<span class="badge-dot">${S.rewards.offers.length}</span>` : ""}${icon("chevron",16,"var(--muted-2)")}</button>
       <button class="li" onclick="push('invite')">${icon("send",18,"var(--muted)")}<div class="grow"><div class="sm bold">Invite friends</div><div class="xs muted2">Share your SnapPro ID${S.rewards && S.rewards.referral && S.rewards.referral.enabled ? " — you both get rewarded" : ""}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
     </div>
@@ -2653,7 +2654,6 @@ function vProfile(){
     <div class="card mt16 list">
       <button class="li" onclick="push('editName')">${icon("user",18,"var(--muted)")}<div class="grow"><div class="sm bold">Name</div><div class="xs muted2">${esc(me.name)}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
       <button class="li" onclick="push('editLoc')">${icon("pin",18,"var(--muted)")}<div class="grow"><div class="sm bold">Location</div><div class="xs muted2">${esc([me.city, me.state, me.pincode].filter(Boolean).join(", ") || "Not set")}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
-      ${pushRow()}
       <button class="li" onclick="push('blockedPeople')">${icon("shield",18,"var(--muted)")}<div class="grow"><div class="sm bold">Blocked people</div><div class="xs muted2">${(S.ublocks || []).length ? S.ublocks.length + " blocked" : "No one blocked"}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
       <a class="li" href="mailto:${SUPPORT_EMAIL}">${icon("mail",18,"var(--muted)")}<div class="grow"><div class="sm bold">Help and support</div><div class="xs muted2">${SUPPORT_EMAIL}</div></div>${icon("chevron",16,"var(--muted-2)")}</a>
     </div>
@@ -4721,7 +4721,7 @@ function pushSync(){
 }
 /* the to-do card that offers notifications */
 function pushTodo(out){
-  if(!pushOK() || !PUSH_KEY || Notification.permission !== "default" || S.prefs.pushLater) return;
+  if(!pushOK() || !PUSH_KEY || Notification.permission === "denied" || S.pushFor === (S.me && S.me.id) || S.pushSyncing) return;
   out.push({ key: "push", ic: "bellring", tone: "accent", urgent: false, title: "Turn on notifications",
     sub: isPg() ? "Hear about new shoots near you, bookings, messages and calls — even when SnapPro is closed" : "Know the moment you get a quote, a message or a call — even when SnapPro is closed",
     btn: "Turn on", go: "enablePush()" });
@@ -4729,8 +4729,18 @@ function pushTodo(out){
 function pushRow(){
   if(!pushOK()) return "";
   const p = pushPerm(), on = p === "granted" && S.pushFor === (S.me && S.me.id);
-  return `<button class="li" onclick="${on ? "toast('Notifications are on','To turn them off, use your phone\\'s Settings → Apps → SnapPro → Notifications','bellring')" : "enablePush()"}">${icon("bellring",18,on ? "var(--green)" : "var(--muted)")}
-    <div class="grow"><div class="sm bold">Notifications</div><div class="xs muted2">${on ? "On for this phone" : p === "denied" ? "Blocked — allow them in your phone's Settings" : !PUSH_KEY ? "Coming soon" : "Off — tap to turn on"}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>`;
+  return `<button class="li" onclick="${on ? "testPush()" : "enablePush()"}">${icon("bellring",18,on ? "var(--green)" : "var(--muted)")}
+    <div class="grow"><div class="sm bold">Notifications</div><div class="xs muted2">${on ? "On for this phone · tap to send a test" : p === "denied" ? "Blocked — allow them in your phone's Settings" : !PUSH_KEY ? "Coming soon" : "Off — tap to turn on"}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>`;
+}
+/* sends a notification to this account's phones, to check everything works */
+async function testPush(){
+  try{
+    if(S.pushFor !== (S.me && S.me.id)) await pushSubscribe(true);
+    const { data, error } = await sb.rpc("push_test");
+    if(error) throw new Error(dbMsg(error));
+    if(!data || !data.phones){ toast("Notifications aren't on yet", "Tap Notifications to turn them on", "x"); return; }
+    toast("Test sent", "Close SnapPro now — a notification should arrive within a few seconds", "bellring");
+  }catch(e){ toast("Couldn't send a test", e.message, "x"); }
 }
 
 /* ---------- opening the right screen from a notification ---------- */
