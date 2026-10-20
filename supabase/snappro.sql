@@ -4795,6 +4795,8 @@ begin
   update public.offers set photographer_name = 'Deleted photographer' where photographer_id = p_user;
   update public.site_visits set user_id = null where user_id = p_user;
   delete from public.push_subscriptions where user_id = p_user;          -- stop notifications to their phones
+  delete from public.saved_photographers where user_id = p_user or photographer_id = p_user;
+  delete from public.chat_reads where user_id = p_user;
   perform set_config('snappro.system', '', true);
 
   -- close the login: free the email and stop sign-in (skipped quietly if the database doesn't allow it)
@@ -5525,6 +5527,144 @@ grant execute on function public.admin_find_booking(text)    to authenticated;
 grant execute on function public.admin_commission_overview() to authenticated;
 -- <<< 8i admin tools
 
+-- >>> 8j history
+-- =====================================================================
+-- 8j. MESSAGES TAB, SHOOT HISTORY, RECEIPTS, SAVED PHOTOGRAPHERS
+--     • Messages: every chat in one place with the last message and how
+--       many are unread (chat_reads remembers when you last opened each)
+--     • My shoots: bookings and payments for any date range
+--     • Receipt: one booking with its payments, for either side
+--     • Saved: customers save photographers they like
+-- =====================================================================
+
+create table if not exists public.chat_reads (
+  user_id      uuid not null references public.profiles(id) on delete cascade,
+  booking_id   uuid not null references public.bookings(id) on delete cascade,
+  last_read_at timestamptz not null default now(),
+  primary key (user_id, booking_id)
+);
+alter table public.chat_reads enable row level security;
+drop policy if exists chat_reads_own on public.chat_reads;
+create policy chat_reads_own on public.chat_reads for select to authenticated using (user_id = auth.uid());
+revoke insert, update, delete on public.chat_reads from anon, authenticated;
+
+create or replace function public.mark_chat_read(p_booking uuid)
+returns void language plpgsql security definer set search_path = public
+as $$
+begin
+  if not exists (select 1 from public.bookings b where b.id = p_booking and (b.customer_id = auth.uid() or b.photographer_id = auth.uid())) then return; end if;
+  insert into public.chat_reads (user_id, booking_id, last_read_at) values (auth.uid(), p_booking, now())
+  on conflict (user_id, booking_id) do update set last_read_at = now();
+end $$;
+
+-- every chat I'm in (bookings past the payment step), newest message first
+create or replace function public.my_conversations()
+returns jsonb language sql stable security definer set search_path = public
+as $$
+  select coalesce(jsonb_agg(z order by z.sort_at desc), '[]') from (
+    select b.id booking_id, b.status, b.category, b.start_at,
+           case when b.customer_id = auth.uid() then b.photographer_id else b.customer_id end other_id,
+           case when b.customer_id = auth.uid() then coalesce(b.photographer_name, 'Photographer') else coalesce(b.customer_name, 'Customer') end other_name,
+           lm.content last_text, lm.created_at last_at, lm.sender_id = auth.uid() last_mine,
+           (select count(*) from public.messages m where m.booking_id = b.id and m.sender_id <> auth.uid()
+               and m.created_at > coalesce((select r.last_read_at from public.chat_reads r where r.user_id = auth.uid() and r.booking_id = b.id), '-infinity'))::int unread,
+           coalesce(lm.created_at, b.updated_at, b.created_at) sort_at
+      from public.bookings b
+      left join lateral (select m.content, m.created_at, m.sender_id from public.messages m where m.booking_id = b.id order by m.created_at desc limit 1) lm on true
+     where (b.customer_id = auth.uid() or (b.photographer_id = auth.uid() and b.status <> 'pending_payment'))
+       and b.status <> 'pending_payment'
+     limit 300) z $$;
+
+-- my shoots and money for a date range (by shoot date; payments by when they happened)
+create or replace function public.my_history(p_from date, p_to date)
+returns jsonb language plpgsql stable security definer set search_path = public
+as $$
+declare me uuid := auth.uid(); f timestamptz; t timestamptz; pg boolean;
+begin
+  if me is null then raise exception 'Please log in again'; end if;
+  f := (coalesce(p_from, date '2020-01-01')::timestamp) at time zone 'Asia/Kolkata';
+  t := ((coalesce(p_to, (now() at time zone 'Asia/Kolkata')::date) + 1)::timestamp) at time zone 'Asia/Kolkata';
+  if t - f > interval '3 years' then raise exception 'Choose a range of up to 3 years'; end if;
+  pg := exists (select 1 from public.photographers where id = me) and (select role from public.profiles where id = me) = 'photographer';
+  return jsonb_build_object(
+    'bookings', (select coalesce(jsonb_agg(z order by z.start_at desc), '[]') from (
+        select b.id, b.status, b.category, b.start_at, b.created_at, b.duration_hrs, b.city, b.price, b.discount_amount,
+               b.customer_id, b.customer_name, b.photographer_id, b.photographer_name, b.payment_status, b.balance_status,
+               b.advance_amount, b.balance_amount, b.cancelled_by,
+               case when pg then b.commission_pct end commission_pct, case when pg then b.commission_amount end commission_amount,
+               case when pg then b.photographer_amount end photographer_amount, case when pg then b.payout_status end payout_status,
+               case when pg then b.payout_at end payout_at, case when pg then b.payout_ref end payout_ref
+          from public.bookings b
+         where (b.customer_id = me or (b.photographer_id = me and b.status <> 'pending_payment'))
+           and b.start_at >= f and b.start_at < t limit 2000) z),
+    'payments', case when pg then
+        (select coalesce(jsonb_agg(z order by z.at desc), '[]') from (
+          select b.id booking_id, 'payout' kind, b.photographer_amount amount, b.payout_at at, b.payout_ref ref, b.customer_name who, b.category
+            from public.bookings b where b.photographer_id = me and b.payout_status = 'paid' and b.payout_at >= f and b.payout_at < t) z)
+      else
+        (select coalesce(jsonb_agg(z order by z.at desc), '[]') from (
+          select p.booking_id, p.stage kind, p.amount, p.paid_at at, p.payment_group method, p.order_id ref, b.photographer_name who, b.category
+            from public.payments p left join public.bookings b on b.id = p.booking_id
+           where p.customer_id = me and p.status = 'paid' and not p.is_duplicate and p.paid_at >= f and p.paid_at < t
+          union all
+          select p.booking_id, 'refund', -r.amount, coalesce(r.processed_at, r.created_at), null, r.refund_id, b.photographer_name, b.category
+            from public.refunds r join public.payments p on p.id = r.payment_id left join public.bookings b on b.id = p.booking_id
+           where p.customer_id = me and r.status in ('processed','refunded','success') and coalesce(r.processed_at, r.created_at) >= f and coalesce(r.processed_at, r.created_at) < t) z)
+      end,
+    'pending_payout', case when pg then (select coalesce(sum(photographer_amount), 0) from public.bookings where photographer_id = me and payout_status in ('due','on_hold')) end);
+end $$;
+
+-- one booking's receipt, for the customer or the photographer on it
+create or replace function public.my_receipt(p_booking uuid)
+returns jsonb language plpgsql stable security definer set search_path = public
+as $$
+declare me uuid := auth.uid(); b record; side text;
+begin
+  select * into b from public.bookings where id = p_booking;
+  if not found then raise exception 'Booking not found'; end if;
+  side := case when b.customer_id = me then 'customer' when b.photographer_id = me and b.status <> 'pending_payment' then 'photographer' end;
+  if side is null then raise exception 'That isn''t your booking'; end if;
+  return jsonb_build_object('side', side,
+    'booking', jsonb_build_object('id', b.id, 'ref', 'SP-' || upper(left(b.id::text, 8)), 'status', b.status, 'category', b.category,
+        'start_at', b.start_at, 'created_at', b.created_at, 'duration_hrs', b.duration_hrs, 'city', b.city, 'pincode', b.pincode,
+        'customer_name', b.customer_name, 'photographer_name', b.photographer_name, 'price', b.price, 'discount_amount', b.discount_amount,
+        'advance_amount', b.advance_amount, 'balance_amount', b.balance_amount, 'payment_status', b.payment_status, 'balance_status', b.balance_status,
+        'commission_pct', case when side = 'photographer' then b.commission_pct end, 'commission_amount', case when side = 'photographer' then b.commission_amount end,
+        'photographer_amount', case when side = 'photographer' then b.photographer_amount end, 'payout_status', case when side = 'photographer' then b.payout_status end,
+        'payout_at', case when side = 'photographer' then b.payout_at end, 'payout_ref', case when side = 'photographer' then b.payout_ref end,
+        'customer_public_id', (select public_id from public.profiles where id = b.customer_id),
+        'photographer_public_id', (select public_id from public.profiles where id = b.photographer_id)),
+    'payments', case when side = 'customer' then (select coalesce(jsonb_agg(z order by z.paid_at), '[]') from (
+        select p.stage, p.amount, p.paid_at, p.payment_group method, p.order_id, p.gateway_payment_id, p.refund_status, p.refunded_amount
+          from public.payments p where p.booking_id = b.id and p.status = 'paid' and not p.is_duplicate) z) else '[]'::jsonb end);
+end $$;
+
+-- saved photographers
+create table if not exists public.saved_photographers (
+  user_id         uuid not null references public.profiles(id) on delete cascade,
+  photographer_id uuid not null references public.photographers(id) on delete cascade,
+  created_at      timestamptz not null default now(),
+  primary key (user_id, photographer_id)
+);
+alter table public.saved_photographers enable row level security;
+drop policy if exists saved_own_read on public.saved_photographers;
+create policy saved_own_read on public.saved_photographers for select to authenticated using (user_id = auth.uid());
+drop policy if exists saved_own_add on public.saved_photographers;
+create policy saved_own_add on public.saved_photographers for insert to authenticated with check (user_id = auth.uid() and photographer_id <> auth.uid());
+drop policy if exists saved_own_remove on public.saved_photographers;
+create policy saved_own_remove on public.saved_photographers for delete to authenticated using (user_id = auth.uid());
+revoke update on public.saved_photographers from anon, authenticated;
+
+revoke all on function public.mark_chat_read(uuid)        from public, anon;
+revoke all on function public.my_conversations()         from public, anon;
+revoke all on function public.my_history(date, date)     from public, anon;
+revoke all on function public.my_receipt(uuid)           from public, anon;
+grant execute on function public.mark_chat_read(uuid)     to authenticated;
+grant execute on function public.my_conversations()      to authenticated;
+grant execute on function public.my_history(date, date)  to authenticated;
+grant execute on function public.my_receipt(uuid)        to authenticated;
+-- <<< 8j history
+
 -- =====================================================================
 -- 9. ONE-OFF CLEAN-UP
 -- =====================================================================
@@ -5605,4 +5745,5 @@ select
     and exists (select 1 from pg_trigger where tgname = 'pair_guard')                    as moderation_ready,
   exists (select 1 from information_schema.columns where table_name = 'photographers' and column_name = 'travel')   as travel_ready,
   exists (select 1 from pg_trigger where tgname = 'push_from_event')   as notifications_ready,
-  exists (select 1 from pg_proc where proname = 'admin_commission_overview')   as admin_tools_ready;
+  exists (select 1 from pg_proc where proname = 'admin_commission_overview')   as admin_tools_ready,
+  exists (select 1 from pg_proc where proname = 'my_history')   as history_ready;

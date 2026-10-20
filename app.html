@@ -586,6 +586,24 @@ html[data-theme=dark] .feat{background:#3a2f15;color:#e8c46a}
 .hint svg{flex:0 0 auto;margin-top:1px}
 .hint b{color:var(--text)}
 .hint-x{flex:0 0 auto;font-size:12px;font-weight:700;color:var(--accent-ink,var(--accent));padding:2px 4px;white-space:nowrap}
+/* ---------- my shoots, messages, receipt ---------- */
+.seg4{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;background:var(--surface-2);border-radius:10px;padding:4px}
+.seg4 button{padding:9px 4px;border-radius:7px;font-size:13px;font-weight:600;color:var(--muted);text-align:center;justify-content:center}
+.seg4 button.on{background:var(--paper);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.chips.hscroll{display:flex;flex-wrap:nowrap;overflow-x:auto;align-items:center;gap:6px;padding-bottom:2px}
+.chips.hscroll .chip{flex:0 0 auto}
+.totals .stat{text-align:left}
+.convo{align-items:flex-start}
+.convo.unread .sm.bold{color:var(--text)}
+.convo .truncate{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+.iconbtn.heart.on{border-color:var(--accent);background:var(--accent-soft)}
+.receipt .kv span:last-child{text-align:right}
+.mt2{margin-top:2px}.mt4{margin-top:4px}
+@media print{
+  body{background:#fff!important} #app{border:0!important;max-width:none!important}
+  #tabs,.topbar .iconbtn,.no-print,#toasts{display:none!important}
+  .card{break-inside:avoid;border-color:#ccc!important}
+}
 
 </style>
 </head>
@@ -692,6 +710,7 @@ function icon(name, size=20, color="currentColor", w=2){
     micoff:'<path d="M2 2l20 20M9 9v2a3 3 0 0 0 5.1 2.1M15 9.3V5a3 3 0 0 0-5.9-.6M17 16.9A7 7 0 0 1 5 11v-1m14 0v1c0 .6-.1 1.2-.2 1.8M12 18v4"/>',
     chevron:'<path d="M9 18l6-6-6-6"/>',
     flag:'<path d="M5 22V4"/><path d="M5 4h13l-2.5 4.5L18 13H5"/>',
+    heart:'<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8z"/>',
     speaker:'<path d="M11 5L6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/>',
     pause:'<rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/>',
     google:'<path d="M21.6 12.2c0-.7-.1-1.4-.2-2H12v3.8h5.4a4.6 4.6 0 0 1-2 3v2.5h3.2c1.9-1.7 3-4.3 3-7.3z" fill="#4285F4" stroke="none"/><path d="M12 22c2.7 0 5-.9 6.6-2.4l-3.2-2.5c-.9.6-2 1-3.4 1-2.6 0-4.8-1.8-5.6-4.1H3.1v2.6A10 10 0 0 0 12 22z" fill="#34A853" stroke="none"/><path d="M6.4 14c-.2-.6-.3-1.3-.3-2s.1-1.4.3-2V7.4H3.1a10 10 0 0 0 0 9.2z" fill="#FBBC05" stroke="none"/><path d="M12 5.9c1.5 0 2.8.5 3.8 1.5l2.9-2.9A10 10 0 0 0 3.1 7.4L6.4 10C7.2 7.7 9.4 5.9 12 5.9z" fill="#EA4335" stroke="none"/>',
@@ -1247,6 +1266,8 @@ async function refresh(fromPoll){
   if(S.ublocksFor !== S.me.id){ S.ublocksFor = S.me.id; S.ublocks = undefined; }
   if(S.ublocks === undefined){ S.ublocks = null; loadUserBlocks().then(softRender); }
   pushSync();
+  loadConversations().then(() => { const t = el("tabs"); if(t && t.innerHTML) t.innerHTML = tabbarHtml(); if(S.tab === "messages" && !S.stack.length) softRender(); });
+  if(isCustomer() && S.saved === undefined){ S.saved = null; loadSaved().then(softRender); }
   if(S.rewards === undefined && !S.loading.rewards){ S.loading.rewards = true; loadRewards().then(() => { S.loading.rewards = false; softRender(); }); }
   try{
     if(isCustomer()){
@@ -2022,6 +2043,7 @@ async function logout(){
   try{ if(sb) await sb.auth.signOut(); }catch(e){}
   pwReset(); S.stack = []; S.tab = "home"; S.draft = null; S.payout = undefined; S.payState = null;
   S.d = { requests: [], offers: {}, bookings: [], openRequests: [], myOffers: [], pgs: {}, pgList: [], pgListAt: 0, reviews: {}, reviewed: {}, msgs: {} };
+  S.convos = undefined; S.hist = undefined; S.saved = undefined; S.rcpt = null; S.chatReadFor = null;
   S.auth = { step: "login", email: "" };
   render(); scrollTop();
 }
@@ -2142,6 +2164,7 @@ function exFilter(){
   const city = meCity().toLowerCase();
   let list = S.d.pgList.filter(p => !iBlocked(p.id));
   if(f.scope === "city" && city) list = list.filter(p => pgCovers(p, meCity(), S.me.state));
+  if(f.scope === "saved") list = list.filter(p => isSaved(p.id));
   if(f.cat !== "all") list = list.filter(p => (p.categories||[]).includes(f.cat));
   const qv = (f.q||"").trim().toLowerCase();
   if(qv) list = list.filter(p => (p.display_name||"").toLowerCase().includes(qv) || (p.bio||"").toLowerCase().includes(qv) || (p.city||"").toLowerCase().includes(qv));
@@ -2154,6 +2177,7 @@ function exFilter(){
 function exResultsHtml(){
   const list = exFilter(), f = S.prefs.ex;
   if(!S.d.pgListAt) return `<div class="skeleton"></div><div class="skeleton"></div>`;
+  if(!list.length && f.scope === "saved") return emptyState("🔍", "No saved photographers yet", "Open a photographer's profile and tap the heart to save them here.");
   if(!list.length) return emptyState("🔍", "No photographers found",
     f.scope === "city" && meCity() ? `No one in ${esc(meCity())}, or travelling there, matches yet. <button class="linkish accent" onclick="exSet('scope','all')"><b>Search all cities</b></button>` : "Try clearing your filters.");
   return `<div class="xs muted2 mb8">${list.length} photographer${list.length===1?"":"s"}</div><div class="stack gap10">${list.map(p => pgCardHtml(p)).join("")}</div>`;
@@ -2170,6 +2194,7 @@ function vExplore(){
     <div class="chips mt12">
       <button class="chip ${f.scope==='city'?'accent':''}" onclick="exSet('scope','city')">${icon("pin",11)} ${esc(meCity()||"My city")}</button>
       <button class="chip ${f.scope==='all'?'accent':''}" onclick="exSet('scope','all')">All cities</button>
+      <button class="chip ${f.scope==='saved'?'accent':''}" onclick="exSet('scope','saved')">${icon("heart",11)} Saved${S.saved && S.saved.size ? " (" + S.saved.size + ")" : ""}</button>
       <span class="chip-sep"></span>
       ${[["rated","Top rated"],["jobs","Most shoots"],["new","Newest"]].map(([k,l]) => `<button class="chip ${f.sort===k?'accent':''}" onclick="exSet('sort','${k}')">${l}</button>`).join("")}
     </div>
@@ -2189,7 +2214,7 @@ function vPgProfile(p){
   const offer = p.offerId ? findOffer(p.offerId) : null;
   const photos = pg.portfolio || [];
   const blocked = iBlocked(pg.id);
-  return `${topbar(pg.display_name, pg.city || "")}
+  return `${topbar(pg.display_name, pg.city || "", isCustomer() && pg.id !== S.me.id ? heartBtn(pg.id) : "")}
   <div class="cover">${photos[0] ? `<img src="${esc(photos[0])}" alt="">` : ""}</div>
   <div class="pad" style="margin-top:-40px">
     ${avatarHtml(pg.id, pg.display_name, "av-72 ring", pg.is_online)}
@@ -2520,6 +2545,8 @@ function vBooking(p){
     </div>
     ${b.status === "completed" && rv === null ? `<button class="btn primary block mt16" onclick="push('rate',{id:'${b.id}'})">${icon("star",16,"var(--on-text)")} Rate your shoot</button>` : ""}
     ${rv ? `<div class="card mt12"><div class="sec-title">Your review</div><div class="rating">${"★".repeat(rv.stars)}</div>${rv.body ? `<div class="sm muted mt6">${esc(rv.body)}</div>` : ""}</div>` : ""}
+    <div class="row gap8 mt16">${["paid","refunded","partially_refunded","refund_due","refund_pending"].includes(b.payment_status) ? `<button class="btn grow" onclick="push('receipt',{id:'${b.id}'})">${icon("doc",15)} Receipt</button>` : ""}
+      ${b.status === "completed" || b.status === "cancelled" ? `<button class="btn grow" onclick="bookAgain('${b.id}')">${icon("plus",15)} Book again</button>` : ""}</div>
     ${canCancel ? `<button class="btn block danger mt16" onclick="cancelBooking('${b.id}')">Cancel booking</button>` : ""}
     <div class="center mt16">${safetyLink(pg.id, pg.display_name, "booking", b.id)}</div>
   </div>`;
@@ -2610,10 +2637,12 @@ async function loadChat(id){
     const changed = !S.d.msgs[id] || S.d.msgs[id].length !== list.length;
     S.d.msgs[id] = list;
     if(changed){ setHtml("chatList", msgsHtml(b)); const c = el("chatList"); if(c) c.scrollTop = c.scrollHeight; }
+    const top = S.stack[S.stack.length - 1]; if(changed && top && top.v === "chat" && top.p.id === id) markRead(id);
   }catch(e){}
 }
 function vChat(p){
-  const b = S.d.bookings.find(x => x.id === p.id); if(!b) return `${topbar("Messages")}`;
+  const b = S.d.bookings.find(x => x.id === p.id); if(!b){ ensureBooking(p.id).then(ok => ok && softRender()); return `${topbar("Messages")}<div class="pad"><div class="skeleton"></div></div>`; }
+  if(S.chatReadFor !== b.id){ S.chatReadFor = b.id; markRead(b.id); }
   const other = isPg() ? b.customer_name : b.photographer_name;
   if(!S.d.msgs[b.id]) loadChat(b.id);
   const closed = b.status === "cancelled", blocked = blockedOn(b);
@@ -2640,21 +2669,7 @@ async function sendChat(id){
 /* ============================================================
    CUSTOMER — ACTIVITY AND PROFILE
    ============================================================ */
-function vActivity(){
-  const open = S.d.requests.filter(reqIsOpen);
-  const up = S.d.bookings.filter(activeBk);
-  const past = S.d.bookings.filter(b => !activeBk(b));
-  const closed = S.d.requests.filter(r => !reqIsOpen(r) && r.status !== "matched");
-  if(!open.length && !S.d.bookings.length && !closed.length)
-    return `<div class="pad">${pageHead("Your shoots", "Every shoot you post or book shows up here.")}</div>` + emptyState("📷", "No shoots yet", "When you post a shoot, it'll show up here.", `<button class="btn primary sm mt12" onclick="startRequest()">Book a photographer</button>`);
-  return `<div class="pad">${pageHead("Your shoots", "Upcoming first. Tap a shoot to see details, message your photographer or pay.", `<button class="btn sm" onclick="startRequest()">${icon("plus",14)} New shoot</button>`)}
-    ${actionsHtml(customerActions())}
-    ${up.length ? `<div class="sec-title mt16">Upcoming</div>${up.map(bookingCard).join("")}` : ""}
-    ${open.length ? `<div class="sec-title mt16">Waiting for quotes</div>${open.map(requestCard).join("")}` : ""}
-    ${past.length ? `<div class="sec-title mt20">Past bookings</div>${past.map(bookingCard).join("")}` : ""}
-    ${closed.length ? `<div class="sec-title mt20">Closed requests</div>${closed.map(requestCard).join("")}` : ""}
-  </div>`;
-}
+function vActivity(){ return vMyShoots(); }
 function vProfile(){
   const me = S.me;
   return `<div class="pad">
@@ -2946,22 +2961,7 @@ async function withdrawOffer(id){
 }
 
 /* ---------- jobs ---------- */
-function vJobs(){
-  const e = earnings();
-  const up = S.d.bookings.filter(activeBk).sort((a,b) => toMs(a.start_at) - toMs(b.start_at));
-  const past = S.d.bookings.filter(b => !activeBk(b));
-  return `<div class="pad">
-    ${pageHead("Your shoots", "Tap a shoot to see the address, update its status as you go and chat with the customer.")}
-    <div class="grid2 mt12">
-      <button class="stat tap" onclick="push('pgEarnings')"><div class="s-v">${inr(e.month)}</div><div class="s-l">Earned this month · ${e.monthJobs} shoot${e.monthJobs===1?"":"s"} ${icon("chevron",11,"var(--muted-2)")}</div></button>
-      <button class="stat tap" onclick="push('pgEarnings')"><div class="s-v">${inr(e.total)}</div><div class="s-l">All time · ${e.jobs} shoot${e.jobs===1?"":"s"} ${icon("chevron",11,"var(--muted-2)")}</div></button>
-    </div>
-    <div class="xs muted2 mt8">Totals count completed shoots at the price you quoted.</div>
-    ${up.length ? `<div class="sec-title mt20">Upcoming</div>${up.map(bookingCard).join("")}` : ""}
-    ${past.length ? `<div class="sec-title mt20">Past</div>${past.map(bookingCard).join("")}` : ""}
-    ${!up.length && !past.length ? emptyState("📅", "No bookings yet", "When a customer books your quote, the shoot appears here.") : ""}
-  </div>`;
-}
+function vJobs(){ return vMyShoots(); }
 const NEXT_STEP = {
   confirmed: { to: "enroute",   label: "I'm on my way",     ic: "send" },
   enroute:   { to: "arrived",   label: "I've arrived",      ic: "pin" },
@@ -3005,6 +3005,7 @@ function vJob(p){
         : b.balance_status === "due" ? "Shoot complete. " + esc(firstName(b.customer_name)) + " can now pay the balance of " + inr(balOf(b)) + " in the SnapPro app. Once they do, we'll send your " + inr(b.photographer_amount) + "."
         : "Shoot complete. SnapPro will send " + inr(b.photographer_amount) + " to your payout UPI ID."}</div></div>` : ""}
     ${b.status === "shooting" && b.balance_status === "due" ? `<div class="note mt12">${icon("wallet",18,"var(--accent)")}<div>${esc(firstName(b.customer_name))} can pay the balance of ${inr(balOf(b))} in the SnapPro app now. Please don't take cash — paying in the app is what lets us pay you.</div></div>` : ""}
+    ${b.status !== "cancelled" && b.payment_status !== "unpaid" ? `<button class="btn block mt12" onclick="push('receipt',{id:'${b.id}'})">${icon("doc",15)} Earnings receipt</button>` : ""}
     ${canCancel ? `<button class="btn block danger mt12" onclick="jobStep('${b.id}','cancelled')">Cancel this booking</button>` : ""}
     <div class="center mt16">${safetyLink(b.customer_id, b.customer_name, "booking", b.id)}</div>
   </div>`;
@@ -4814,6 +4815,232 @@ if("serviceWorker" in navigator){
 }
 
 /* ============================================================
+   MESSAGES · MY SHOOTS · RECEIPTS · BOOK AGAIN · SAVED
+   ============================================================ */
+
+/* ---------- Messages tab ---------- */
+async function loadConversations(){
+  try{ const { data, error } = await sb.rpc("my_conversations"); if(!error && Array.isArray(data)){ S.convos = data; } }catch(e){}
+  return S.convos;
+}
+const unreadTotal = () => (S.convos || []).reduce((t, c) => t + (c.unread || 0), 0);
+function vMessages(){
+  if(S.convos === undefined){ S.convos = null; loadConversations().then(softRender); }
+  const list = S.convos;
+  const head = pageHead("Messages", isPg() ? "Chats with your customers, newest first. A chat opens once a shoot is booked." : "Chats with your photographers, newest first. A chat opens once you've booked.");
+  if(!list) return `<div class="pad">${head}<div class="skeleton"></div><div class="skeleton"></div></div>`;
+  if(!list.length) return `<div class="pad">${head}</div>` + emptyState("💬", "No messages yet", isPg() ? "When a customer books you, you can chat with them here." : "When you book a photographer, you can chat with them here.");
+  return `<div class="pad">${head}
+    <div class="card list convos">${list.map(c => `<button class="li convo ${c.unread ? "unread" : ""}" onclick="openChatFor('${c.booking_id}')">
+      ${avatarHtml(c.other_id, c.other_name, "av-48")}
+      <div class="grow" style="text-align:left;min-width:0">
+        <div class="between"><span class="sm bold truncate">${esc(c.other_name)}</span><span class="xs ${c.unread ? "accent bold" : "muted2"}">${c.last_at ? timeAgo(c.last_at) : ""}</span></div>
+        <div class="xs muted2 truncate">${esc(catById(c.category).name)} · ${dayStr(c.start_at)}${c.status === "cancelled" ? " · cancelled" : ""}</div>
+        <div class="between mt2"><span class="xs ${c.unread ? "" : "muted"} truncate">${c.last_text ? (c.last_mine ? "You: " : "") + esc(c.last_text) : "No messages yet — say hello"}</span>
+          ${c.unread ? `<span class="cnt-b">${c.unread}</span>` : ""}</div>
+      </div></button>`).join("")}</div></div>`;
+}
+/* open a chat even for an old booking that isn't in the recent list */
+async function ensureBooking(id){
+  if(S.d.bookings.some(b => b.id === id)) return true;
+  try{ const b = await api.booking(id); if(b){ S.d.bookings.push(b); return true; } }catch(e){}
+  toast("Couldn't open this booking", "Check your connection and try again", "x"); return false;
+}
+async function openChatFor(id){ if(await ensureBooking(id)) push("chat", { id }); }
+async function openShoot(id){ if(await ensureBooking(id)) push(isPg() ? "job" : "booking", { id }); }
+function markRead(id){
+  const c = (S.convos || []).find(x => x.booking_id === id); if(c && c.unread){ c.unread = 0; const t = el("tabs"); if(t) t.innerHTML = tabbarHtml(); }
+  Promise.resolve(sb.rpc("mark_chat_read", { p_booking: id })).catch(() => {});
+}
+
+/* ---------- My shoots: Upcoming / Past / Cancelled / All, any dates ---------- */
+const SHOOT_MODES = [["upcoming","Upcoming"],["past","Past"],["cancelled","Cancelled"],["all","All"]];
+const RANGES = [["any","Any date"],["month","This month"],["lastmonth","Last month"],["3m","Last 3 months"],["year","This year"],["custom","Pick dates"]];
+const isoDay = d => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+function rangeDates(){
+  const r = S.hist || {}, k = r.range || "any", now = new Date(), y = now.getFullYear(), m = now.getMonth();
+  if(k === "month") return [isoDay(new Date(y, m, 1)), isoDay(new Date(y, m + 1, 0))];
+  if(k === "lastmonth") return [isoDay(new Date(y, m - 1, 1)), isoDay(new Date(y, m, 0))];
+  if(k === "3m") return [isoDay(new Date(y, m - 2, 1)), isoDay(new Date(y, m + 1, 0))];
+  if(k === "year") return [isoDay(new Date(y, 0, 1)), isoDay(new Date(y, 11, 31))];
+  if(k === "custom" && r.from && r.to) return [r.from, r.to];
+  return [isoDay(new Date(y - 2, m, now.getDate() + 1)), isoDay(new Date(y, m + 6, now.getDate()))];      // "Any date": 2 years back to 6 months ahead
+}
+const rangeLabel = () => { const k = (S.hist || {}).range || "any"; if(k === "any") return "the last 2 years"; if(k === "custom"){ const [a, b] = rangeDates(); return fmtDay(a) + " – " + fmtDay(b); } return RANGES.find(x => x[0] === k)[1].toLowerCase(); };
+const fmtDay = s => new Date(s + "T00:00:00").toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+async function loadHistory(){
+  const [f, t] = rangeDates(), key = f + "|" + t;
+  S.hist = Object.assign({ mode: "upcoming", range: "any" }, S.hist, { busy: true, key });
+  const { data, error } = await sb.rpc("my_history", { p_from: f, p_to: t });
+  if(S.hist.key !== key) return;
+  S.hist.busy = false;
+  if(error){ S.hist.err = dbMsg(error); S.hist.data = null; } else { S.hist.err = null; S.hist.data = data; }
+  softRender();
+}
+function setHist(k, v){
+  S.hist = Object.assign({ mode: "upcoming", range: "any" }, S.hist, { [k]: v });
+  if(k === "range" && v !== "custom") loadHistory(); else render();
+}
+function applyCustomRange(){
+  const f = (el("hFrom") || {}).value, t = (el("hTo") || {}).value;
+  if(!f || !t){ toast("Pick both dates", "", "calendar"); return; }
+  if(f > t){ toast("The From date is after the To date", "", "x"); return; }
+  S.hist.from = f; S.hist.to = t; loadHistory();
+}
+function histRows(){
+  const H = S.hist || {}, mode = H.mode || "upcoming", q = (H.q || "").trim().toLowerCase(), now = Date.now();
+  const [f, t] = rangeDates(), from = toMs(f + "T00:00:00"), to = toMs(t + "T23:59:59");
+  const byId = {};
+  ((H.data && H.data.bookings) || []).forEach(b => byId[b.id] = Object.assign({}, b));
+  S.d.bookings.forEach(b => { const ms = toMs(b.start_at); if(byId[b.id] || (ms >= from && ms <= to)) byId[b.id] = Object.assign(byId[b.id] || {}, b); });   // newest status from the live list
+  let rows = Object.values(byId).filter(b => b.status !== "pending_payment" || !isPg());
+  if(mode === "upcoming") rows = rows.filter(b => activeBk(b));
+  if(mode === "past") rows = rows.filter(b => !activeBk(b) && b.status !== "cancelled");
+  if(mode === "cancelled") rows = rows.filter(b => b.status === "cancelled");
+  if(q) rows = rows.filter(b => [b.customer_name, b.photographer_name, catById(b.category).name, b.city, bookingRef(b)].some(v => v && String(v).toLowerCase().includes(q)));
+  rows.sort((a, b) => mode === "upcoming" ? toMs(a.start_at) - toMs(b.start_at) : toMs(b.start_at) - toMs(a.start_at));
+  return rows;
+}
+function histTotals(){
+  const H = S.hist || {}, all = (H.data && H.data.bookings) || [], pay = (H.data && H.data.payments) || [];
+  const done = all.filter(b => b.status === "completed"), canc = all.filter(b => b.status === "cancelled"), booked = all.filter(b => b.status !== "cancelled" && b.status !== "pending_payment");
+  if(isPg()) return [
+    [num0(done.length), "Shoots done", "past"], [inr(done.reduce((t, b) => t + Number(b.photographer_amount != null ? b.photographer_amount : b.price || 0), 0)), "Earned", "past"],
+    [inr(pay.reduce((t, p) => t + Number(p.amount || 0), 0)), "Paid to you", "pay"], [inr(H.data && H.data.pending_payout || 0), "Waiting to be paid", "pay"],
+    [num0(booked.filter(b => activeBk(b)).length), "Upcoming", "upcoming"], [num0(canc.length), "Cancelled", "cancelled"]];
+  return [
+    [num0(booked.length), "Shoots booked", "all"], [num0(done.length), "Completed", "past"],
+    [inr(pay.filter(p => p.amount > 0).reduce((t, p) => t + Number(p.amount), 0)), "Paid", "pay"], [inr(-pay.filter(p => p.amount < 0).reduce((t, p) => t + Number(p.amount), 0)), "Refunded", "pay"],
+    [num0(booked.filter(b => activeBk(b)).length), "Upcoming", "upcoming"], [num0(canc.length), "Cancelled", "cancelled"]];
+}
+const PAY_KIND = { advance: "Advance paid", balance: "Balance paid", refund: "Refund to you", payout: "Paid to you" };
+function vMyShoots(){
+  const H = S.hist = Object.assign({ mode: "upcoming", range: "any" }, S.hist);
+  if(!H.data && !H.busy && !H.err) loadHistory();
+  const mode = H.mode, rows = histRows(), pay = (H.data && H.data.payments) || [];
+  const openReqs = !isPg() ? S.d.requests.filter(reqIsOpen) : [];
+  const groups = []; rows.forEach(b => { const k = new Date(toMs(b.start_at)).toLocaleDateString("en-IN", { month: "long", year: "numeric" }); const g = groups[groups.length - 1]; if(g && g.k === k) g.rows.push(b); else groups.push({ k, rows: [b] }); });
+  return `<div class="pad">
+    ${pageHead("My shoots", isPg() ? "Every shoot you've been booked for. Pick a date range to see what you earned and what's been paid." : "Every shoot you've booked. Pick a date range to see past shoots, payments and refunds.",
+      !isPg() ? `<button class="btn sm" onclick="startRequest()">${icon("plus",14)} New shoot</button>` : "")}
+    ${actionsHtml(isPg() ? [] : customerActions())}
+    <div class="seg4 mt12">${SHOOT_MODES.map(([k, l]) => `<button class="${mode === k ? "on" : ""}" onclick="setHist('mode','${k}')">${l}</button>`).join("")}</div>
+    <div class="chips hscroll mt12">${icon("calendar",14,"var(--muted-2)")}${RANGES.map(([k, l]) => `<button class="chip ${H.range === k ? "accent" : ""}" onclick="setHist('range','${k}')">${l}</button>`).join("")}</div>
+    ${H.range === "custom" ? `<div class="card soft mt8"><div class="row gap8" style="flex-wrap:wrap;align-items:flex-end">
+        <label class="xs muted grow">From<input id="hFrom" class="input mt4" type="date" value="${esc(H.from || "")}"></label>
+        <label class="xs muted grow">To<input id="hTo" class="input mt4" type="date" value="${esc(H.to || "")}"></label>
+        <button class="btn primary sm" onclick="applyCustomRange()">Show</button></div></div>` : ""}
+    <div class="xs muted2 mt8">Showing ${rangeLabel()}${H.busy ? " · loading…" : ""}</div>
+    ${H.err ? `<div class="form-err">${esc(H.err)}</div>` : ""}
+    ${H.data ? `<div class="grid3 mt12 totals">${histTotals().map(([v, l, go]) => `<button class="stat tap" onclick="${go === "pay" ? "S.hist.showPay=true;render();setTimeout(()=>{const n=el('histPay');if(n)n.scrollIntoView({behavior:'smooth'})},50)" : `setHist('mode','${go}')`}"><div class="s-v">${v}</div><div class="s-l">${l}</div></button>`).join("")}</div>` : ""}
+    <div class="search mt12">${icon("search",16,"var(--muted-2)")}<input id="histQ" type="search" placeholder="Search by name, shoot type or booking ref" value="${esc(H.q || "")}" oninput="S.hist.q=this.value;setHtml('histList',histListHtml())"></div>
+    ${mode === "upcoming" && openReqs.length ? `<div class="sec-title mt20">Waiting for quotes</div>${openReqs.map(requestCard).join("")}` : ""}
+    <div id="histList">${histListHtml(groups)}</div>
+    ${!isPg() && (mode === "past" || mode === "all") && S.d.requests.some(r => !reqIsOpen(r) && r.status !== "matched") ? `<div class="sec-title mt20">Requests that closed without a booking</div>${S.d.requests.filter(r => !reqIsOpen(r) && r.status !== "matched").map(requestCard).join("")}` : ""}
+    ${H.data ? `<div class="card mt20" id="histPay">
+      <button class="between w100" onclick="S.hist.showPay=!S.hist.showPay;render()"><span class="sec-title" style="margin:0">${isPg() ? "Payouts to you" : "Payments and refunds"} <span class="cnt-b">${pay.length}</span></span>${icon("chevron",16,"var(--muted-2)")}</button>
+      ${H.showPay ? (pay.length ? `<div class="list mt8">${pay.map(p => `<button class="li" onclick="openShoot('${p.booking_id}')">
+          <div class="grow" style="text-align:left"><div class="sm bold">${PAY_KIND[p.kind] || p.kind} · ${esc(catById(p.category).name)}</div>
+            <div class="xs muted2">${p.at ? whenStr(p.at) : ""}${p.who ? " · " + esc(p.who) : ""}${p.ref ? " · ref " + esc(p.ref) : ""}${p.method ? " · " + esc(p.method.toUpperCase()) : ""}</div></div>
+          <div class="bold sm ${p.amount < 0 ? "" : "green"}">${p.amount < 0 ? "− " + inr(-p.amount) : inr(p.amount)}</div></button>`).join("")}</div>`
+        : `<div class="xs muted2 mt8">No ${isPg() ? "payouts" : "payments"} in this period.</div>`) : `<div class="xs muted2 mt4">Tap to see every ${isPg() ? "payout" : "payment and refund"} in this period.</div>`}
+      <button class="btn block mt12" onclick="downloadStatement()">${icon("doc",15)} Download statement (spreadsheet)</button></div>` : ""}
+  </div>`;
+}
+function histListHtml(groups){
+  if(!groups){ const rows = histRows(); groups = []; rows.forEach(b => { const k = new Date(toMs(b.start_at)).toLocaleDateString("en-IN", { month: "long", year: "numeric" }); const g = groups[groups.length - 1]; if(g && g.k === k) g.rows.push(b); else groups.push({ k, rows: [b] }); }); }
+  const H = S.hist || {};
+  if(!H.data && !groups.length) return H.err ? "" : `<div class="skeleton mt12"></div><div class="skeleton"></div>`;
+  if(!groups.length) return emptyState("📅", H.q ? "Nothing matches your search" : { upcoming: "No upcoming shoots", past: "No past shoots", cancelled: "No cancelled shoots", all: "No shoots" }[H.mode || "upcoming"] + " in " + rangeLabel(),
+    !isPg() && (H.mode || "upcoming") === "upcoming" ? "Post a shoot and photographers will send you their price." : "Try a different date range.",
+    !isPg() && (H.mode || "upcoming") === "upcoming" ? `<button class="btn primary sm mt12" onclick="startRequest()">Book a photographer</button>` : "");
+  return groups.map(g => `<div class="sec-title mt20">${esc(g.k)} <span class="muted2 xs">· ${g.rows.length}</span></div>${g.rows.map(histCard).join("")}`).join("");
+}
+function histCard(b){
+  const name = isPg() ? b.customer_name : b.photographer_name, other = isPg() ? b.customer_id : b.photographer_id;
+  const money = isPg() ? (b.photographer_amount != null ? b.photographer_amount : b.price) : b.price;
+  const pay = isPg() ? (b.payout_status === "paid" ? "Paid to you" : b.payout_status === "due" ? "Payout on the way" : "") :
+    ({ paid: b.balance_status === "paid" || b.balance_status === "not_required" ? "Paid in full" : "Advance paid", refunded: "Refunded", partially_refunded: "Partly refunded", refund_due: "Refund on the way", refund_pending: "Refund on the way" }[b.payment_status] || "");
+  return `<button class="card tap bk-card mt8" onclick="openShoot('${b.id}')">
+    <div class="row gap12">${avatarHtml(other, name, "av-48")}
+      <div class="grow" style="text-align:left"><div class="bold sm">${esc(name || "")}</div>
+        <div class="xs muted2">${esc(catById(b.category).name)} · ${whenStr(b.start_at)}</div>
+        <div class="xs muted2">${bookingRef(b)}${pay ? " · " + pay : ""}</div></div>
+      <div class="stack right">${statusChip(BK_LABEL[b.status], BK_CHIP[b.status])}<div class="sm bold mt4">${inr(money)}</div></div></div>
+  </button>`;
+}
+function downloadStatement(){
+  const H = S.hist || {}, rows = histRows(), pay = (H.data && H.data.payments) || [], [f, t] = rangeDates();
+  const q = v => { v = v == null ? "" : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+  const d = v => v ? new Date(toMs(v)).toLocaleString("en-IN") : "";
+  const lines = ["SnapPro statement," + q(S.me.name) + "," + q(S.me.public_id || "") + ",from " + f + " to " + t, "",
+    "SHOOTS", ["Booking ref","Shoot date","Shoot type","City", isPg() ? "Customer" : "Photographer","Status","Price","Discount"].concat(isPg() ? ["Commission %","Commission","Your share","Payout","Paid out on","Payout ref"] : ["Payment"]).join(",")];
+  rows.forEach(b => lines.push([bookingRef(b), d(b.start_at), catById(b.category).name, b.city, isPg() ? b.customer_name : b.photographer_name, BK_LABEL[b.status], b.price, b.discount_amount || 0]
+    .concat(isPg() ? [b.commission_pct, b.commission_amount, b.photographer_amount, b.payout_status, d(b.payout_at), b.payout_ref] : [b.payment_status]).map(q).join(",")));
+  lines.push("", isPg() ? "PAYOUTS" : "PAYMENTS AND REFUNDS", ["Date","What","Amount","Shoot type",isPg() ? "Customer" : "Photographer","Reference","Method"].join(","));
+  pay.forEach(p => lines.push([d(p.at), PAY_KIND[p.kind] || p.kind, p.amount, catById(p.category).name, p.who, p.ref, p.method].map(q).join(",")));
+  const blob = new Blob(["﻿" + lines.join("\n")], { type: "text/csv" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "snappro-statement-" + f + "-to-" + t + ".csv";
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 800);
+  toast("Statement downloaded", "Open it in Excel or Google Sheets", "doc");
+}
+
+/* ---------- receipt ---------- */
+function vReceipt(p){
+  if(!S.rcpt || S.rcpt.id !== p.id){ S.rcpt = { id: p.id }; sb.rpc("my_receipt", { p_booking: p.id }).then(r => { if(S.rcpt && S.rcpt.id === p.id){ if(r.error) S.rcpt.err = dbMsg(r.error); else S.rcpt.data = r.data; softRender(); } }); }
+  const R = S.rcpt;
+  if(R.err) return `${topbar("Receipt")}<div class="pad"><div class="form-err">${esc(R.err)}</div></div>`;
+  if(!R.data) return `${topbar("Receipt")}<div class="pad"><div class="skeleton"></div></div>`;
+  const b = R.data.booking, pays = R.data.payments || [], pgSide = R.data.side === "photographer";
+  const kv = (k, v) => `<div class="kv"><span>${k}</span><span>${v}</span></div>`;
+  const paid = pays.reduce((t, x) => t + Number(x.amount || 0), 0), refunded = pays.reduce((t, x) => t + Number(x.refunded_amount || 0), 0);
+  return `${topbar("Receipt", b.ref, `<button class="iconbtn" aria-label="Print or save as PDF" onclick="window.print()">${icon("doc",17)}</button>`)}
+  <div class="pad receipt">
+    <div class="between"><div class="wordmark">SnapPro</div><div class="xs muted2 right">snappro.in<br>${SUPPORT_EMAIL}</div></div>
+    <div class="h2 mt16">${pgSide ? "Earnings receipt" : "Payment receipt"}</div>
+    <div class="xs muted2">Booking ${esc(b.ref)} · made ${whenStr(b.created_at)}</div>
+    <div class="card mt16">
+      ${kv("Shoot", esc(catById(b.category).name) + ", " + b.duration_hrs + " hr" + (b.duration_hrs > 1 ? "s" : ""))}${kv("When", whenStr(b.start_at))}${kv("Where", esc([b.city, b.pincode].filter(Boolean).join(" ")))}
+      ${kv("Customer", esc(b.customer_name || "") + (b.customer_public_id ? " · " + esc(b.customer_public_id) : ""))}${kv("Photographer", esc(b.photographer_name || "") + (b.photographer_public_id ? " · " + esc(b.photographer_public_id) : ""))}
+      ${kv("Status", esc(BK_LABEL[b.status] || b.status))}</div>
+    <div class="card mt12">
+      ${kv("Price", inr(b.price))}${b.discount_amount ? kv("Reward discount", "− " + inr(b.discount_amount)) : ""}
+      ${pgSide ? kv("SnapPro commission" + (b.commission_pct != null ? " (" + Number(b.commission_pct) + "%)" : ""), "− " + inr(b.commission_amount)) + kv("<b>Your share</b>", "<b>" + inr(b.photographer_amount) + "</b>")
+          + kv("Payout", b.payout_status === "paid" ? "Sent " + dayStr(b.payout_at) + (b.payout_ref ? " · ref " + esc(b.payout_ref) : "") : b.payout_status === "due" ? "On the way" : "After the shoot")
+        : pays.map(x => kv((x.stage === "balance" ? "Balance" : "Advance") + " paid · " + dayStr(x.paid_at), inr(x.amount) + (x.method ? " · " + esc(String(x.method).toUpperCase()) : "") + (x.gateway_payment_id ? `<div class="xs muted2">${esc(x.gateway_payment_id)}</div>` : ""))).join("")
+          + (refunded ? kv("Refunded", "− " + inr(refunded)) : "") + kv("<b>Total paid</b>", "<b>" + inr(paid - refunded) + "</b>")}</div>
+    <div class="xs muted2 mt12">Payments are processed securely by Razorpay. This is a receipt for your records, not a tax invoice. Questions? Write to ${SUPPORT_EMAIL} with booking ${esc(b.ref)}.</div>
+    <button class="btn primary block mt16 no-print" onclick="window.print()">${icon("doc",16,"var(--on-text)")} Print or save as PDF</button>
+  </div>`;
+}
+
+/* ---------- book again ---------- */
+function bookAgain(id){
+  const b = S.d.bookings.find(x => x.id === id); if(!b) return;
+  startRequest(null, b.category);
+  S.draft.hours = b.duration_hrs || 2;
+  S.draft.notes = "Same as my last " + catById(b.category).name.toLowerCase() + " shoot" + (b.photographer_name ? " with " + firstName(b.photographer_name) : "") + ".";
+  render();
+  toast("Shoot type and hours copied", "Pick a time and post — " + (b.photographer_name ? firstName(b.photographer_name) + " and others" : "photographers") + " can quote", "check");
+}
+
+/* ---------- saved photographers ---------- */
+async function loadSaved(){
+  try{ const { data, error } = await sb.from("saved_photographers").select("photographer_id"); if(!error && data) S.saved = new Set(data.map(r => r.photographer_id)); }catch(e){}
+}
+const isSaved = id => !!(S.saved && S.saved.has(id));
+async function toggleSave(id, ev){
+  if(ev) ev.stopPropagation();
+  if(!S.saved) S.saved = new Set();
+  const on = !isSaved(id);
+  on ? S.saved.add(id) : S.saved.delete(id); render();
+  const res = on ? await sb.from("saved_photographers").insert({ user_id: S.me.id, photographer_id: id }) : await sb.from("saved_photographers").delete().eq("photographer_id", id).eq("user_id", S.me.id);
+  if(res && res.error && !/duplicate/i.test(res.error.message)){ on ? S.saved.delete(id) : S.saved.add(id); render(); toast("Couldn't update", dbMsg(res.error), "x"); return; }
+  toast(on ? "Saved" : "Removed from saved", on ? "Find them any time in Explore → Saved" : "", on ? "heart" : "x");
+}
+const heartBtn = (id, cls) => `<button class="iconbtn heart ${isSaved(id) ? "on" : ""} ${cls || ""}" aria-label="${isSaved(id) ? "Remove from saved" : "Save photographer"}" aria-pressed="${isSaved(id)}" onclick="toggleSave('${id}', event)">${icon("heart",17, isSaved(id) ? "var(--accent)" : "currentColor")}</button>`;
+
+/* ============================================================
    NAVIGATION
    ============================================================ */
 const AUTH_VIEWS = { welcome: vWelcome, signup: vSignup, otp: vOtp, login: vLogin, reset: vReset, newpw: vNewPw,
@@ -4822,10 +5049,10 @@ const STACK_VIEWS = { pg: vPgProfile, photo: vPhoto, newRequest: vNewRequest, re
                       booking: vBooking, rate: vRate, chat: vChat, editName: vEditName, editLoc: vEditLoc,
                       quote: vQuote, job: vJob, portfolio: vPortfolio, editPg: vEditPg,
                       payResult: vPayResult, editPayout: vEditPayout,
-                      pgEarnings: vPgEarnings, pgDone: vPgDone, pgReviews: vPgReviews, how: vHow, storage: vStorage, rewards: vRewards, invite: vInvite, kyc: vKyc, deleteAccount: vDeleteAccount,
+                      pgEarnings: vPgEarnings, pgDone: vPgDone, pgReviews: vPgReviews, how: vHow, storage: vStorage, rewards: vRewards, invite: vInvite, kyc: vKyc, deleteAccount: vDeleteAccount, receipt: vReceipt,
                       report: vReport, blockedPeople: vBlockedPeople };
-const CUST_TABS = [ ["home","Home","home",vCustHome], ["explore","Explore","search",vExplore], ["activity","Shoots","calendar",vActivity], ["profile","Profile","user",vProfile] ];
-const PG_TABS   = [ ["home","Home","home",vPgHome], ["requests","Requests","bolt",vPgRequests], ["jobs","Shoots","calendar",vJobs], ["profile","Profile","user",vProfile] ];
+const CUST_TABS = [ ["home","Home","home",vCustHome], ["explore","Explore","search",vExplore], ["activity","My shoots","calendar",vActivity], ["messages","Messages","chat",vMessages], ["profile","Profile","user",vProfile] ];
+const PG_TABS   = [ ["home","Home","home",vPgHome], ["requests","Requests","bolt",vPgRequests], ["jobs","My shoots","calendar",vJobs], ["messages","Messages","chat",vMessages], ["profile","Profile","user",vProfile] ];
 const tabsFor = () => isPg() ? PG_TABS : CUST_TABS;
 
 function scrollTop(){ try{ window.scrollTo(0, 0); }catch(e){} }
@@ -4847,7 +5074,8 @@ function replaceStack(v, p){
   if(S.stack.length) S.stack[S.stack.length - 1] = { v, p: p || {} }; else { S.stack.push({ v, p: p || {} }); try{ history.pushState({ snap: 1 }, ""); }catch(e){} }
   render(); scrollTop();
 }
-function go(tab){ S.tab = tab; S.stack = []; S.formErr = null; navMark(tab === "home"); render(); scrollTop(); }
+function go(tab){ if(tab === "messages") loadConversations().then(softRender); if((tab === "activity" || tab === "jobs") && S.hist && !S.hist.busy) loadHistory();
+  S.tab = tab; S.stack = []; S.formErr = null; navMark(tab === "home"); render(); scrollTop(); }
 window.addEventListener("popstate", () => {
   if(ignorePop){ ignorePop--; return; }
   if(S.stack.length){ S.stack.pop(); S.formErr = null; render(); return; }
@@ -4857,6 +5085,7 @@ window.addEventListener("popstate", () => {
 function tabBadge(id){
   if(isCustomer() && id === "activity") return customerActions().filter(a => a.urgent).length;
   if(isPg() && id === "requests") return newForMe().length;
+  if(id === "messages") return unreadTotal();
   if(isPg() && id === "jobs") return S.d.bookings.filter(b => activeBk(b) && (b.status !== "confirmed" || soonMs(b) < 24*3600e3)).length;
   return 0;
 }
