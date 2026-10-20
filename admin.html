@@ -297,6 +297,20 @@ html[data-theme=dark] input[type=date]{color-scheme:dark}
 .main{overflow-x:clip}
 .pbody .tabs{flex-wrap:wrap;max-width:100%}
 .pbody .card,.pbody .grid2>*,.pbody .grid3>*{min-width:0}
+
+/* photographer payouts */
+.modal-bg{position:fixed;inset:0;background:rgba(5,5,10,.72);backdrop-filter:blur(3px);z-index:80;display:flex;justify-content:center;align-items:flex-start;padding:6vh 14px;overflow-y:auto}
+.po-bk{padding:14px 16px}
+.po-bk table.dt td,.po-bk table.dt th{font-size:12.5px}
+.stat .xs{line-height:1.45}
+html[data-theme=light] .modal-bg{background:rgba(20,20,30,.38)}
+@media print{
+  body.print-sheet .shell,body.print-sheet .modal-bg{display:none!important}
+  body.print-sheet .sheet-bg{position:static;background:none;backdrop-filter:none;padding:0}
+  body.print-sheet .sheet-bg:not(:last-of-type){display:none}
+  body.print-sheet .sheet{box-shadow:none;border:0;max-width:none}
+  body.print-sheet .trail,body.print-sheet button{display:none!important}
+}
 </style>
 </head>
 <body>
@@ -949,7 +963,7 @@ function vUsers(){
 const PAY_FILTERS = [["all","All"],["paid","Paid"],["problem","Failed / not completed"],["refunds","Refunds"],["open","Waiting"]];
 async function loadPayments(quiet){
   const [p, b, r, po, cs] = await Promise.all([
-    sb.from('payments').select('id,order_id,booking_id,customer_id,photographer_id,amount,currency,commission_amount,photographer_amount,status,environment,provider,gateway_order_id,gateway_payment_id,payment_group,bank_reference,payment_message,paid_at,refund_status,refunded_amount,is_duplicate,note,stage,created_at').order('created_at',{ascending:false}).limit(1000),
+    sb.from('payments').select('id,order_id,receipt_no,paid_out_amount,booking_id,customer_id,photographer_id,amount,currency,commission_amount,photographer_amount,status,environment,provider,gateway_order_id,gateway_payment_id,payment_group,bank_reference,payment_message,paid_at,refund_status,refunded_amount,is_duplicate,note,stage,created_at').order('created_at',{ascending:false}).limit(1000),
     sb.from('bookings').select('id,customer_name,photographer_name,photographer_id,start_at,status,price,commission_amount,photographer_amount,payment_status,payout_status,payout_ref,payout_at,cancelled_from,cancelled_by,advance_amount,balance_amount,balance_status,customer_id').order('start_at',{ascending:false}).limit(1000),
     sb.from('refunds').select('id,refund_id,payment_id,order_id,amount,status,gateway_refund_id,refund_arn,reason,created_at,processed_at').order('created_at',{ascending:false}).limit(1000),
     sb.from('photographer_payout').select('id,upi_id,account_name'),
@@ -1031,6 +1045,14 @@ async function checkRefund(refundId, gatewayRefundId){
   catch(e){ S.err = "Couldn't check: " + e.message; }
   await loadPayments();
 }
+async function noRefund(id){
+  const p = S.pay.payments.find(x => x.id === id); if(!p) return;
+  const why = prompt("No refund for " + payRef(p.booking_id) + " (" + inr(p.amount) + ")?\nThe customer gets nothing back and the photographer's share becomes payable.\n\nWhy? (e.g. cancelled less than 24 hours before)");
+  if(why === null) return;
+  const { error } = await sb.rpc("admin_refund_none", { p_payment: id, p_reason: why.trim() });
+  if(error){ S.err = error.message; render(); return; }
+  S.err = ""; S.note = "Marked: no refund for " + payRef(p.booking_id) + "."; await loadPayments(); if(S.po) loadPayouts(true);
+}
 async function markPaidOut(bookingId){
   const b = S.pay.bookings.find(x => x.id === bookingId); if(!b) return;
   const ref = prompt("You've sent " + inr(b.photographer_amount) + " to " + (b.photographer_name || "the photographer") + ".\nEnter the UPI / bank transfer reference (UTR):");
@@ -1050,9 +1072,9 @@ async function setCommission(){
 }
 function exportPayments(){
   const bk = id => (S.pay.bookings.find(b => b.id === id) || {});
-  const cols = ["created_at","order_id","booking","customer","photographer","part","amount","commission","photographer_share","status","method","razorpay_payment_id","bank_reference","refund_status","refunded_amount","environment"];
+  const cols = ["created_at","receipt_no","order_id","booking","customer","photographer","part","amount","commission","photographer_share","status","method","razorpay_payment_id","bank_reference","refund_status","refunded_amount","environment"];
   const q = v => { v = v == null ? "" : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g,'""') + '"' : v; };
-  const rows = S.pay.payments.filter(payMatches).map(p => [p.created_at, p.order_id, payRef(p.booking_id), bk(p.booking_id).customer_name, bk(p.booking_id).photographer_name,
+  const rows = S.pay.payments.filter(payMatches).map(p => [p.created_at, p.receipt_no, p.order_id, payRef(p.booking_id), bk(p.booking_id).customer_name, bk(p.booking_id).photographer_name,
     p.stage || "advance", p.amount, p.commission_amount, p.photographer_amount, p.status, p.payment_group, p.gateway_payment_id, p.bank_reference, p.refund_status, p.refunded_amount, p.environment].map(q).join(","));
   const blob = new Blob([cols.join(",") + "\n" + rows.join("\n")], { type: "text/csv" });
   const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "snappro-payments-" + istToday() + ".csv";
@@ -1077,7 +1099,7 @@ function vPayments(){
   <div class="grid">
     ${tile(inr(collected), "Collected online", "", "hl", "collected", "Payments collected", null, true)}
     ${tile(inr(commission), "SnapPro commission (" + P.commission + "%)", "", "", "commission", "Payments with commission", null, true)}
-    ${tile(inr(due.reduce((s,b) => s + (b.photographer_amount||0), 0)), "Owed to photographers (" + due.length + ")", "", "", "payouts_due", "Payouts due to photographers", null, true)}
+    <button class="stat tap" onclick="goPage('payouts')"><div class="v">${inr(real.filter(p => p.refund_status === "none").reduce((s,p) => s + Math.max(0, Number(p.photographer_amount) - Number(p.paid_out_amount || 0)), 0))}</div><div class="l">Owed to photographers <span class="go">›</span></div><div class="xs muted2 mt8">Open Photographer payouts</div></button>
     ${tile(num(balances.length), "Balances owed by customers", inr(balances.reduce((s,b) => s + (b.balance_amount||0), 0)), "", "balances_due", "Balances still owed by customers", null, true)}
     ${tile(num(refundsDue.length), "Refunds to do", "", "", "refunds_due", "Refunds to do", null, true)}
     ${tile(inr(refunded), "Refunded", "", "", "refunds", "Refunds", null, true)}
@@ -1088,7 +1110,8 @@ function vPayments(){
   <div class="card tblwrap"><table><thead><tr><th>Booking</th><th>Customer</th><th>Paid</th><th>Why</th><th></th></tr></thead><tbody>
   ${refundsDue.map(p => `<tr><td>${payRef(p.booking_id)}</td><td>${esc(bk(p.booking_id).customer_name || "—")}</td><td>${inr(p.amount)}</td>
     <td class="sm">${esc(policyRefund(p).why || "—")}<div class="xs muted2">Suggested refund: ${inr(policyRefund(p).amount)}</div></td>
-    <td style="text-align:right"><button class="btn sm primary" ${S.busyId===p.id?'disabled':''} onclick="refundPayment('${p.id}')">${S.busyId===p.id?'Refunding…':'Refund'}</button></td></tr>`).join("")}
+    <td style="text-align:right;white-space:nowrap"><button class="btn sm primary" ${S.busyId===p.id?'disabled':''} onclick="refundPayment('${p.id}')">${S.busyId===p.id?'Refunding…':'Refund'}</button>
+      ${!p.is_duplicate ? `<button class="btn sm" onclick="noRefund('${p.id}')" title="No refund is owed (e.g. a late cancellation). The photographer's share becomes payable.">No refund</button>` : ""}</td></tr>`).join("")}
   </tbody></table></div>` : ""}
 
   ${balances.length ? `<div class="sec mt24">Balances waiting from customers (${balances.length})</div>
@@ -1096,15 +1119,11 @@ function vPayments(){
   ${balances.map(b => `<tr><td>${payRef(b.id)}</td><td>${esc(b.customer_name || "—")}</td><td>${esc(b.photographer_name || "—")}</td><td class="muted">${when(b.start_at)}</td>
     <td>${statusChip(b.status)}</td><td class="bold">${inr(b.balance_amount)}</td></tr>`).join("")}
   </tbody></table></div>
-  <div class="xs muted2 mt8">The customer pays this in the app. The photographer's payout becomes due once it's paid and the shoot is complete.</div>` : ""}
+  <div class="xs muted2 mt8">The customer pays this in the app. The photographer's share of it is owed as soon as it's paid.</div>` : ""}
 
-  ${due.length ? `<div class="sec mt24">Photographer payouts due (${due.length})</div>
-  <div class="card tblwrap"><table><thead><tr><th>Booking</th><th>Photographer</th><th>Shoot</th><th>Their share</th><th>Pay to</th><th></th></tr></thead><tbody>
-  ${due.map(b => `<tr><td>${payRef(b.id)}</td><td>${esc(b.photographer_name || "—")}</td><td class="muted">${when(b.start_at)}</td>
-    <td class="bold">${inr(b.photographer_amount)}</td><td class="sm">${upiOf(b.photographer_id)}</td>
-    <td style="text-align:right"><button class="btn sm" onclick="markPaidOut('${b.id}')">Mark paid out</button></td></tr>`).join("")}
-  </tbody></table></div>
-  <div class="xs muted2 mt8">Send the money from your bank or UPI app, then record the reference here. Automatic payouts can be added later.</div>` : ""}
+  <div class="card mt24 between" style="flex-wrap:wrap;gap:10px"><div><div class="sec" style="margin:0">Photographer payouts</div>
+    <div class="xs muted2 mt8">A photographer's share is owed as soon as the customer pays. See who's owed, pay them and record the UTR on the Photographer payouts page.</div></div>
+    <button class="btn sm primary" onclick="goPage('payouts')">Open Photographer payouts ›</button></div>
 
   <div class="between mt24" style="flex-wrap:wrap;gap:10px">
     <div class="tabs" style="width:fit-content;flex-wrap:wrap">${PAY_FILTERS.map(([k,l]) => `<button class="tab ${(S.payFilter||'all')===k?'on':''}" onclick="S.payFilter='${k}';render()">${l}</button>`).join("")}</div>
@@ -1115,7 +1134,7 @@ function vPayments(){
     <thead><tr><th>Date</th><th>Booking</th><th>Customer</th><th>Photographer</th><th>Amount</th><th>Status</th><th>Method</th><th>Razorpay reference</th><th>Refund</th><th></th></tr></thead>
     <tbody>${list.map(p => `<tr>
       <td class="muted">${when(p.paid_at || p.created_at)}</td>
-      <td>${payRef(p.booking_id)}<div class="xs muted2">${esc(p.order_id)}</div></td>
+      <td>${payRef(p.booking_id)}${p.receipt_no ? `<div class="xs mono">${esc(p.receipt_no)}</div>` : ""}<div class="xs muted2">${esc(p.order_id)}</div></td>
       <td>${esc(bk(p.booking_id).customer_name || "—")}</td>
       <td>${esc(bk(p.booking_id).photographer_name || "—")}</td>
       <td class="bold">${inr(p.amount)}<div class="xs muted2">${p.stage === "balance" ? "Balance" : "Advance"} · fee ${inr(p.commission_amount)}</div></td>
@@ -3029,6 +3048,7 @@ const ICO = {
   gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
   clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>',
   card: '<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/>',
+  wallet: '<path d="M20 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h13a2 2 0 0 0 2-2v-2"/><path d="M22 11h-6a2 2 0 0 0 0 4h6z"/>',
   chart: '<path d="M3 3v18h18"/><path d="M7 15l4-5 3 3 5-7"/>',
   pct: '<path d="M19 5L5 19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/>',
   tag: '<path d="M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L2 12V2h10l8.6 8.6a2 2 0 0 1 0 2.8z"/><circle cx="7" cy="7" r="1.5"/>',
@@ -3070,7 +3090,8 @@ function navGroups(){
       ["ops", "gear", "Operations", "Speed, cancellations, cities"],
       ["timeline", "clock", "Live timeline", "Everything that happens, as it happens"] ] },
     { t: "Money", items: [
-      money && ["payments", "card", "Payments & refunds", "Money in, refunds, payouts", refunds],
+      money && ["payments", "card", "Payments & refunds", "Money in from customers, refunds", refunds],
+      money && ["payouts", "wallet", "Photographer payouts", "Who's owed, pay them, holds", S.po && S.po.data ? (S.po.data.photographers || []).filter(p => Number(p.ready) > 0).length : 0],
       money && ["finance", "chart", "Profit & finance", "Revenue, commission, profit"],
       money && ["commission", "pct", "Commission", "Standard rate and each photographer's rate"],
       money && ["offers", "tag", "Offers & promo codes", "Discounts and rewards"] ] },
@@ -3084,7 +3105,7 @@ function navGroups(){
   return g.filter(x => x.items.length);
 }
 const navItem = k => { for(const g of navGroups()) for(const it of g.items) if(it[0] === k) return it; return null; };
-function goPage(k){ S.navOpen = false; S.menuOpen = false; S.trail = []; S.drill = null; S.u360 = null; S.bk = null; openTab(k); try{ window.scrollTo(0, 0); }catch(e){} }
+function goPage(k){ S.navOpen = false; S.menuOpen = false; S.trail = []; S.drill = null; S.u360 = null; S.bk = null; S.poPg = null; S.poOut = null; S.poPay = null; openTab(k); try{ window.scrollTo(0, 0); }catch(e){} }
 
 /* ---------- the page frame ---------- */
 vConsole = function(){
@@ -3103,7 +3124,7 @@ vConsole = function(){
     <main class="main">
       <header class="topbar">
         <button class="iconb mob" aria-label="Menu" onclick="S.navOpen=true;render()">${ic("menu", 20)}</button>
-        <div class="tsearch">${ic("search", 17)}<input id="findQ" placeholder="Find anyone — name, phone, email, SnapPro ID or booking ref" onkeydown="if(event.key==='Enter')findAnything()"></div>
+        <div class="tsearch">${ic("search", 17)}<input id="findQ" placeholder="Find anyone or anything — name, phone, SnapPro ID, booking, receipt or payout no." onkeydown="if(event.key==='Enter')findAnything()"></div>
         <div class="pmenu-wrap">
           <button class="avatar-b" onclick="S.menuOpen=!S.menuOpen;render()" aria-label="Profile and settings"><span>${esc(initials)}</span></button>
           ${S.menuOpen ? `<div class="pmenu" role="menu">
@@ -3133,7 +3154,7 @@ vConsole = function(){
   </div>`;
 };
 function tabContent(){
-  const V = { users: vUsers, bookings: vBookings, payments: vPayments, requests: vRequests, pros: vPros, offers: vOffers, activity: vActivity, team: vTeam,
+  const V = { users: vUsers, bookings: vBookings, payments: vPayments, payouts: vPayouts, requests: vRequests, pros: vPros, offers: vOffers, activity: vActivity, team: vTeam,
               leads: vLeads, marketing: vMarketing, finance: vFinance, ops: vOps, customers: vCustomers, referrals: vReferrals, trust: vTrust, timeline: vTimeline };
   return V[S.tab] ? V[S.tab]() : vAttention() + vOverview();
 }
@@ -3149,7 +3170,8 @@ const PAGE_HELP = {
   bookings: ["Every booked shoot — status, money, people.", "Click a booking for the full story: payments, chat, quotes and review."],
   ops: ["How smoothly shoots run: how fast quotes come, cancellations, busy cities and times.", "Click any number or row to see the shoots behind it."],
   timeline: ["Everything that happens on SnapPro, newest first — sign-ups, quotes, bookings, payments, chats.", "Turn on Live to watch it update. Click any name or booking."],
-  payments: ["Money in from customers, refunds to send, and payouts to photographers.", "Refunds and payouts waiting for you are highlighted."],
+  payments: ["Money in from customers and refunds to send. Every payment has a receipt number (SPR-…).", "Refunds waiting for you are highlighted. Photographer payouts have their own page."],
+  payouts: ["What SnapPro owes each photographer, and every payout sent. A photographer's share is owed as soon as the customer pays.", "Filter by shoot done / not done yet. Pay everything, only finished shoots, or one shoot — then record the UTR. Click any receipt (SPR-…), booking (SP-…) or payout (PO-…) number."],
   finance: ["Revenue, SnapPro's commission, discounts and profit over time.", "Click a number to see the payments behind it."],
   commission: ["What SnapPro keeps from each booking. One standard rate for everyone, and a special rate for any photographer.", "Changes apply to new bookings only. Bookings already made keep their rate."],
   offers: ["Promo codes, offers and the referral reward settings.", "Start from a ready-made offer, then change the amount or dates."],
@@ -3169,7 +3191,7 @@ function vAttention(){
     [T && T.kyc && T.kyc.submitted, "ID checks to review", "Government ID + face photo sent in", "goPage('pros')", "shield"],
     [T && T.reports_open, "Reports from users", "Someone reported a person or a chat", "goPage('trust')", "alert"],
     money && [k.refunds_due, "Refunds to send", "Customers waiting for their money back", "openDrill('refunds_due','Refunds to do')", "card"],
-    money && [k.payouts_due || 0, "Owed to photographers", "Payouts due now", "openDrill('payouts_due','Payouts due to photographers')", "card", true],
+    money && [k.payouts_due || 0, "Owed to photographers", "Customers have paid — send their share", "goPage('payouts')", "wallet", true],
     money && [k.balances_due, "Balances customers still owe", "Shoot started, balance not paid", "openDrill('balances_due','Balances owed by customers',null,true)", "clock"],
     [k.now_open_requests, "Requests waiting for quotes", "Customers waiting — photographers can quote now", "openDrill('open_requests','Requests waiting for quotes',null,true)", "bolt"]
   ].filter(x => x && Number(x[0]) > 0);
@@ -3249,7 +3271,8 @@ function editPgRate(id, name, cur){
 /* ---------- click through: Back between people, bookings and lists ---------- */
 S.trail = [];
 const trailTop = () => S.trail[S.trail.length - 1];
-function trailShow(item){ S.drill = item.t === "drill" ? item.st : null; S.u360 = item.t === "user" ? item.st : null; S.bk = item.t === "bk" ? item.st : null; }
+function trailShow(item){ S.drill = item.t === "drill" ? item.st : null; S.u360 = item.t === "user" ? item.st : null; S.bk = item.t === "bk" ? item.st : null;
+  S.poPg = item.t === "pgpay" ? item.st : null; S.poOut = item.t === "payout" ? item.st : null; }
 function trailPush(t, st){ const top = trailTop(); if(top && top.st === st) return; S.trail.push({ t, st }); if(S.trail.length > 30) S.trail.shift(); trailShow(trailTop()); }
 const _openUser = openUser, _openBooking = openBooking, _openDrill = openDrill;
 openUser = function(key){ const p = _openUser(key); if(S.u360) trailPush("user", S.u360); render(); return p; };
@@ -3258,18 +3281,21 @@ openDrill = function(kind, title, arg, allTime){ S.trail = S.u360 || S.bk ? S.tr
 function openUserQuiet(id){ const keep = S.trail.slice(0, -1); _openUser(id); S.trail = keep; trailPush("user", S.u360); }
 function navBack(){
   S.trail.pop(); const top = trailTop();
-  if(!top){ S.drill = null; S.u360 = null; S.bk = null; render(); return; }
+  if(!top){ S.drill = null; S.u360 = null; S.bk = null; S.poPg = null; S.poOut = null; render(); return; }
   trailShow(top);
   /* reload anything that hadn't finished loading when we left it */
   if(top.t === "user" && !top.st.data && !top.st.err){ S.trail.pop(); openUser(top.st.key); return; }
   if(top.t === "bk" && !top.st.data && !top.st.err){ S.trail.pop(); openBooking(top.st.id); return; }
   if(top.t === "drill" && !top.st.rows && !top.st.err){ S.trail.pop(); openDrill(top.st.kind, top.st.title, top.st.arg); return; }
+  if(top.t === "payout" && !top.st.data && !top.st.err){ S.trail.pop(); openPayout(top.st.id); return; }
   render();
 }
-function closeAll(){ S.trail = []; S.drill = null; S.u360 = null; S.bk = null; render(); }
+function closeAll(){ S.trail = []; S.drill = null; S.u360 = null; S.bk = null; S.poPg = null; S.poOut = null; render(); }
 closeUser = navBack; closeDrill = navBack;
 const trailLabel = it => it.t === "user" ? (it.st.data && it.st.data.profile ? it.st.data.profile.name || it.st.data.profile.public_id : it.st.key)
-  : it.t === "bk" ? "Booking " + payRef(it.st.id) : it.st.title;
+  : it.t === "bk" ? "Booking " + payRef(it.st.id)
+  : it.t === "payout" ? (it.st.data ? it.st.data.payout_no : "Payout")
+  : it.t === "pgpay" ? "Payouts · " + (((S.po && S.po.data && (S.po.data.photographers || []).find(p => p.id === it.st.id)) || {}).name || "photographer") : it.st.title;
 function trailBar(){
   if(!S.trail.length) return "";
   return `<div class="trail"><button class="btn sm" onclick="navBack()">${ic("back", 15)} ${S.trail.length > 1 ? "Back" : "Close"}</button>
@@ -3282,11 +3308,11 @@ vBooking = function(){ return _vBooking().replace(/S\.bk=null;render\(\)/g, "nav
 document.addEventListener("keydown", e => { if(e.key === "Escape" && S.trail && S.trail.length && !S.chatView){ e.stopImmediatePropagation(); navBack(); } }, true);
 
 /* ---------- click through: IDs and booking refs anywhere become links ---------- */
-const ID_RE = /\b(SP[CP]\d{4,}|SP-[0-9A-F]{8})\b/g;
+const ID_RE = /\b(SP[CP]\d{4,}|SP-[0-9A-F]{8}|SPR-\d{4}-\d{5}|PO-\d{4}-\d{5})\b/g;
 function linkify(root){
   if(!root) return;
   const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, { acceptNode: n => {
-    if(!n.nodeValue || !/SP[CP-]/.test(n.nodeValue)) return NodeFilter.FILTER_REJECT;
+    if(!n.nodeValue || !/SP[CPR-]|PO-/.test(n.nodeValue)) return NodeFilter.FILTER_REJECT;
     for(let p = n.parentNode; p && p !== root; p = p.parentNode){ if(/^(A|BUTTON|INPUT|TEXTAREA|SELECT|SCRIPT|STYLE|OPTION|TH)$/.test(p.tagName) || (p.classList && p.classList.contains("nolink"))) return NodeFilter.FILTER_REJECT; }
     return NodeFilter.FILTER_ACCEPT; } });
   const nodes = []; while(w.nextNode()) nodes.push(w.currentNode);
@@ -3295,8 +3321,10 @@ function linkify(root){
     const f = document.createDocumentFragment(); let last = 0, m;
     while((m = ID_RE.exec(s))){
       if(m.index > last) f.appendChild(document.createTextNode(s.slice(last, m.index)));
-      const a = document.createElement("a"); a.className = "lnk idl"; a.textContent = m[1]; a.title = m[1].startsWith("SP-") ? "Open this booking" : "Open this person";
-      a.setAttribute("onclick", `event.stopPropagation();${m[1].startsWith("SP-") ? "openBookingRef" : "openUser"}('${m[1]}')`);
+      const id = m[1], kind = id.startsWith("SPR-") ? "receipt" : id.startsWith("PO-") ? "payout" : id.startsWith("SP-") ? "booking" : "person";
+      const a = document.createElement("a"); a.className = "lnk idl"; a.textContent = id;
+      a.title = { receipt: "Open the booking this receipt belongs to", payout: "Open this payout", booking: "Open this booking", person: "Open this person" }[kind];
+      a.setAttribute("onclick", `event.stopPropagation();${kind === "payout" ? "openPayoutNo" : kind === "person" ? "openUser" : "openBookingRef"}('${id}')`);
       f.appendChild(a); last = m.index + m[1].length;
     }
     if(last < s.length) f.appendChild(document.createTextNode(s.slice(last)));
@@ -3305,12 +3333,14 @@ function linkify(root){
 }
 async function openBookingRef(ref){
   const { data, error } = await sb.rpc("admin_find_booking", { p_ref: ref });
-  if(error || !data){ S.err = "Couldn't find booking " + ref + "."; render(); return; }
+  if(error || !data){ S.err = "Couldn't find " + (/^SPR-/.test(ref) ? "receipt " : "booking ") + ref + "."; render(); return; }
   openBooking(data);
 }
 async function findAnything(){
   const t = ((el("findQ") || {}).value || "").trim(); if(!t) return;
-  if(/^SP-[0-9A-F]{8}$/i.test(t)) return openBookingRef(t.toUpperCase());
+  if(/^SP-[0-9A-F]{8}$/i.test(t) || /^SPR-\d{4}-\d{5}$/i.test(t)) return openBookingRef(t.toUpperCase());
+  if(/^PO-\d{4}-\d{5}$/i.test(t)) return openPayoutNo(t.toUpperCase());
+  if(/^pay_[A-Za-z0-9]+$/.test(t) || /^SP_[A-Za-z0-9_-]+$/.test(t)) return openBookingRef(t);
   S.trail = []; return findAnyone();
 }
 
@@ -3376,6 +3406,419 @@ render = function(){
 document.addEventListener("click", e => { if(S.menuOpen && !e.target.closest(".pmenu-wrap")){ S.menuOpen = false; render(); } });
 const _openTabOld = openTab;
 openTab = function(k){ if(k === "commission"){ S.tab = k; S.err = ""; S.note = ""; S.comm = null; render(); return; } return _openTabOld(k); };
+
+/* ===================== PHOTOGRAPHER PAYOUTS =====================
+   Who SnapPro owes, how much, for which shoot — and every payout sent.
+   • A photographer's share is owed as soon as the customer pays
+     (₹100 paid, 20% commission → ₹80 owed), with the shoot's state shown
+     next to it: (Shoot done) / (Not done yet) / (Cancelled).
+   • Pay everything ready, only finished shoots, or one shoot.
+   • Hold / release money, remind people with no UPI ID, CSV for accounts.
+   • Every receipt no. (SPR-…), booking (SP-…) and payout no. (PO-…) opens. */
+
+const PO_RANGES = [["7d","Last 7 days"],["this_month","This month"],["last_month","Last month"],["90d","Last 90 days"],["all","All time"],["custom","Pick dates"]];
+const PO_SHOOT = [["all","All shoots"],["done","Shoot done"],["not_done","Not done yet"],["cancelled","Cancelled"]];
+const PO_STATE = [["owed","Owed now"],["ready","Ready to pay"],["held","On hold"],["refund_pending","Waiting on refund"],["recover","To recover"],["paid_out","Paid out"],["all","Everything"]];
+const PO_VIEWS = [["people","By photographer"],["items","Each payment"],["sent","Payouts sent"],["holds","Holds"]];
+S.poF = { view: "people", shoot: "all", state: "owed", range: "this_month", from: "", to: "", noUpi: false };
+const SHOOT_TXT = { done: "Shoot done", not_done: "Not done yet", cancelled: "Cancelled" };
+const STATE_TXT = { ready: "Ready to pay", held: "On hold", refund_pending: "Waiting on refund", recover: "To recover", paid_out: "Paid out" };
+const STATE_CLS = { ready: "green", held: "amber", refund_pending: "amber", recover: "red", paid_out: "" };
+const shootChip = s => `<span class="chip ${s === "done" ? "green" : s === "cancelled" ? "red" : "amber"}">(${SHOOT_TXT[s] || s})</span>`;
+const stateChip = s => `<span class="chip ${STATE_CLS[s] || ""}">${STATE_TXT[s] || esc(s)}</span>`;
+const partName = s => s === "balance" ? "Balance" : "Advance";
+const N = v => Number(v || 0);
+
+function poRange(){
+  const f = S.poF, today = istToday(), d = new Date(today + "T00:00:00Z"), iso = x => x.toISOString().slice(0, 10);
+  const back = n => { const x = new Date(d); x.setUTCDate(x.getUTCDate() - n); return iso(x); };
+  if(f.range === "7d") return { from: back(6), to: today, label: "Last 7 days" };
+  if(f.range === "90d") return { from: back(89), to: today, label: "Last 90 days" };
+  if(f.range === "last_month"){ const a = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - 1, 1)), b = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 0)); return { from: iso(a), to: iso(b), label: a.toLocaleDateString("en-IN", { month: "long", year: "numeric", timeZone: "UTC" }) }; }
+  if(f.range === "all") return { from: "2020-01-01", to: today, label: "All time" };
+  if(f.range === "custom" && f.from && f.to) return { from: f.from, to: f.to, label: fmtDay(f.from) + " – " + fmtDay(f.to) };
+  return { from: iso(new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1))), to: today, label: "This month" };
+}
+let poSeq = 0;
+async function loadPayouts(quiet){
+  const r = poRange(), seq = ++poSeq;
+  const { data, error } = await sb.rpc("admin_payouts", { p_from: r.from, p_to: r.to });
+  if(seq !== poSeq) return;
+  S.po = error ? { err: /admin_payouts|function/i.test(error.message) ? "Payouts need the latest database update — run supabase/snappro.sql in the Supabase SQL Editor." : error.message } : { data };
+  render();
+}
+function poSet(k, v){ S.poF[k] = v; if(k === "range" && v !== "custom") loadPayouts(true); else render(); }
+function poApplyDates(){ const f = el("poFrom"), t = el("poTo"); if(!f || !t || !f.value || !t.value) return;
+  if(f.value > t.value){ S.err = "The start date must be before the end date."; render(); return; }
+  S.err = ""; S.poF.from = f.value; S.poF.to = t.value; loadPayouts(true); }
+const poPeople = () => (S.po && S.po.data && S.po.data.photographers) || [];
+const poPg = id => poPeople().find(p => p.id === id);
+const poItems = () => (S.po && S.po.data && S.po.data.items) || [];
+function poItemMatch(i){
+  const f = S.poF;
+  if(f.shoot !== "all" && i.shoot !== f.shoot) return false;
+  if(f.state === "owed") return ["ready","held","refund_pending","recover"].includes(i.state);
+  return f.state === "all" || i.state === f.state;
+}
+
+/* ---------- the page ---------- */
+function vPayouts(){
+  if(!S.po){ S.po = { loading: true }; setTimeout(() => loadPayouts(true)); }
+  if(S.po.loading) return `<div class="empty">Loading…</div>`;
+  if(S.po.err) return `<div class="warn">${esc(S.po.err)}</div>`;
+  const D = S.po.data, f = S.poF, r = poRange(), P = D.photographers || [];
+  const sum = k => P.reduce((t, p) => t + N(p[k]), 0);
+  const owedPeople = P.filter(p => N(p.ready) > 0), noUpi = P.filter(p => !p.upi_id && N(p.ready) + N(p.held) > 0);
+  const sentRange = (D.payouts || []).reduce((t, p) => t + N(p.amount), 0);
+  const t = (v, l, sub, cls, go) => `<button class="stat tap ${cls || ""}" onclick="${go}"><div class="v">${v}</div><div class="l">${l} <span class="go">›</span></div>${sub ? `<div class="xs muted2 mt8">${sub}</div>` : ""}</button>`;
+  return `
+  <div class="grid">
+    ${t(inr(sum("ready")), "Ready to pay now", num(owedPeople.length) + " photographer" + (owedPeople.length === 1 ? "" : "s") + ` · (shoot done ${inr(sum("ready_done"))} · not done yet ${inr(sum("ready_not_done"))}${sum("ready_cancelled") ? " · cancelled " + inr(sum("ready_cancelled")) : ""})`, sum("ready") ? "hl" : "", "poGo('people','owed','all')")}
+    ${t(inr(sum("ready_done")), "For shoots already done", "Safe to pay — the shoot happened", "", "poGo('items','ready','done')")}
+    ${t(inr(sum("ready_not_done")), "For shoots not done yet", "Customer paid; the shoot is still to come", "", "poGo('items','ready','not_done')")}
+    ${t(inr(sum("held")), "On hold", num((D.holds || []).filter(h => !h.released_at).length) + " active hold(s)", sum("held") ? "hl" : "", "poGo('holds')")}
+    ${t(inr(sum("refund_pending")), "Waiting on a refund decision", "Cancelled shoots — decide the refund on Payments", "", "poGo('items','refund_pending','all')")}
+    ${sum("recover") ? t(inr(sum("recover")), "To recover", "Paid out, then refunded — comes off the next payout", "hl", "poGo('items','recover','all')") : ""}
+    ${t(inr(sentRange), "Paid out · " + esc(r.label), num((D.payouts || []).length) + " payout" + ((D.payouts || []).length === 1 ? "" : "s"), "", "poGo('sent')")}
+    ${t(num(noUpi.length), "Owed money, no UPI ID", noUpi.length ? "Remind them to add it" : "Everyone owed has a UPI ID", noUpi.length ? "hl" : "", "S.poF.noUpi=true;poGo('people','owed','all')")}
+  </div>
+  ${noUpi.length ? `<div class="warn mt16">${ic("alert", 16)} <b>${num(noUpi.length)} photographer${noUpi.length === 1 ? " is" : "s are"} owed money but ha${noUpi.length === 1 ? "s" : "ve"} no UPI ID:</b>
+    ${noUpi.slice(0, 8).map(p => `${userLink(p.id, p.name, p.public_id)} (${inr(N(p.ready) + N(p.held))}) <button class="linkbtn" onclick="remindUpi('${p.id}')">Remind</button>`).join(" · ")}${noUpi.length > 8 ? " …" : ""}
+    <div class="xs muted2 mt8">They also see “Add your UPI ID” in their app. You can still pay by bank transfer or cash and record it here.</div></div>` : ""}
+
+  <div class="between mt24" style="flex-wrap:wrap;gap:10px">
+    <div class="tabs" style="width:fit-content;flex-wrap:wrap">${PO_VIEWS.map(([k, l]) => `<button class="tab ${f.view === k ? "on" : ""}" onclick="poSet('view','${k}')">${l}</button>`).join("")}</div>
+    <div class="row" style="flex-wrap:wrap"><select class="input" style="width:auto;padding:8px 10px" onchange="poSet('range',this.value)" aria-label="Period">${PO_RANGES.map(([k, l]) => `<option value="${k}" ${f.range === k ? "selected" : ""}>${l}</option>`).join("")}</select>
+      ${f.range === "custom" ? `<input id="poFrom" type="date" class="input" style="width:auto;padding:7px 9px" value="${esc(f.from)}"><span class="muted">to</span><input id="poTo" type="date" class="input" style="width:auto;padding:7px 9px" value="${esc(f.to)}"><button class="btn sm" onclick="poApplyDates()">Show</button>` : ""}
+      <button class="btn sm" onclick="poAccountsCsv()">Accounts CSV</button></div>
+  </div>
+  ${f.view === "people" || f.view === "items" ? `<div class="row mt12" style="flex-wrap:wrap;gap:10px">
+    <div class="tabs" style="width:fit-content;flex-wrap:wrap">${PO_SHOOT.map(([k, l]) => `<button class="tab ${f.shoot === k ? "on" : ""}" onclick="poSet('shoot','${k}')">${l}</button>`).join("")}</div>
+    ${f.view === "items" ? `<div class="tabs" style="width:fit-content;flex-wrap:wrap">${PO_STATE.map(([k, l]) => `<button class="tab ${f.state === k ? "on" : ""}" onclick="poSet('state','${k}')">${l}</button>`).join("")}</div>` : ""}
+    ${f.noUpi ? `<span class="chip amber">Only: no UPI ID <button class="linkbtn" onclick="S.poF.noUpi=false;render()">✕</button></span>` : ""}
+  </div>` : ""}
+  <div class="mt12">${f.view === "people" ? poPeopleTable() : f.view === "items" ? poItemsTable() : f.view === "sent" ? poSentTable() : poHoldsTable()}</div>
+  <div class="xs muted2 mt12">A photographer is owed their share as soon as the customer pays. “Paid out” and the Accounts CSV follow the period above; money still owed is always shown in full.</div>`;
+}
+function poGo(view, state, shoot){ Object.assign(S.poF, { view }, state ? { state } : {}, shoot ? { shoot } : {}); render(); setTimeout(() => { const x = document.querySelector(".pbody .tabs"); if(x) x.scrollIntoView({ behavior: "smooth", block: "start" }); }); }
+
+/* by photographer */
+function poReadyFor(p, shoot){ return shoot === "done" ? N(p.ready_done) : shoot === "not_done" ? N(p.ready_not_done) : shoot === "cancelled" ? N(p.ready_cancelled) : N(p.ready); }
+function poPeopleTable(){
+  const f = S.poF;
+  let rows = poPeople().map(p => Object.assign({}, p, { show: poReadyFor(p, f.shoot) }));
+  if(f.shoot !== "all") rows = rows.filter(p => p.show > 0);
+  if(f.noUpi) rows = rows.filter(p => !p.upi_id && N(p.ready) + N(p.held) > 0);
+  const money = (p) => `<b>${inr(p.show)}</b>${f.shoot === "all" && N(p.ready) ? `<div class="xs muted2">(done ${inr(p.ready_done)} · not done ${inr(p.ready_not_done)}${N(p.ready_cancelled) ? " · cancelled " + inr(p.ready_cancelled) : ""})</div>` : f.shoot !== "all" ? `<div class="xs muted2">(${SHOOT_TXT[f.shoot]})</div>` : ""}`;
+  return dtable("poPeople", "Who's owed", [
+    ["name", "Photographer", p => userLink(p.id, p.name, p.public_id) + (p.hold_id ? ` <span class="chip amber" title="${esc(p.hold_reason)}">on hold</span>` : "")],
+    ["upi_id", "Pay to", p => p.upi_id ? `<span class="mono">${esc(p.upi_id)}</span>${p.account_name ? `<div class="xs muted2">${esc(p.account_name)}</div>` : ""}` : `<span class="chip amber">No UPI ID</span> <button class="linkbtn" onclick="event.stopPropagation();remindUpi('${p.id}')">Remind</button>`],
+    ["show", f.shoot === "all" ? "Ready to pay" : "Ready · " + SHOOT_TXT[f.shoot], money],
+    ["held", "On hold", p => N(p.held) ? inr(p.held) : `<span class="muted2">—</span>`],
+    ["refund_pending", "Waiting on refund", p => N(p.refund_pending) ? inr(p.refund_pending) : `<span class="muted2">—</span>`],
+    ["recover", "To recover", p => N(p.recover) ? `<span style="color:var(--red)">− ${inr(p.recover)}</span>` : `<span class="muted2">—</span>`],
+    ["paid_out", "Paid so far", p => inr(p.paid_out) + `<div class="xs muted2">${num(p.payouts)} payout${p.payouts === 1 ? "" : "s"}</div>`],
+    ["last_payout_at", "Last payout", "d"],
+    ["act", "", p => {
+      const amt = f.shoot === "done" ? N(p.ready_done) - N(p.recover) : N(p.ready) - N(p.recover);
+      return `<div class="row" style="justify-content:flex-end">${!p.hold_id && amt > 0 && (f.shoot === "all" || f.shoot === "done") ? `<button class="btn sm primary" onclick="event.stopPropagation();openPayDialog('${p.id}',null,${f.shoot === "done"})">Pay ${inr(amt)}</button>` : ""}
+        <button class="btn sm" onclick="event.stopPropagation();openPgPay('${p.id}')">Open</button></div>`; }]
+  ], rows, { click: p => `openPgPay('${p.id}')`, empty: f.noUpi ? "Everyone who's owed money has a UPI ID." : "Nobody is owed money for this filter.", note: "Click a row to see every shoot and payout for that photographer." });
+}
+
+/* each payment */
+function poItemsTable(){
+  const rows = poItems().filter(poItemMatch);
+  return dtable("poItems", "Each customer payment and the photographer's share", [
+    ["paid_at", "Customer paid", "dt"],
+    ["receipt_no", "Receipt no.", i => i.receipt_no ? `<span class="mono">${esc(i.receipt_no)}</span>` : "—"],
+    ["ref", "Booking", i => `<span class="mono">${esc(i.ref)}</span>`],
+    ["photographer_name", "Photographer", i => userLink(i.photographer_id, i.photographer_name, i.photographer_public_id)],
+    ["customer_name", "Customer", i => userLink(i.customer_id, i.customer_name, i.customer_public_id)],
+    ["start_at", "Shoot", i => esc(CAT_NAMES[i.category] || i.category || "") + `<div class="xs muted2">${when(i.start_at)}</div>` + shootChip(i.shoot)],
+    ["stage", "Part", i => partName(i.stage)],
+    ["amount", "Customer paid", i => inr(i.amount) + (N(i.refunded) ? `<div class="xs" style="color:var(--red)">− ${inr(i.refunded)} refunded</div>` : "")],
+    ["commission", "Commission", "inr"],
+    ["share", "Photographer's share", "inr"],
+    ["paid_out", "Paid out", i => N(i.paid_out) ? inr(i.paid_out) + (i.payout_nos ? `<div class="xs mono">${esc(i.payout_nos)}</div>` : "") : `<span class="muted2">—</span>`],
+    ["owed", "Owed now", i => N(i.owed) > 0 ? `<b>${inr(i.owed)}</b>` : N(i.owed) < 0 ? `<span style="color:var(--red)">− ${inr(-i.owed)}</span>` : `<span class="muted2">—</span>`],
+    ["state", "Status", i => stateChip(i.state) + (i.hold_reason ? `<div class="xs muted2" style="max-width:200px;white-space:normal">${esc(i.hold_reason)}</div>` : "")],
+    ["act", "", i => i.state === "ready" ? `<button class="btn sm" onclick="event.stopPropagation();openPayDialog('${i.photographer_id}','${i.booking_id}')">Pay this shoot</button>` : ""]
+  ], rows, { click: i => `openBooking('${i.booking_id}')`, empty: "No payments match these filters.", note: "Click a row for the booking. Receipt numbers and payout numbers open too." });
+}
+
+/* payouts sent */
+function poSentTable(){
+  return dtable("poSent", "Payouts sent · " + esc(poRange().label), [
+    ["payout_no", "Payout no.", p => `<b class="mono">${esc(p.payout_no)}</b>`],
+    ["paid_at", "Paid", "dt"],
+    ["photographer_name", "Photographer", p => userLink(p.photographer_id, p.photographer_name, p.photographer_public_id)],
+    ["amount", "Amount", p => `<b>${inr(p.amount)}</b>`],
+    ["method", "How", p => esc(({ upi: "UPI", bank: "Bank transfer", cash: "Cash", other: "Other" })[p.method] || p.method)],
+    ["utr", "Reference (UTR)", p => p.utr ? `<span class="mono">${esc(p.utr)}</span>` : `<span class="muted2">—</span>`],
+    ["upi_id", "Sent to", p => esc(p.upi_id || "—")],
+    ["shoots", "Shoots", "n"],
+    ["scope", "Covered", p => esc(({ all: "Everything owed", done: "Finished shoots", booking: "One shoot" })[p.scope] || p.scope)],
+    ["paid_by_email", "Recorded by"],
+    ["note", "Note"]
+  ], (S.po.data.payouts || []), { click: p => `openPayout('${p.id}')`, empty: "No payouts in this period.", note: "Click a payout to see exactly which shoots and receipts it covered." });
+}
+
+/* holds */
+function poHoldsTable(){
+  const rows = (S.po.data.holds || []);
+  return dtable("poHolds", "Holds", [
+    ["held_at", "Since", "dt"],
+    ["photographer_name", "Photographer", h => userLink(h.photographer_id, h.photographer_name, h.photographer_public_id)],
+    ["ref", "What", h => h.ref ? `Shoot <span class="mono">${esc(h.ref)}</span>` : "All their money"],
+    ["reason", "Why", h => `<span style="white-space:normal">${esc(h.reason)}</span>`],
+    ["held_by_email", "By"],
+    ["released_at", "Released", h => h.released_at ? dt(h.released_at) + (h.release_note ? `<div class="xs muted2">${esc(h.release_note)}</div>` : "") : `<span class="chip amber">Active</span>`],
+    ["act", "", h => h.released_at ? "" : `<button class="btn sm" onclick="event.stopPropagation();releaseHold(${h.id})">Release</button>`]
+  ], rows, { click: h => h.booking_id ? `openBooking('${h.booking_id}')` : `openPgPay('${h.photographer_id}')`, empty: "No holds. Hold a photographer's money from their payout page.", search: false });
+}
+
+/* ---------- one photographer's payouts (a sheet, with Back) ---------- */
+function openPgPay(id){ S.trail = S.trail || []; trailPush("pgpay", { id }); if(!S.po || S.po.err){ S.po = { loading: true }; loadPayouts(true); } render(); }
+function vPgPay(){
+  const st = S.poPg; if(!st) return "";
+  const shell = inner => `<div class="sheet-bg top" onclick="if(event.target===this)navBack()"><div class="sheet" role="dialog" aria-label="Payouts">${inner}</div></div>`;
+  if(!S.po || !S.po.data) return shell(`<div class="empty">${S.po && S.po.err ? esc(S.po.err) : "Loading…"}</div>`);
+  const p = poPg(st.id);
+  const items = poItems().filter(i => i.photographer_id === st.id);
+  if(!p) return shell(`<div class="between"><div class="h2">Payouts</div><button class="btn sm" onclick="navBack()">Close</button></div><div class="empty">No payments or payouts for this photographer yet.</div>`);
+  const owedItems = items.filter(i => ["ready","held","refund_pending","recover"].includes(i.state));
+  const byBk = {}; owedItems.forEach(i => { (byBk[i.booking_id] = byBk[i.booking_id] || []).push(i); });
+  const payouts = (S.po.data.payouts || []).filter(x => x.photographer_id === st.id);
+  const allAmt = N(p.ready) - N(p.recover), doneAmt = N(p.ready_done) - N(p.recover);
+  const bookingHolds = (S.po.data.holds || []).filter(h => h.photographer_id === st.id && h.booking_id && !h.released_at);
+  return shell(`
+    <div class="between" style="align-items:flex-start;flex-wrap:wrap;gap:10px">
+      <div><div class="h1">${esc(p.name)}</div><div class="row mt8" style="flex-wrap:wrap;gap:6px"><span class="chip super">${esc(p.public_id || "")}</span>${p.city ? `<span class="chip">${esc(p.city)}</span>` : ""}
+        ${p.hold_id ? `<span class="chip amber">All payouts on hold — ${esc(p.hold_reason)}</span>` : ""}</div></div>
+      <div class="row" style="flex-wrap:wrap"><button class="btn sm" onclick="openUser('${p.id}')">Full profile</button>
+        ${p.hold_id ? `<button class="btn sm" onclick="releaseHold(${p.hold_id})">Release hold</button>` : `<button class="btn sm" onclick="holdMoney('${p.id}',null)">Hold all their money</button>`}
+        <button class="btn sm" onclick="navBack()">Close</button></div>
+    </div>
+    <div class="card mt16"><div class="between" style="flex-wrap:wrap;gap:10px"><div>
+      <div class="xs muted2">Pay to</div>
+      ${p.upi_id ? `<div class="h2 mono" style="margin-top:2px">${esc(p.upi_id)} <button class="linkbtn" onclick="copyText('${esc(p.upi_id)}')">Copy</button></div>${p.account_name ? `<div class="sm muted">${esc(p.account_name)}</div>` : ""}`
+        : `<div class="sm"><span class="chip amber">No UPI ID yet</span> <button class="linkbtn" onclick="remindUpi('${p.id}')">Send a reminder</button></div><div class="xs muted2 mt8">You can still pay by bank transfer or cash and record it.</div>`}</div>
+      <div class="row" style="flex-wrap:wrap">${!p.hold_id && allAmt > 0 ? `<button class="btn primary" onclick="openPayDialog('${p.id}',null,false)">Pay everything ready · ${inr(allAmt)}</button>` : ""}
+        ${!p.hold_id && doneAmt > 0 && doneAmt !== allAmt ? `<button class="btn" onclick="openPayDialog('${p.id}',null,true)">Only finished shoots · ${inr(doneAmt)}</button>` : ""}</div></div></div>
+    <div class="grid mt16">
+      ${kpiPlain(inr(p.ready), "Ready to pay", `(shoot done ${inr(p.ready_done)} · not done yet ${inr(p.ready_not_done)}${N(p.ready_cancelled) ? " · cancelled " + inr(p.ready_cancelled) : ""})`, N(p.ready) ? "hl" : "")}
+      ${kpiPlain(inr(p.held), "On hold", bookingHolds.length ? num(bookingHolds.length) + " shoot(s) held" : "")}
+      ${kpiPlain(inr(p.refund_pending), "Waiting on refund", "Cancelled — refund not decided")}
+      ${N(p.recover) ? kpiPlain("− " + inr(p.recover), "To recover", "Comes off the next payout", "hl") : ""}
+      ${kpiPlain(inr(p.earned), "Earned on SnapPro", "Their share of everything customers paid")}
+      ${kpiPlain(inr(p.paid_out), "Paid out so far", num(p.payouts) + " payout" + (p.payouts === 1 ? "" : "s"))}
+    </div>
+    <div class="sec mt24">Money owed, shoot by shoot (${num(Object.keys(byBk).length)})</div>
+    ${Object.keys(byBk).length ? Object.entries(byBk).sort((a, b) => String(a[1][0].start_at).localeCompare(String(b[1][0].start_at))).map(([bid, list]) => {
+      const i0 = list[0], owed = list.reduce((t, i) => t + N(i.owed), 0), canPay = list.some(i => i.state === "ready") && !p.hold_id && owed > 0;
+      const held = bookingHolds.find(h => h.booking_id === bid);
+      return `<div class="card mt8 po-bk"><div class="between" style="flex-wrap:wrap;gap:8px">
+        <div><b>${esc(CAT_NAMES[i0.category] || i0.category || "Shoot")}</b> · <span class="mono">${esc(i0.ref)}</span> · ${when(i0.start_at)} ${shootChip(i0.shoot)}
+          <div class="xs muted2 mt8">Customer: ${userLink(i0.customer_id, i0.customer_name, i0.customer_public_id)}</div></div>
+        <div class="row" style="flex-wrap:wrap"><b style="font-size:17px">${owed < 0 ? "− " + inr(-owed) : inr(owed)}</b>
+          ${canPay && !held ? `<button class="btn sm primary" onclick="openPayDialog('${p.id}','${bid}')">Pay this shoot</button>` : ""}
+          ${held ? `<button class="btn sm" onclick="releaseHold(${held.id})">Release</button>` : !p.hold_id ? `<button class="btn sm" onclick="holdMoney('${p.id}','${bid}')">Hold</button>` : ""}
+          <button class="btn sm" onclick="openBooking('${bid}')">Booking</button></div></div>
+        <div class="tblwrap mt8"><table class="dt"><thead><tr><th>Receipt no.</th><th>Part</th><th>Customer paid</th><th>Commission</th><th>Their share</th><th>Paid out</th><th>Owed</th><th>Status</th></tr></thead><tbody>
+          ${list.map(i => `<tr><td class="mono">${esc(i.receipt_no || "—")}</td><td>${partName(i.stage)}</td><td>${inr(i.amount)}${N(i.refunded) ? `<div class="xs" style="color:var(--red)">− ${inr(i.refunded)} refunded</div>` : ""}</td><td>${inr(i.commission)}</td><td>${inr(i.share)}</td>
+            <td>${N(i.paid_out) ? inr(i.paid_out) + (i.payout_nos ? `<div class="xs mono">${esc(i.payout_nos)}</div>` : "") : "—"}</td><td><b>${N(i.owed) < 0 ? "− " + inr(-i.owed) : inr(i.owed)}</b></td><td>${stateChip(i.state)}${held ? `<div class="xs muted2">${esc(held.reason)}</div>` : ""}</td></tr>`).join("")}
+        </tbody></table></div></div>`; }).join("") : `<div class="card"><div class="empty">Nothing owed right now.</div></div>`}
+    <div class="mt16">${dtable("poPgSent", "Payouts sent · " + esc(poRange().label), [["payout_no","Payout no.", x => `<b class="mono">${esc(x.payout_no)}</b>`],["paid_at","Paid","dt"],["amount","Amount","inr"],["method","How", x => esc(({ upi: "UPI", bank: "Bank", cash: "Cash", other: "Other" })[x.method] || x.method)],["utr","UTR", x => x.utr ? `<span class="mono">${esc(x.utr)}</span>` : "—"],["shoots","Shoots","n"],["paid_by_email","By"]],
+      payouts, { click: x => `openPayout('${x.id}')`, search: false, empty: "No payouts in this period — change the period on the Payouts page to see older ones." })}</div>
+    ${(() => { const paid = items.filter(i => i.state === "paid_out"); return paid.length ? `<div class="mt16">${dtable("poPgPaid", "Already paid out (customer paid in this period)", [["paid_at","Customer paid","dt"],["receipt_no","Receipt no.", i => `<span class="mono">${esc(i.receipt_no || "")}</span>`],["ref","Booking", i => `<span class="mono">${esc(i.ref)}</span>`],["stage","Part", i => partName(i.stage)],["share","Their share","inr"],["payout_nos","Payout", i => `<span class="mono">${esc(i.payout_nos || "")}</span>`],["shoot","Shoot", i => shootChip(i.shoot)]], paid, { click: i => `openBooking('${i.booking_id}')`, search: false })}</div>` : ""; })()}
+  `);
+}
+const kpiPlain = (v, l, sub, cls) => `<div class="stat ${cls || ""}"><div class="v">${v}</div><div class="l">${l}</div>${sub ? `<div class="xs muted2 mt8">${sub}</div>` : ""}</div>`;
+function copyText(t){ try{ navigator.clipboard.writeText(t); S.note = "Copied " + t; }catch(e){ S.note = t; } render(); }
+
+/* ---------- one payout (a sheet, with Back) ---------- */
+async function openPayout(id){
+  const st = { id, data: null, err: "" }; trailPush("payout", st); render();
+  const { data, error } = await sb.rpc("admin_payout_detail", { p_payout: id });
+  if(error) st.err = error.message; else st.data = data;
+  render();
+}
+async function openPayoutNo(no){
+  const { data, error } = await sb.rpc("admin_find_payout", { p_no: no });
+  if(error || !data){ S.err = "Couldn't find payout " + no + "."; render(); return; }
+  openPayout(data);
+}
+function vPayoutSheet(){
+  const st = S.poOut; if(!st) return "";
+  const d = st.data;
+  const shell = inner => `<div class="sheet-bg top" onclick="if(event.target===this)navBack()"><div class="sheet narrow" role="dialog" aria-label="Payout">${inner}</div></div>`;
+  if(st.err) return shell(`<div class="between"><div class="h2">Payout</div><button class="btn sm" onclick="navBack()">Close</button></div><div class="warn mt12">${esc(st.err)}</div>`);
+  if(!d) return shell(`<div class="empty">Loading…</div>`);
+  const kv = (k, v) => v == null || v === "" ? "" : `<div class="kvr"><span class="muted2">${k}</span><span>${v}</span></div>`;
+  return shell(`
+    <div class="between" style="flex-wrap:wrap;gap:8px"><div><div class="xs muted2">Payout</div><div class="h1 mono">${esc(d.payout_no)}</div></div>
+      <div class="row"><button class="btn sm" onclick="poPrint()">Print / PDF</button><button class="btn sm" onclick="navBack()">Close</button></div></div>
+    <div class="grid2 mt12">
+      <div class="card"><div class="bigv">${inr(d.amount)}</div>
+        ${kv("To", userLink(d.photographer_id, d.photographer_name, d.photographer_public_id))}${kv("Sent to", esc(d.upi_id || "—"))}
+        ${kv("How", esc(({ upi: "UPI", bank: "Bank transfer", cash: "Cash", other: "Other" })[d.method] || d.method))}${kv("Reference (UTR)", d.utr ? `<span class="mono">${esc(d.utr)}</span>` : "—")}</div>
+      <div class="card">${kv("Paid on", dt(d.paid_at))}${kv("Recorded by", esc(d.paid_by_email || "—"))}
+        ${kv("Covered", esc(({ all: "Everything owed at the time", done: "Finished shoots only", booking: "One shoot" })[d.scope] || d.scope))}${kv("Note", esc(d.note || ""))}
+        ${d.photographer_id ? `<button class="btn sm mt12" onclick="openPgPay('${d.photographer_id}')">All payouts for ${esc(d.photographer_name || "them")}</button>` : ""}</div>
+    </div>
+    <div class="sec mt16">What it covered (${num((d.lines || []).length)})</div>
+    <div class="tblwrap"><table class="dt"><thead><tr><th>Booking</th><th>Shoot</th><th>Customer</th><th>Receipt no.</th><th>Part</th><th>Customer paid</th><th>Commission</th><th>Paid in this payout</th></tr></thead><tbody>
+      ${(d.lines || []).map(l => `<tr class="rowlink" onclick="if(!event.target.closest('a,button'))openBooking('${l.booking_id}')"><td class="mono">${esc(l.ref)}</td>
+        <td>${esc(CAT_NAMES[l.category] || l.category || "")}<div class="xs muted2">${when(l.start_at)}</div>${shootChip(l.booking_status === "completed" ? "done" : l.booking_status === "cancelled" ? "cancelled" : "not_done")}</td>
+        <td>${userLink(l.customer_id, l.customer_name, l.customer_public_id)}</td><td class="mono">${esc(l.receipt_no || "—")}</td><td>${partName(l.stage)}</td>
+        <td>${inr(l.customer_paid)}${N(l.refunded) ? `<div class="xs" style="color:var(--red)">− ${inr(l.refunded)} refunded</div>` : ""}</td><td>${inr(l.commission)}</td>
+        <td><b>${N(l.amount) < 0 ? "− " + inr(-l.amount) + `<div class="xs muted2">taken back (refund)</div>` : inr(l.amount)}</b></td></tr>`).join("")}
+    </tbody></table></div>`);
+}
+function poPrint(){ document.body.classList.add("print-sheet"); window.print(); setTimeout(() => document.body.classList.remove("print-sheet"), 500); }
+
+/* ---------- pay dialog ---------- */
+function openPayDialog(pg, booking, onlyDone){
+  const p = poPg(pg); if(!p){ S.err = "Open the Payouts page first."; render(); return; }
+  let list = poItems().filter(i => i.photographer_id === pg && (i.state === "recover" || (i.state === "ready" && (!booking || i.booking_id === booking) && (!onlyDone || i.shoot === "done"))));
+  if(booking) list = list.filter(i => i.booking_id === booking);
+  const amount = Math.round(list.reduce((t, i) => t + N(i.owed), 0) * 100) / 100;
+  S.poPay = { pg, booking: booking || null, onlyDone: !!onlyDone, amount, list, method: p.upi_id ? "upi" : "bank", busy: false, err: "" };
+  render(); setTimeout(() => { const u = el("payUtr"); if(u) u.focus(); }, 50);
+}
+function vPayDialog(){
+  const x = S.poPay; if(!x) return "";
+  const p = poPg(x.pg) || {}, notDone = x.list.filter(i => i.shoot === "not_done" && i.state === "ready").reduce((t, i) => t + N(i.owed), 0);
+  const back = x.list.filter(i => i.state === "recover").reduce((t, i) => t - N(i.owed), 0), bks = new Set(x.list.map(i => i.booking_id)).size;
+  return `<div class="modal-bg" onclick="if(event.target===this){S.poPay=null;render()}"><div class="sheet" style="max-width:560px" role="dialog" aria-label="Record a payout">
+    <div class="between"><div class="h2">Pay ${esc(p.name || "")}</div><button class="btn sm" onclick="S.poPay=null;render()">Cancel</button></div>
+    <div class="bigv mt12">${inr(x.amount)}</div>
+    <div class="sm muted">${x.booking ? "For one shoot" : x.onlyDone ? "For finished shoots only" : "Everything ready to pay"} · ${num(bks)} shoot${bks === 1 ? "" : "s"}, ${num(x.list.length)} payment${x.list.length === 1 ? "" : "s"}${back > 0 ? ` · after taking back ${inr(back)} for refunded shoots` : ""}</div>
+    ${notDone > 0 ? `<div class="warn mt12">${ic("alert", 15)} ${inr(notDone)} of this is for shoots that haven't happened yet. If the customer cancels, it comes off ${esc((p.name || "their").split(" ")[0])}'s next payout.</div>` : ""}
+    <div class="card mt12"><div class="xs muted2">Step 1 — send the money from your UPI or bank app to</div>
+      ${p.upi_id ? `<div class="h2 mono" style="margin-top:4px">${esc(p.upi_id)} <button class="linkbtn" onclick="copyText('${esc(p.upi_id)}')">Copy</button></div>${p.account_name ? `<div class="sm muted">${esc(p.account_name)}</div>` : ""}`
+        : `<div class="sm mt8"><span class="chip amber">No UPI ID yet</span> Pay by bank transfer or cash, or <button class="linkbtn" onclick="remindUpi('${p.id}')">remind them</button>.</div>`}</div>
+    <div class="xs muted2 mt16">Step 2 — record it</div>
+    <div class="lbgrid mt8">
+      <label class="sm">How you paid<select id="payMethod" class="input" onchange="S.poPay.method=this.value;render()">${[["upi","UPI"],["bank","Bank transfer"],["cash","Cash"],["other","Other"]].map(([k, l]) => `<option value="${k}" ${x.method === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+      <label class="sm">Reference (UTR)${["upi","bank"].includes(x.method) ? "" : " — optional"}<input id="payUtr" class="input" maxlength="100" placeholder="e.g. 4321 8765 0912" autocomplete="off"></label>
+    </div>
+    <label class="sm mt12" style="display:block">Note (optional)<input id="payNote" class="input" maxlength="300" placeholder="e.g. October payout"></label>
+    ${x.err ? `<div class="errbar">${esc(x.err)}</div>` : ""}
+    <button class="btn primary mt16" style="width:100%" ${x.busy ? "disabled" : ""} onclick="confirmPay()">${x.busy ? "Saving…" : "I've sent " + inr(x.amount) + " — record payout"}</button>
+    <div class="xs muted2 mt8">${esc((p.name || "They").split(" ")[0])} gets a notification with the payout number and can see which shoots it covered.</div>
+  </div></div>`;
+}
+async function confirmPay(){
+  const x = S.poPay; if(!x || x.busy) return;
+  const utr = (el("payUtr") || {}).value || "", note = (el("payNote") || {}).value || "";
+  if(["upi","bank"].includes(x.method) && utr.trim().length < 4){ x.err = "Enter the UPI / bank reference (UTR) from your payment app."; render(); return; }
+  x.busy = true; x.err = ""; render();
+  const { data, error } = await sb.rpc("admin_pay", { p_photographer: x.pg, p_booking: x.booking, p_method: x.method, p_utr: utr.trim(), p_note: note.trim(), p_expected: x.amount, p_only_done: x.onlyDone });
+  if(error){ x.busy = false; x.err = error.message; render(); return; }
+  S.poPay = null; S.err = ""; S.note = "Payout " + data.payout_no + " for " + inr(data.amount) + " recorded.";
+  await loadPayouts(true); if(S.pay) loadPayments(true);
+}
+
+/* ---------- holds, reminders ---------- */
+async function holdMoney(pg, booking){
+  const p = poPg(pg) || {};
+  const why = prompt((booking ? "Hold the money for this shoot" : "Hold ALL money for " + (p.name || "this photographer")) + ".\nWhy? (your team will see this)");
+  if(why === null) return;
+  const { error } = await sb.rpc("admin_payout_hold", { p_photographer: pg, p_booking: booking, p_reason: why.trim() });
+  if(error){ S.err = error.message; render(); return; }
+  S.err = ""; S.note = booking ? "That shoot's money is on hold." : "All payouts to " + (p.name || "them") + " are on hold."; loadPayouts(true);
+}
+async function releaseHold(id){
+  const note = prompt("Release this hold? Add a note (optional):", "");
+  if(note === null) return;
+  const { error } = await sb.rpc("admin_payout_release", { p_hold: id, p_note: note.trim() });
+  if(error){ S.err = error.message; render(); return; }
+  S.err = ""; S.note = "Hold released — the money can be paid now."; loadPayouts(true);
+}
+async function remindUpi(pg){
+  const { error } = await sb.rpc("admin_payout_remind_upi", { p_photographer: pg });
+  if(error){ S.err = error.message; render(); return; }
+  S.err = ""; S.note = "Reminder sent to " + ((poPg(pg) || {}).name || "the photographer") + "."; render();
+}
+
+/* ---------- CSV for accounts ---------- */
+function poCsv(name, cols, rows){
+  const q = v => { v = v == null ? "" : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+  const blob = new Blob(["﻿" + cols.map(c => c[1]).join(",") + "\n" + rows.map(r => cols.map(c => q(typeof c[0] === "function" ? c[0](r) : r[c[0]])).join(",")).join("\n")], { type: "text/csv" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+}
+function poAccountsCsv(){
+  if(!S.po || !S.po.data) return;
+  const r = poRange(), D = S.po.data, ist = d => d ? new Date(Date.parse(d) + IST_MS).toISOString().slice(0, 16).replace("T", " ") : "";
+  const lines = [];
+  const sec = (title, cols, rows) => { lines.push([title]); lines.push(cols.map(c => c[1])); rows.forEach(x => lines.push(cols.map(c => typeof c[0] === "function" ? c[0](x) : x[c[0]]))); lines.push([]); };
+  sec("PAYOUTS SENT " + r.from + " to " + r.to, [["payout_no","Payout no"],[x => ist(x.paid_at),"Paid (IST)"],["photographer_name","Photographer"],["photographer_public_id","SnapPro ID"],["amount","Amount"],["method","Method"],["utr","UTR"],["upi_id","Sent to"],["shoots","Shoots"],["scope","Covered"],["paid_by_email","Recorded by"],["note","Note"]], D.payouts || []);
+  sec("CUSTOMER PAYMENTS AND PHOTOGRAPHER SHARE (paid in the period, plus everything still owed)", [[x => ist(x.paid_at),"Customer paid (IST)"],["receipt_no","Receipt no"],["ref","Booking"],["photographer_name","Photographer"],["photographer_public_id","Photographer ID"],["customer_name","Customer"],["customer_public_id","Customer ID"],["category","Shoot"],[x => ist(x.start_at),"Shoot date (IST)"],[x => SHOOT_TXT[x.shoot] || x.shoot,"Shoot status"],["stage","Part"],["amount","Customer paid"],["refunded","Refunded"],["commission","Commission"],["share","Photographer share"],["paid_out","Paid out"],["owed","Owed now"],[x => STATE_TXT[x.state] || x.state,"Status"],["payout_nos","Payout no(s)"]], poItems());
+  sec("OWED PER PHOTOGRAPHER (now)", [["name","Photographer"],["public_id","SnapPro ID"],["upi_id","UPI ID"],["ready","Ready to pay"],["ready_done","…shoot done"],["ready_not_done","…not done yet"],["ready_cancelled","…cancelled"],["held","On hold"],["refund_pending","Waiting on refund"],["recover","To recover"],["paid_out","Paid out (all time)"]], poPeople());
+  const q = v => { v = v == null ? "" : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+  const blob = new Blob(["﻿" + lines.map(l => l.map(q).join(",")).join("\n")], { type: "text/csv" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "snappro-payouts-" + r.from + "-to-" + r.to + ".csv";
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+}
+
+/* ---------- wiring ---------- */
+/* "owed to photographers" anywhere opens this page */
+const _openDrillPo = openDrill;
+openDrill = function(kind, title, arg, allTime){
+  if(kind === "payouts_due" && S.me.role !== "manager"){ goPage("payouts"); return; }
+  if(kind === "payouts_paid" && S.me.role !== "manager"){ S.poF.view = "sent"; goPage("payouts"); return; }
+  return _openDrillPo(kind, title, arg, allTime);
+};
+const _openTabPo = openTab;
+openTab = function(k){
+  if(k === "payouts"){ S.tab = k; S.err = ""; S.note = ""; render(); loadPayouts(!!S.po); return; }
+  return _openTabPo(k);
+};
+/* sheets sit with the others; only the top of the Back trail shows */
+const _vBookingPo = vBooking;
+vBooking = function(){ return _vBookingPo() + vPgPay() + vPayoutSheet() + vPayDialog(); };
+/* the booking sheet: receipt numbers, payouts and holds for that booking */
+function bookingPayoutCard(){
+  const x = S.bk; if(!x || !x.data || S.me.role === "manager") return "";
+  const d = x.data, b = d.booking || {}, pays = (d.payments || []).filter(p => p.status === "paid"), outs = d.payouts || [];
+  if(!pays.length && !outs.length) return "";
+  const share = pays.reduce((t, p) => t + N(p.share), 0), out = pays.reduce((t, p) => t + N(p.paid_out), 0);
+  return `<div class="card mt12"><div class="between" style="flex-wrap:wrap;gap:8px"><div class="sec" style="margin:0">Photographer payout</div>
+      <div class="row">${b.photographer_id ? `<button class="btn sm" onclick="openPgPay('${b.photographer_id}')">All their payouts</button>` : ""}
+        ${share - out > 0 && !d.payout_hold && b.photographer_id ? `<button class="btn sm primary" onclick="(S.po&&S.po.data?Promise.resolve():loadPayouts(true)).then(()=>openPayDialog('${b.photographer_id}','${x.id}'))">Pay this shoot · ${inr(share - out)}</button>` : ""}</div></div>
+    ${d.payout_hold ? `<div class="warn mt8">On hold${d.payout_hold.whole ? " (all their money)" : ""}: ${esc(d.payout_hold.reason)} <button class="linkbtn" onclick="releaseHold(${d.payout_hold.id})">Release</button></div>` : ""}
+    <div class="grid mt8">${kpiPlain(inr(share), "Their share so far", "(" + (b.status === "completed" ? "Shoot done" : b.status === "cancelled" ? "Cancelled" : "Not done yet") + ")")}${kpiPlain(inr(out), "Paid out")}${kpiPlain(inr(share - out), share - out < 0 ? "To recover" : "Still owed", "", share - out > 0 ? "hl" : "")}</div>
+    ${outs.length ? `<div class="tblwrap mt8"><table class="dt"><thead><tr><th>Payout no.</th><th>Paid</th><th>For this shoot</th><th>Whole payout</th><th>UTR</th></tr></thead><tbody>
+      ${outs.map(o => `<tr class="rowlink" onclick="openPayout('${o.id}')"><td class="mono"><b>${esc(o.payout_no)}</b></td><td>${dt(o.paid_at)}</td><td>${inr(o.for_this)}</td><td>${inr(o.total)}</td><td class="mono">${esc(o.utr || "—")}</td></tr>`).join("")}</tbody></table></div>` : `<div class="xs muted2 mt8">Not paid out yet.</div>`}
+  </div>`;
+}
+const _renderPo = render;
+render = function(){
+  _renderPo();
+  if(S.view !== "console") return;
+  /* booking sheet: receipt numbers on payments + the payout card */
+  if(S.bk && S.bk.data){
+    const sh = [...document.querySelectorAll(".sheet[aria-label=Booking]")].pop();
+    if(sh && !sh.querySelector(".po-card")){
+      const pays = S.bk.data.payments || [];
+      sh.querySelectorAll("table").forEach(tb => { const th = tb.querySelector("thead tr"); if(!th || !/Razorpay ID/.test(th.textContent)) return;
+        th.insertAdjacentHTML("afterbegin", "<th>Receipt no.</th>");
+        tb.querySelectorAll("tbody tr").forEach((tr, i) => tr.insertAdjacentHTML("afterbegin", `<td class="mono">${esc((pays[i] || {}).receipt || "—")}</td>`)); });
+      const money = [...sh.querySelectorAll(".card")].find(c => (c.querySelector(".sec") || {}).textContent === "Money");
+      const card = bookingPayoutCard();
+      if(money && card){ money.insertAdjacentHTML("afterend", `<div class="po-card">${card}</div>`); linkify(sh); }
+    }
+  }
+  /* a photographer's person page: a Payouts button */
+  if(S.u360 && S.u360.data && S.u360.data.profile && S.u360.data.profile.role === "photographer" && S.me.role !== "manager"){
+    const sh = [...document.querySelectorAll(".sheet[aria-label=Person]")].pop(), id = S.u360.data.profile.id;
+    const btn = sh && [...sh.querySelectorAll("button")].find(b => b.textContent.trim() === "On timeline");
+    if(btn && !sh.querySelector(".po-open")) btn.insertAdjacentHTML("beforebegin", `<button class="btn sm po-open" onclick="openPgPay('${id}')">Payouts</button>`);
+  }
+};
 
 /* ============================ render ========================== */
 

@@ -3010,7 +3010,7 @@ begin
                                 and public._ist(paid_at) between p_from and p_to) end,
     'refunds_due',       (select count(*) from public.payments where refund_status in ('refund_due','refund_failed')),
     'balances_due',      (select count(*) from public.bookings where balance_status = 'due'),
-    'payouts_due',       case when money then (select coalesce(sum(photographer_amount),0) from public.bookings where payout_status = 'due') end,
+    'payouts_due',       case when money then public._owed_total('ready') end,
     'payments_failed',   (select count(*) from public.payments where status in ('failed','user_dropped') and public._ist(created_at) between p_from and p_to),
     'now_open_requests',   (select count(*) from public.requests where status = 'broadcasting' and expires_at > now()),
     'now_upcoming_shoots', (select count(*) from public.bookings where status in ('confirmed','enroute','arrived','shooting')),
@@ -3268,8 +3268,16 @@ begin
                    from public.photographers g left join auth.users u on u.id = g.id left join public.photographer_payout x on x.id = g.id where g.id = b.photographer_id),
     'payments', case when money then (select coalesce(jsonb_agg(jsonb_build_object('stage', p.stage, 'amount', p.amount, 'status', p.status,
                    'method', p.payment_group, 'at', coalesce(p.paid_at, p.created_at), 'razorpay_id', p.gateway_payment_id,
-                   'refund', p.refund_status, 'refunded', p.refunded_amount) order by p.created_at), '[]')
-                   from public.payments p where p.booking_id = b.id) end
+                   'refund', p.refund_status, 'refunded', p.refunded_amount, 'receipt', p.receipt_no, 'order_id', p.order_id,
+                   'id', p.id, 'share', public._pay_share(p), 'paid_out', p.paid_out_amount) order by p.created_at), '[]')
+                   from public.payments p where p.booking_id = b.id) end,
+    'payouts', case when money then (select coalesce(jsonb_agg(jsonb_build_object('id', py.id, 'payout_no', py.payout_no, 'paid_at', py.paid_at,
+                   'utr', py.utr, 'method', py.method, 'total', py.amount, 'for_this', z.amt) order by py.paid_at), '[]')
+                   from (select l.payout_id, sum(l.amount) amt from public.payout_lines l where l.booking_id = b.id group by 1) z
+                   join public.payouts py on py.id = z.payout_id) end,
+    'payout_hold', case when money then (select jsonb_build_object('id', h.id, 'reason', h.reason, 'whole', h.booking_id is null)
+                   from public.payout_holds h where h.released_at is null and h.photographer_id = b.photographer_id
+                    and (h.booking_id is null or h.booking_id = b.id) order by h.booking_id nulls first limit 1) end
   );
   return res;
 end $$;
@@ -4036,9 +4044,9 @@ begin
       'revenue', (select coalesce(sum(commission_amount),0) from Done) + (select coalesce(sum(amount),0) from St),
       'payouts_paid', (select coalesce(sum(photographer_amount),0) from Po),
       'payouts_paid_n', (select count(*) from Po),
-      'payouts_due', (select coalesce(sum(photographer_amount),0) from public.bookings where payout_status = 'due'),
+      'payouts_due', public._owed_total('ready'),
       'payouts_due_n', (select count(*) from public.bookings where payout_status = 'due'),
-      'payouts_on_hold', (select coalesce(sum(photographer_amount),0) from public.bookings where payout_status = 'on_hold'),
+      'payouts_on_hold', public._owed_total('held'),
       'balances_due', (select coalesce(sum(balance_amount),0) from public.bookings where balance_status = 'due' and status <> 'cancelled'),
       'balances_due_n', (select count(*) from public.bookings where balance_status = 'due' and status <> 'cancelled'),
       'balances_pending', (select coalesce(sum(balance_amount),0) from public.bookings where balance_status = 'pending' and status not in ('cancelled','pending_payment')),
@@ -5306,7 +5314,7 @@ begin
   elsif e.kind = 'balance_due' then
     perform public._push(e.user_id, 'payment', 'Balance due: ₹' || to_char(e.amount, 'FM99,99,99,999'), 'Pay the rest of your booking in SnapPro — no cash needed.',
       '/app.html?open=booking&id=' || e.entity_id, 'bk-' || e.entity_id);
-  elsif e.kind = 'payout_paid' then
+  elsif e.kind = 'payout_paid' and coalesce(current_setting('snappro.payout_batch', true), '') <> 'on' then
     perform public._push(e.user_id, 'payment', '₹' || to_char(e.amount, 'FM99,99,99,999') || ' sent to you', 'Your payout for a completed shoot is on its way to your UPI.',
       '/app.html?open=booking&id=' || e.entity_id, 'pay-' || e.entity_id);
   elsif e.kind = 'review_posted' then
@@ -5600,8 +5608,12 @@ begin
            and b.start_at >= f and b.start_at < t limit 2000) z),
     'payments', case when pg then
         (select coalesce(jsonb_agg(z order by z.at desc), '[]') from (
-          select b.id booking_id, 'payout' kind, b.photographer_amount amount, b.payout_at at, b.payout_ref ref, b.customer_name who, b.category
-            from public.bookings b where b.photographer_id = me and b.payout_status = 'paid' and b.payout_at >= f and b.payout_at < t) z)
+          select (select l.booking_id from public.payout_lines l where l.payout_id = py.id order by l.amount desc limit 1) booking_id, 'payout' kind,
+                 py.amount, py.paid_at at, coalesce(py.utr, py.payout_no) ref, py.payout_no, py.id payout_id, py.method,
+                 (select count(distinct l.booking_id) from public.payout_lines l where l.payout_id = py.id)::int shoots,
+                 (select string_agg(distinct b.customer_name, ', ') from public.payout_lines l join public.bookings b on b.id = l.booking_id where l.payout_id = py.id) who,
+                 (select min(b.category) from public.payout_lines l join public.bookings b on b.id = l.booking_id where l.payout_id = py.id) category
+            from public.payouts py where py.photographer_id = me and py.paid_at >= f and py.paid_at < t) z)
       else
         (select coalesce(jsonb_agg(z order by z.at desc), '[]') from (
           select p.booking_id, p.stage kind, p.amount, p.paid_at at, p.payment_group method, p.order_id ref, b.photographer_name who, b.category
@@ -5612,7 +5624,7 @@ begin
             from public.refunds r join public.payments p on p.id = r.payment_id left join public.bookings b on b.id = p.booking_id
            where p.customer_id = me and r.status in ('processed','refunded','success') and coalesce(r.processed_at, r.created_at) >= f and coalesce(r.processed_at, r.created_at) < t) z)
       end,
-    'pending_payout', case when pg then (select coalesce(sum(photographer_amount), 0) from public.bookings where photographer_id = me and payout_status in ('due','on_hold')) end);
+    'pending_payout', case when pg then (select coalesce(sum(owed), 0) from public._payout_items(me, null) where state in ('ready','held')) end);
 end $$;
 
 -- one booking's receipt, for the customer or the photographer on it
@@ -5636,8 +5648,13 @@ begin
         'customer_public_id', (select public_id from public.profiles where id = b.customer_id),
         'photographer_public_id', (select public_id from public.profiles where id = b.photographer_id)),
     'payments', case when side = 'customer' then (select coalesce(jsonb_agg(z order by z.paid_at), '[]') from (
-        select p.stage, p.amount, p.paid_at, p.payment_group method, p.order_id, p.gateway_payment_id, p.refund_status, p.refunded_amount
-          from public.payments p where p.booking_id = b.id and p.status = 'paid' and not p.is_duplicate) z) else '[]'::jsonb end);
+        select p.stage, p.amount, p.paid_at, p.payment_group method, p.order_id, p.gateway_payment_id, p.refund_status, p.refunded_amount, p.receipt_no
+          from public.payments p where p.booking_id = b.id and p.status = 'paid' and not p.is_duplicate) z) else '[]'::jsonb end,
+    'payouts', case when side = 'photographer' then (select coalesce(jsonb_agg(jsonb_build_object('id', py.id, 'payout_no', py.payout_no, 'paid_at', py.paid_at,
+          'utr', py.utr, 'method', py.method, 'amount', z.amt) order by py.paid_at), '[]')
+          from (select l.payout_id, sum(l.amount) amt from public.payout_lines l where l.booking_id = b.id group by 1) z join public.payouts py on py.id = z.payout_id) else '[]'::jsonb end,
+    'owed', case when side = 'photographer' then (select coalesce(sum(i.owed), 0) from public._payout_items(b.photographer_id, b.id) i where i.state in ('ready','held','refund_pending')) end,
+    'share_so_far', case when side = 'photographer' then (select coalesce(sum(i.share), 0) from public._payout_items(b.photographer_id, b.id) i) end);
 end $$;
 
 -- saved photographers
@@ -5795,6 +5812,558 @@ revoke all on function public.my_calendar(date, date)   from public, anon;
 grant execute on function public.my_calendar(date, date) to authenticated;
 -- <<< 8k calendar
 
+-- >>> 8l payouts
+-- =====================================================================
+-- 8l. RECEIPT NUMBERS + PHOTOGRAPHER PAYOUTS
+--     • Every successful payment gets a receipt number that counts up
+--       through the financial year: SPR-2627-00001 (April 2026 – March 2027).
+--     • Each payment's photographer share is owed as soon as the customer
+--       pays (customer paid ₹100, commission 20% → ₹80 owed to the photographer).
+--     • A payout pays everything owed to one photographer, or one shoot,
+--       in one transfer: PO-2627-00001, with the UPI / bank reference (UTR).
+--     • Refunds after a payout leave an amount to recover; the next payout
+--       takes it off automatically.
+--     • Admins can hold a photographer's money (or one shoot's) with a reason.
+-- =====================================================================
+
+-- ---------- numbering ----------
+create table if not exists public.doc_counters (
+  series text primary key,
+  n      integer not null default 0
+);
+alter table public.doc_counters enable row level security;
+revoke all on public.doc_counters from anon, authenticated;
+
+-- financial year (April–March, India time) as "2627"
+create or replace function public._fy(t timestamptz) returns text language plpgsql stable
+as $$
+declare d date := (coalesce(t, now()) at time zone 'Asia/Kolkata')::date; y int := extract(year from d)::int;
+begin
+  if extract(month from d) < 4 then y := y - 1; end if;
+  return lpad((y % 100)::text, 2, '0') || lpad(((y + 1) % 100)::text, 2, '0');
+end $$;
+
+create or replace function public._next_no(p_prefix text, p_at timestamptz default now())
+returns text language plpgsql security definer set search_path = public
+as $$
+declare s text := p_prefix || '-' || public._fy(p_at); v int;
+begin
+  insert into public.doc_counters (series, n) values (s, 1)
+  on conflict (series) do update set n = public.doc_counters.n + 1
+  returning n into v;
+  return s || '-' || lpad(v::text, 5, '0');
+end $$;
+
+-- ---------- receipt numbers on payments ----------
+alter table public.payments
+  add column if not exists receipt_no      text,
+  add column if not exists paid_out_amount numeric(12,2) not null default 0;
+create unique index if not exists uniq_payments_receipt on public.payments(receipt_no) where receipt_no is not null;
+
+create or replace function public.payments_receipt_no()
+returns trigger language plpgsql security definer set search_path = public
+as $$
+begin
+  if tg_op = 'UPDATE' and old.receipt_no is not null then new.receipt_no := old.receipt_no; end if;   -- never changes once given
+  if new.status = 'paid' and new.receipt_no is null then
+    new.receipt_no := public._next_no('SPR', coalesce(new.paid_at, now()));
+  end if;
+  return new;
+end $$;
+drop trigger if exists payments_receipt_no on public.payments;
+create trigger payments_receipt_no before insert or update on public.payments
+  for each row execute function public.payments_receipt_no();
+
+-- payments made before receipt numbers existed get one, oldest first
+do $$ declare r record; begin
+  for r in select id from public.payments where status = 'paid' and receipt_no is null
+            order by coalesce(paid_at, updated_at, created_at), created_at loop
+    update public.payments set receipt_no = public._next_no('SPR', coalesce(paid_at, updated_at, created_at)) where id = r.id;
+  end loop;
+end $$;
+
+-- ---------- payouts ----------
+create table if not exists public.payouts (
+  id                uuid primary key default gen_random_uuid(),
+  payout_no         text not null unique,
+  photographer_id   uuid references public.photographers(id) on delete set null,
+  photographer_name text,
+  upi_id            text,                      -- where it was sent, as it was at the time
+  amount            numeric(12,2) not null check (amount > 0),
+  method            text not null default 'upi' check (method in ('upi','bank','cash','other')),
+  utr               text,
+  note              text,
+  scope             text not null default 'all' check (scope in ('all','done','booking')),
+  paid_at           timestamptz not null default now(),
+  paid_by           uuid,
+  paid_by_email     text,
+  created_at        timestamptz not null default now()
+);
+create index if not exists idx_payouts_pg on public.payouts(photographer_id, paid_at desc);
+create index if not exists idx_payouts_at on public.payouts(paid_at desc);
+
+create table if not exists public.payout_lines (
+  payout_id  uuid not null references public.payouts(id) on delete cascade,
+  payment_id uuid not null references public.payments(id),
+  booking_id uuid,
+  amount     numeric(12,2) not null,          -- negative = money taken back after a refund
+  primary key (payout_id, payment_id)
+);
+create index if not exists idx_payout_lines_booking on public.payout_lines(booking_id);
+create index if not exists idx_payout_lines_payment on public.payout_lines(payment_id);
+
+create table if not exists public.payout_holds (
+  id                bigserial primary key,
+  photographer_id   uuid not null references public.photographers(id) on delete cascade,
+  booking_id        uuid references public.bookings(id) on delete cascade,     -- null = all their money
+  reason            text not null check (length(reason) between 3 and 300),
+  held_by           uuid,
+  held_by_email     text,
+  held_at           timestamptz not null default now(),
+  released_at       timestamptz,
+  released_by       uuid,
+  released_by_email text,
+  release_note      text
+);
+create index if not exists idx_payout_holds_pg on public.payout_holds(photographer_id) where released_at is null;
+
+alter table public.payouts      enable row level security;
+alter table public.payout_lines enable row level security;
+alter table public.payout_holds enable row level security;
+revoke all on public.payouts, public.payout_lines, public.payout_holds from anon, authenticated;
+-- read through the functions below only
+
+-- the photographer's share of one payment, after any refund
+create or replace function public._pay_share(p public.payments) returns numeric language sql immutable
+as $$ select case when p.status <> 'paid' or p.is_duplicate or coalesce(p.amount, 0) <= 0 then 0::numeric
+                  when p.refund_status = 'refunded' then 0::numeric
+                  when coalesce(p.refunded_amount, 0) > 0
+                    then round(p.photographer_amount * greatest(p.amount - p.refunded_amount, 0) / p.amount, 2)
+                  else p.photographer_amount end $$;
+
+-- every paid payment, with what the photographer is owed for it
+--   state: ready (can be paid now) · held · refund_pending (waiting for a refund decision)
+--          · recover (paid out, then refunded) · paid_out · none
+create or replace function public._payout_items(p_pg uuid default null, p_booking uuid default null)
+returns table (payment_id uuid, receipt_no text, order_id text, stage text, booking_id uuid, photographer_id uuid, customer_id uuid,
+               amount numeric, refunded numeric, commission numeric, share numeric, paid_out numeric, owed numeric,
+               refund_status text, booking_status text, shoot text, start_at timestamptz, paid_at timestamptz, category text,
+               customer_name text, photographer_name text, hold_id bigint, hold_reason text, state text)
+language sql stable security definer set search_path = public
+as $$
+  select p.id, p.receipt_no, p.order_id, coalesce(p.stage, 'advance'), p.booking_id, b.photographer_id, b.customer_id,
+         p.amount, p.refunded_amount, p.commission_amount, s.share, p.paid_out_amount, s.share - p.paid_out_amount,
+         p.refund_status, b.status,
+         case when b.status = 'completed' then 'done' when b.status = 'cancelled' then 'cancelled' else 'not_done' end,
+         b.start_at, p.paid_at, b.category, b.customer_name, b.photographer_name, h.id, h.reason,
+         case when s.share - p.paid_out_amount < 0 then 'recover'
+              when s.share - p.paid_out_amount = 0 then case when p.paid_out_amount > 0 then 'paid_out' else 'none' end
+              when p.refund_status in ('refund_due','refund_pending','refund_failed') then 'refund_pending'
+              when h.id is not null then 'held'
+              else 'ready' end
+    from public.payments p
+    join public.bookings b on b.id = p.booking_id
+    cross join lateral (select public._pay_share(p) share) s
+    left join lateral (select x.id, x.reason from public.payout_holds x
+                        where x.released_at is null and x.photographer_id = b.photographer_id
+                          and (x.booking_id is null or x.booking_id = b.id)
+                        order by x.booking_id nulls first limit 1) h on true
+   where p.status = 'paid'
+     and (p_pg is null or b.photographer_id = p_pg)
+     and (p_booking is null or b.id = p_booking)
+$$;
+
+create or replace function public._owed_total(p_state text default 'ready') returns numeric
+language sql stable security definer set search_path = public
+as $$ select coalesce(sum(owed), 0) from public._payout_items(null, null) where state = p_state $$;
+
+-- keep each booking's payout status in step with its payments
+--   due = money ready to pay · on_hold · paid = everything sent · not_due
+create or replace function public._payout_sync(p_booking uuid) returns void
+language plpgsql security definer set search_path = public
+as $$
+declare b record; ready numeric; paid numeric; held boolean; st text; prev text;
+        l_ref text; l_at timestamptz; l_by uuid;
+begin
+  select id, status, balance_status, payout_status, payout_ref into b from public.bookings where id = p_booking;
+  if not found then return; end if;
+  select coalesce(sum(i.owed) filter (where i.state in ('ready','held')), 0), coalesce(sum(i.paid_out), 0), coalesce(bool_or(i.state = 'held'), false)
+    into ready, paid, held from public._payout_items(null, p_booking) i;
+  st := case when ready > 0 and held then 'on_hold'
+             when ready > 0 then 'due'
+             when paid > 0 and (b.status = 'cancelled' or coalesce(b.balance_status, 'not_required') in ('paid','not_required')) then 'paid'
+             else 'not_due' end;
+  if st = 'paid' then
+    select coalesce(py.utr, py.payout_no), py.paid_at, py.paid_by into l_ref, l_at, l_by
+      from public.payout_lines l join public.payouts py on py.id = l.payout_id
+     where l.booking_id = p_booking order by py.paid_at desc limit 1;
+  end if;
+  if st is distinct from b.payout_status or (st = 'paid' and l_ref is distinct from b.payout_ref) then
+    prev := current_setting('snappro.system', true);
+    perform set_config('snappro.system', 'on', true);
+    update public.bookings
+       set payout_status = st,
+           payout_ref = case when st = 'paid' then l_ref else payout_ref end,
+           payout_at  = case when st = 'paid' then l_at  else payout_at end,
+           payout_by  = case when st = 'paid' then l_by  else payout_by end
+     where id = p_booking;
+    perform set_config('snappro.system', coalesce(prev, ''), true);
+  end if;
+end $$;
+
+create or replace function public._tg_payout_sync_payment() returns trigger
+language plpgsql security definer set search_path = public
+as $$ begin
+  if new.booking_id is not null then perform public._payout_sync(new.booking_id); end if;
+  return new;
+end $$;
+drop trigger if exists payments_payout_sync on public.payments;
+create trigger payments_payout_sync after insert or update of status, refund_status, refunded_amount, paid_out_amount, is_duplicate
+  on public.payments for each row execute function public._tg_payout_sync_payment();
+
+create or replace function public._tg_payout_sync_booking() returns trigger
+language plpgsql security definer set search_path = public
+as $$ begin perform public._payout_sync(new.id); return new; end $$;
+drop trigger if exists bookings_payout_sync on public.bookings;
+create trigger bookings_payout_sync after update of status, balance_status on public.bookings
+  for each row when (old.status is distinct from new.status or old.balance_status is distinct from new.balance_status)
+  execute function public._tg_payout_sync_booking();
+
+create or replace function public._tg_payout_sync_hold() returns trigger
+language plpgsql security definer set search_path = public
+as $$ declare r record; begin
+  for r in select distinct b.id from public.bookings b join public.payments p on p.booking_id = b.id and p.status = 'paid'
+            where b.photographer_id = new.photographer_id and (new.booking_id is null or b.id = new.booking_id) loop
+    perform public._payout_sync(r.id);
+  end loop;
+  return new;
+end $$;
+drop trigger if exists payout_holds_sync on public.payout_holds;
+create trigger payout_holds_sync after insert or update on public.payout_holds
+  for each row execute function public._tg_payout_sync_hold();
+
+-- payouts recorded the old way (one booking at a time) become payouts with numbers
+do $$ declare b record; pid uuid; tot numeric; begin
+  for b in select bk.* from public.bookings bk
+            where bk.payout_status = 'paid'
+              and not exists (select 1 from public.payout_lines l where l.booking_id = bk.id)
+              and exists (select 1 from public.payments p where p.booking_id = bk.id and p.status = 'paid' and not p.is_duplicate)
+            order by bk.payout_at nulls first loop
+    select coalesce(sum(public._pay_share(p) - p.paid_out_amount), 0) into tot
+      from public.payments p where p.booking_id = b.id and p.status = 'paid';
+    continue when tot <= 0;
+    insert into public.payouts (payout_no, photographer_id, photographer_name, upi_id, amount, method, utr, note, scope, paid_at, paid_by, paid_by_email)
+    values (public._next_no('PO', coalesce(b.payout_at, b.updated_at, now())), b.photographer_id, b.photographer_name,
+            (select upi_id from public.photographer_payout where id = b.photographer_id), tot, 'upi', b.payout_ref,
+            'Recorded before payout numbers', 'booking', coalesce(b.payout_at, b.updated_at, now()), b.payout_by,
+            (select email from public.staff where id = b.payout_by))
+    returning id into pid;
+    insert into public.payout_lines (payout_id, payment_id, booking_id, amount)
+    select pid, p.id, p.booking_id, public._pay_share(p) - p.paid_out_amount
+      from public.payments p where p.booking_id = b.id and p.status = 'paid' and public._pay_share(p) - p.paid_out_amount <> 0;
+    update public.payments p set paid_out_amount = p.paid_out_amount + l.amount
+      from public.payout_lines l where l.payout_id = pid and l.payment_id = p.id;
+  end loop;
+end $$;
+-- money is now owed as soon as the customer pays: bring every booking up to date
+do $$ declare r record; begin
+  for r in select distinct booking_id from public.payments where status = 'paid' and booking_id is not null loop
+    perform public._payout_sync(r.booking_id);
+  end loop;
+end $$;
+
+-- ---------- admin: the Payouts page ----------
+create or replace function public.admin_payouts(p_from date, p_to date)
+returns jsonb language plpgsql stable security definer set search_path = public
+as $$
+declare f timestamptz; t timestamptz;
+begin
+  if not public._money_ok() then raise exception 'Only admins can see payouts'; end if;
+  f := (coalesce(p_from, date '2020-01-01')::timestamp) at time zone 'Asia/Kolkata';
+  t := ((coalesce(p_to, (now() at time zone 'Asia/Kolkata')::date) + 1)::timestamp) at time zone 'Asia/Kolkata';
+  return (with I as (select i.*, pc.public_id customer_public_id, pp.public_id photographer_public_id
+                       from public._payout_items(null, null) i
+                       left join public.profiles pc on pc.id = i.customer_id
+                       left join public.profiles pp on pp.id = i.photographer_id
+                      where i.state <> 'none'),
+               PO as (select py.*, pp.public_id photographer_public_id,
+                             (select count(distinct l.booking_id) from public.payout_lines l where l.payout_id = py.id)::int shoots
+                        from public.payouts py left join public.profiles pp on pp.id = py.photographer_id
+                       where py.paid_at >= f and py.paid_at < t)
+    select jsonb_build_object(
+      'items', (select coalesce(jsonb_agg(to_jsonb(z) order by z.paid_at desc), '[]') from (
+          select I.*, 'SP-' || upper(left(I.booking_id::text, 8)) ref,
+                 (select string_agg(py.payout_no, ', ' order by py.paid_at) from public.payout_lines l join public.payouts py on py.id = l.payout_id
+                   where l.payment_id = I.payment_id) payout_nos
+            from I where I.state in ('ready','held','refund_pending','recover') or (I.paid_at >= f and I.paid_at < t)
+           limit 5000) z),
+      'payouts', (select coalesce(jsonb_agg(to_jsonb(z) order by z.paid_at desc), '[]') from (select * from PO limit 2000) z),
+      'photographers', (select coalesce(jsonb_agg(to_jsonb(z) order by z.ready desc, z.name), '[]') from (
+          select g.id, coalesce(g.display_name, pr.name) name, pr.public_id, g.city, x.upi_id, x.account_name,
+                 coalesce((select sum(owed) from I where I.photographer_id = g.id and state = 'ready'), 0) ready,
+                 coalesce((select sum(owed) from I where I.photographer_id = g.id and state = 'ready' and shoot = 'done'), 0) ready_done,
+                 coalesce((select sum(owed) from I where I.photographer_id = g.id and state = 'ready' and shoot = 'not_done'), 0) ready_not_done,
+                 coalesce((select sum(owed) from I where I.photographer_id = g.id and state = 'ready' and shoot = 'cancelled'), 0) ready_cancelled,
+                 coalesce((select sum(owed) from I where I.photographer_id = g.id and state = 'held'), 0) held,
+                 coalesce((select sum(owed) from I where I.photographer_id = g.id and state = 'refund_pending'), 0) refund_pending,
+                 coalesce((select -sum(owed) from I where I.photographer_id = g.id and state = 'recover'), 0) recover,
+                 coalesce((select sum(share) from I where I.photographer_id = g.id), 0) earned,
+                 coalesce((select sum(amount) from public.payouts py where py.photographer_id = g.id), 0) paid_out,
+                 coalesce((select sum(amount) from PO where PO.photographer_id = g.id), 0) paid_out_range,
+                 (select max(paid_at) from public.payouts py where py.photographer_id = g.id) last_payout_at,
+                 (select count(*) from public.payouts py where py.photographer_id = g.id)::int payouts,
+                 h.id hold_id, h.reason hold_reason,
+                 (select count(*) from public.payout_holds y where y.photographer_id = g.id and y.booking_id is not null and y.released_at is null)::int shoot_holds
+            from public.photographers g
+            join public.profiles pr on pr.id = g.id
+            left join public.photographer_payout x on x.id = g.id
+            left join lateral (select y.id, y.reason from public.payout_holds y where y.photographer_id = g.id and y.booking_id is null and y.released_at is null limit 1) h on true
+           where exists (select 1 from I where I.photographer_id = g.id) or exists (select 1 from public.payouts py where py.photographer_id = g.id)) z),
+      'holds', (select coalesce(jsonb_agg(to_jsonb(z) order by z.held_at desc), '[]') from (
+          select y.*, coalesce(g.display_name, '—') photographer_name, pr.public_id photographer_public_id,
+                 case when y.booking_id is not null then 'SP-' || upper(left(y.booking_id::text, 8)) end ref
+            from public.payout_holds y left join public.photographers g on g.id = y.photographer_id left join public.profiles pr on pr.id = y.photographer_id
+           where y.released_at is null or (y.released_at >= f and y.released_at < t)
+           order by y.held_at desc limit 500) z),
+      'from', p_from, 'to', p_to));
+end $$;
+
+-- one payout: what it covered
+create or replace function public.admin_payout_detail(p_payout uuid)
+returns jsonb language plpgsql stable security definer set search_path = public
+as $$
+declare py record;
+begin
+  if not public._money_ok() then raise exception 'Only admins can see payouts'; end if;
+  select x.*, pr.public_id photographer_public_id into py from public.payouts x left join public.profiles pr on pr.id = x.photographer_id where x.id = p_payout;
+  if not found then raise exception 'Payout not found'; end if;
+  return to_jsonb(py) || jsonb_build_object('lines', (select coalesce(jsonb_agg(to_jsonb(z) order by z.start_at, z.stage), '[]') from (
+      select l.amount, l.booking_id, 'SP-' || upper(left(l.booking_id::text, 8)) ref, p.receipt_no, p.order_id, coalesce(p.stage, 'advance') stage,
+             p.amount customer_paid, p.commission_amount commission, p.refunded_amount refunded, p.paid_at,
+             b.category, b.start_at, b.status booking_status, b.customer_id, b.customer_name, pc.public_id customer_public_id
+        from public.payout_lines l join public.payments p on p.id = l.payment_id
+        left join public.bookings b on b.id = l.booking_id left join public.profiles pc on pc.id = b.customer_id
+       where l.payout_id = p_payout) z));
+end $$;
+
+-- record a payout: everything ready for a photographer, or one shoot
+drop function if exists public.admin_pay(uuid, uuid, text, text, text, numeric);
+create or replace function public.admin_pay(p_photographer uuid, p_booking uuid, p_method text, p_utr text, p_note text, p_expected numeric,
+                                            p_only_done boolean default false)
+returns jsonb language plpgsql security definer set search_path = public
+as $$
+declare me uuid := auth.uid(); g record; tot numeric; n int; pid uuid; no text; hr text; m text := lower(coalesce(nullif(trim(p_method), ''), 'upi'));
+        utr text := nullif(left(trim(coalesce(p_utr, '')), 100), ''); prev text;
+begin
+  if not public._money_ok() then raise exception 'Only admins can record payouts'; end if;
+  if p_booking is not null then
+    select photographer_id into p_photographer from public.bookings where id = p_booking;
+    if not found then raise exception 'Booking not found'; end if;
+  end if;
+  select x.id, coalesce(x.display_name, pr.name) name into g from public.photographers x join public.profiles pr on pr.id = x.id where x.id = p_photographer for update of x;
+  if not found then raise exception 'Photographer not found'; end if;
+  if m not in ('upi','bank','cash','other') then raise exception 'Choose how you paid: UPI, bank transfer, cash or other'; end if;
+  if m in ('upi','bank') and coalesce(length(utr), 0) < 4 then raise exception 'Enter the UPI / bank transfer reference (UTR) so this payout can be traced'; end if;
+  select reason into hr from public.payout_holds where photographer_id = p_photographer and booking_id is null and released_at is null limit 1;
+  if found then raise exception 'Payouts to % are on hold (%). Release the hold first.', g.name, hr; end if;
+  if p_booking is not null then
+    select reason into hr from public.payout_holds where booking_id = p_booking and released_at is null limit 1;
+    if found then raise exception 'This shoot''s payout is on hold (%). Release the hold first.', hr; end if;
+  end if;
+  select coalesce(sum(owed), 0), count(*) into tot, n from public._payout_items(p_photographer, p_booking)
+   where state = 'recover' or (state = 'ready' and (not coalesce(p_only_done, false) or shoot = 'done'));
+  if n = 0 or tot = 0 then raise exception 'No payout is due%', case when p_booking is not null then ' for this booking' else ' to ' || g.name end; end if;
+  if tot < 0 then raise exception 'Nothing to pay: % owes ₹% back from refunded shoots. It comes off their next payout.', g.name, -tot; end if;
+  if p_expected is not null and round(p_expected, 2) <> round(tot, 2) then
+    raise exception 'The amount due is now ₹% (it changed since you opened the page). Please check and try again.', tot;
+  end if;
+  no := public._next_no('PO', now());
+  insert into public.payouts (payout_no, photographer_id, photographer_name, upi_id, amount, method, utr, note, scope, paid_by, paid_by_email)
+  values (no, p_photographer, g.name, (select upi_id from public.photographer_payout where id = p_photographer), tot, m, utr,
+          nullif(left(trim(coalesce(p_note, '')), 300), ''), case when p_booking is not null then 'booking' when p_only_done then 'done' else 'all' end,
+          me, (select email from public.staff where id = me))
+  returning id into pid;
+  insert into public.payout_lines (payout_id, payment_id, booking_id, amount)
+  select pid, payment_id, booking_id, owed from public._payout_items(p_photographer, p_booking)
+   where state = 'recover' or (state = 'ready' and (not coalesce(p_only_done, false) or shoot = 'done'));
+  prev := current_setting('snappro.payout_batch', true);
+  perform set_config('snappro.payout_batch', 'on', true);       -- one "money sent" notification, not one per booking
+  update public.payments p set paid_out_amount = p.paid_out_amount + l.amount, updated_at = now()
+    from public.payout_lines l where l.payout_id = pid and l.payment_id = p.id;
+  perform set_config('snappro.payout_batch', coalesce(prev, ''), true);
+  perform public._audit('Sent payout', 'photographer', p_photographer::text, g.name,
+    jsonb_build_object('payout', no, 'amount', tot, 'method', m, 'utr', utr, 'payments', n, 'booking', p_booking));
+  begin
+    perform public._push(p_photographer, 'payment', '₹' || to_char(tot, 'FM99,99,99,999') || ' sent to you',
+      'Payout ' || no || case when utr is not null then ' · ref ' || utr else '' end || '. Tap to see which shoots it covers.',
+      '/app.html?open=payouts', 'po-' || pid);
+  exception when others then null; end;
+  return jsonb_build_object('id', pid, 'payout_no', no, 'amount', tot, 'payments', n);
+end $$;
+
+alter table public.payouts drop constraint if exists payouts_scope_check;
+alter table public.payouts add constraint payouts_scope_check check (scope in ('all','done','booking'));
+
+-- remind a photographer to add their UPI ID (they're owed money)
+create or replace function public.admin_payout_remind_upi(p_photographer uuid)
+returns void language plpgsql security definer set search_path = public
+as $$
+declare owed numeric; nm text;
+begin
+  if not public._money_ok() then raise exception 'Only admins can do this'; end if;
+  select display_name into nm from public.photographers where id = p_photographer;
+  if not found then raise exception 'Photographer not found'; end if;
+  if exists (select 1 from public.photographer_payout where id = p_photographer and upi_id is not null) then raise exception '% already has a UPI ID', nm; end if;
+  select coalesce(sum(i.owed), 0) into owed from public._payout_items(p_photographer, null) i where i.state in ('ready','held');
+  perform public._push(p_photographer, 'payment', 'Add your UPI ID to get paid',
+    case when owed > 0 then '₹' || to_char(owed, 'FM99,99,99,999') || ' is waiting for you. ' else '' end || 'Open SnapPro → Profile → Payout details.',
+    '/app.html?open=payouts', 'upi-remind');
+  perform public._audit('Reminded to add UPI', 'photographer', p_photographer::text, nm, jsonb_build_object('owed', owed));
+end $$;
+
+-- the old one-booking button keeps working
+create or replace function public.admin_mark_payout(p_booking uuid, p_ref text)
+returns text language plpgsql security definer set search_path = public
+as $$ begin
+  return public.admin_pay(null, p_booking, 'upi', p_ref, null, null)->>'payout_no';
+end $$;
+
+create or replace function public.admin_payout_hold(p_photographer uuid, p_booking uuid, p_reason text)
+returns bigint language plpgsql security definer set search_path = public
+as $$
+declare me uuid := auth.uid(); hid bigint; nm text;
+begin
+  if not public._money_ok() then raise exception 'Only admins can hold payouts'; end if;
+  if p_booking is not null then
+    select photographer_id into p_photographer from public.bookings where id = p_booking;
+    if not found then raise exception 'Booking not found'; end if;
+  end if;
+  select display_name into nm from public.photographers where id = p_photographer;
+  if not found then raise exception 'Photographer not found'; end if;
+  if length(trim(coalesce(p_reason, ''))) < 3 then raise exception 'Say why you''re holding the money (the team will see this)'; end if;
+  if exists (select 1 from public.payout_holds where photographer_id = p_photographer and booking_id is not distinct from p_booking and released_at is null) then
+    raise exception 'That is already on hold';
+  end if;
+  insert into public.payout_holds (photographer_id, booking_id, reason, held_by, held_by_email)
+  values (p_photographer, p_booking, left(trim(p_reason), 300), me, (select email from public.staff where id = me)) returning id into hid;
+  perform public._audit('Held payout', case when p_booking is null then 'photographer' else 'booking' end,
+    coalesce(p_booking, p_photographer)::text, nm || case when p_booking is not null then ' · SP-' || upper(left(p_booking::text, 8)) else '' end,
+    jsonb_build_object('reason', left(trim(p_reason), 300)));
+  return hid;
+end $$;
+
+create or replace function public.admin_payout_release(p_hold bigint, p_note text)
+returns void language plpgsql security definer set search_path = public
+as $$
+declare me uuid := auth.uid(); h record;
+begin
+  if not public._money_ok() then raise exception 'Only admins can release payouts'; end if;
+  select y.*, g.display_name nm into h from public.payout_holds y left join public.photographers g on g.id = y.photographer_id where y.id = p_hold for update of y;
+  if not found then raise exception 'Hold not found'; end if;
+  if h.released_at is not null then raise exception 'Already released'; end if;
+  update public.payout_holds set released_at = now(), released_by = me, released_by_email = (select email from public.staff where id = me),
+         release_note = nullif(left(trim(coalesce(p_note, '')), 300), '') where id = p_hold;
+  perform public._audit('Released payout hold', case when h.booking_id is null then 'photographer' else 'booking' end,
+    coalesce(h.booking_id, h.photographer_id)::text, coalesce(h.nm, '—'), jsonb_build_object('reason', h.reason, 'note', p_note));
+end $$;
+
+-- a cancelled booking where no refund is owed (e.g. a late cancellation): the money stays,
+-- and the photographer's share becomes payable
+create or replace function public.admin_refund_none(p_payment uuid, p_reason text)
+returns void language plpgsql security definer set search_path = public
+as $$
+declare p record; prev text;
+begin
+  if not public._money_ok() then raise exception 'Only admins can decide refunds'; end if;
+  select * into p from public.payments where id = p_payment for update;
+  if not found then raise exception 'Payment not found'; end if;
+  if p.is_duplicate then raise exception 'A duplicate payment must be refunded'; end if;
+  if p.refund_status not in ('refund_due','refund_failed') then raise exception 'This payment isn''t waiting for a refund decision'; end if;
+  if length(trim(coalesce(p_reason, ''))) < 3 then raise exception 'Say why there''s no refund'; end if;
+  update public.payments set refund_status = 'none', note = left('No refund: ' || trim(p_reason), 300), updated_at = now() where id = p_payment;
+  prev := current_setting('snappro.system', true);
+  perform set_config('snappro.system', 'on', true);
+  update public.bookings set payment_status = 'paid' where id = p.booking_id and payment_status = 'refund_due' and coalesce(p.stage, 'advance') = 'advance';
+  perform set_config('snappro.system', coalesce(prev, ''), true);
+  perform public._audit('Decided no refund', 'booking', coalesce(p.booking_id::text, ''), 'SP-' || upper(left(coalesce(p.booking_id::text, ''), 8)),
+    jsonb_build_object('payment', p.receipt_no, 'amount', p.amount, 'reason', left(trim(p_reason), 300)));
+end $$;
+
+-- find anything by its number: booking ref, receipt no. or payout no.
+create or replace function public.admin_find_booking(p_ref text)
+returns uuid language sql stable security definer set search_path = public
+as $$ select coalesce(
+         (select p.booking_id from public.payments p where public.is_staff() and upper(trim(p_ref)) ~ '^SPR-' and p.receipt_no = upper(trim(p_ref)) limit 1),
+         (select p.booking_id from public.payments p where public.is_staff() and (p.order_id = trim(p_ref) or p.gateway_payment_id = trim(p_ref)) limit 1),
+         (select b.id from public.bookings b
+           where public.is_staff() and upper(trim(p_ref)) !~ '^SPR-'
+             and upper(left(b.id::text, 8)) = upper(regexp_replace(coalesce(trim(p_ref), ''), '^SP-', '', 'i'))
+           order by b.created_at desc limit 1)) $$;
+create or replace function public.admin_find_payout(p_no text)
+returns uuid language sql stable security definer set search_path = public
+as $$ select id from public.payouts where public._money_ok() and (payout_no = upper(trim(p_no)) or utr = trim(p_no)) order by paid_at desc limit 1 $$;
+
+-- ---------- photographers: money waiting and payouts received ----------
+create or replace function public.my_payouts()
+returns jsonb language plpgsql stable security definer set search_path = public
+as $$
+declare me uuid := auth.uid();
+begin
+  if me is null then raise exception 'Please log in again'; end if;
+  if not exists (select 1 from public.photographers where id = me) then raise exception 'Only photographers have payouts'; end if;
+  return (with I as (select * from public._payout_items(me, null) where state <> 'none')
+    select jsonb_build_object(
+      'upi_id', (select upi_id from public.photographer_payout where id = me),
+      'account_name', (select account_name from public.photographer_payout where id = me),
+      'ready', coalesce((select sum(owed) from I where state = 'ready'), 0),
+      'held', coalesce((select sum(owed) from I where state = 'held'), 0),
+      'refund_pending', coalesce((select sum(owed) from I where state = 'refund_pending'), 0),
+      'recover', coalesce((select -sum(owed) from I where state = 'recover'), 0),
+      'paid_out', coalesce((select sum(amount) from public.payouts where photographer_id = me), 0),
+      'items', (select coalesce(jsonb_agg(jsonb_build_object('booking_id', booking_id, 'ref', 'SP-' || upper(left(booking_id::text, 8)), 'stage', stage,
+                   'category', category, 'customer', split_part(coalesce(customer_name, ''), ' ', 1), 'start_at', start_at, 'shoot', shoot,
+                   'customer_paid', amount, 'commission', commission, 'share', share, 'owed', owed, 'state', state) order by start_at), '[]')
+                  from I where state in ('ready','held','refund_pending','recover')),
+      'payouts', (select coalesce(jsonb_agg(to_jsonb(z) order by z.paid_at desc), '[]') from (
+          select py.id, py.payout_no, py.amount, py.method, py.utr, py.upi_id, py.paid_at, py.photographer_name,
+                 (select coalesce(jsonb_agg(jsonb_build_object('booking_id', l.booking_id, 'ref', 'SP-' || upper(left(l.booking_id::text, 8)),
+                          'stage', coalesce(p.stage, 'advance'), 'category', b.category, 'customer', split_part(coalesce(b.customer_name, ''), ' ', 1),
+                          'start_at', b.start_at, 'customer_paid', p.amount, 'commission', p.commission_amount, 'amount', l.amount) order by b.start_at, p.stage), '[]')
+                    from public.payout_lines l join public.payments p on p.id = l.payment_id left join public.bookings b on b.id = l.booking_id
+                   where l.payout_id = py.id) lines
+            from public.payouts py where py.photographer_id = me order by py.paid_at desc limit 300) z)));
+end $$;
+
+revoke all on function public._fy(timestamptz)                         from public, anon, authenticated;
+revoke all on function public._next_no(text, timestamptz)              from public, anon, authenticated;
+revoke all on function public._pay_share(public.payments)              from public, anon, authenticated;
+revoke all on function public._payout_items(uuid, uuid)                from public, anon, authenticated;
+revoke all on function public._owed_total(text)                        from public, anon, authenticated;
+revoke all on function public._payout_sync(uuid)                       from public, anon, authenticated;
+revoke all on function public.admin_payouts(date, date)                from public, anon;
+revoke all on function public.admin_payout_detail(uuid)                from public, anon;
+revoke all on function public.admin_pay(uuid, uuid, text, text, text, numeric, boolean) from public, anon;
+revoke all on function public.admin_payout_remind_upi(uuid)         from public, anon;
+revoke all on function public.admin_mark_payout(uuid, text)            from public, anon;
+revoke all on function public.admin_payout_hold(uuid, uuid, text)      from public, anon;
+revoke all on function public.admin_payout_release(bigint, text)       from public, anon;
+revoke all on function public.admin_refund_none(uuid, text)            from public, anon;
+revoke all on function public.admin_find_booking(text)                 from public, anon;
+revoke all on function public.admin_find_payout(text)                  from public, anon;
+revoke all on function public.my_payouts()                             from public, anon;
+grant execute on function public.admin_payouts(date, date)             to authenticated;
+grant execute on function public.admin_payout_detail(uuid)             to authenticated;
+grant execute on function public.admin_pay(uuid, uuid, text, text, text, numeric, boolean) to authenticated;
+grant execute on function public.admin_payout_remind_upi(uuid)       to authenticated;
+grant execute on function public.admin_mark_payout(uuid, text)         to authenticated;
+grant execute on function public.admin_payout_hold(uuid, uuid, text)   to authenticated;
+grant execute on function public.admin_payout_release(bigint, text)    to authenticated;
+grant execute on function public.admin_refund_none(uuid, text)         to authenticated;
+grant execute on function public.admin_find_booking(text)              to authenticated;
+grant execute on function public.admin_find_payout(text)               to authenticated;
+grant execute on function public.my_payouts()                          to authenticated;
+-- <<< 8l payouts
+
 -- =====================================================================
 -- 9. ONE-OFF CLEAN-UP
 -- =====================================================================
@@ -5878,4 +6447,5 @@ select
   exists (select 1 from pg_proc where proname = 'admin_commission_overview')   as admin_tools_ready,
   exists (select 1 from pg_proc where proname = 'my_history')   as history_ready,
   exists (select 1 from pg_proc where proname = 'send_due_reminders')   as calendar_ready,
-  exists (select 1 from pg_extension where extname = 'pg_cron')   as reminders_scheduled;
+  exists (select 1 from pg_extension where extname = 'pg_cron')   as reminders_scheduled,
+  (select count(*) = 4 from information_schema.tables where table_schema = 'public' and table_name in ('payouts','payout_lines','payout_holds','doc_counters'))   as payouts_ready;

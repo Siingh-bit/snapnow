@@ -632,6 +632,10 @@ html[data-theme=dark] .feat{background:#3a2f15;color:#e8c46a}
 .ev-body{padding:0 12px 12px;border-top:1px solid var(--border-soft)}
 .ev.open{box-shadow:0 6px 18px -10px rgba(0,0,0,.25)}
 .clash{display:flex;gap:6px;align-items:flex-start;font-size:12.5px;color:var(--red);background:color-mix(in srgb,var(--red) 8%,transparent);border-radius:8px;padding:7px 9px}
+/* ---------- payouts ---------- */
+.receipt a.link{color:var(--accent-ink,var(--accent));font-weight:600;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+.rcpt-no{font-variant-numeric:tabular-nums;letter-spacing:.2px}
+.xs.green,.sm.green{color:var(--green)}
 
 </style>
 </head>
@@ -2070,7 +2074,7 @@ async function logout(){
   await pushForget();
   S.me = null; S.pg = null;
   try{ if(sb) await sb.auth.signOut(); }catch(e){}
-  pwReset(); S.stack = []; S.tab = "home"; S.draft = null; S.payout = undefined; S.payState = null;
+  pwReset(); S.stack = []; S.tab = "home"; S.draft = null; S.payout = undefined; S.payState = null; S.myPay = null;
   S.d = { requests: [], offers: {}, bookings: [], openRequests: [], myOffers: [], pgs: {}, pgList: [], pgListAt: 0, reviews: {}, reviewed: {}, msgs: {} };
   S.convos = undefined; S.hist = undefined; S.saved = undefined; S.rcpt = null; S.chatReadFor = null;
   CAL.month = null; CAL.data = null; CAL.key = ""; CAL.open = null;
@@ -2894,6 +2898,7 @@ function vPgEarnings(){
       <div class="stat"><div class="s-v">${inr(e.total)}</div><div class="s-l">All time · ${e.jobs} shoot${e.jobs===1?"":"s"}</div></div>
     </div>
     <div class="xs muted2 mt8">Your share after SnapPro's commission, for each completed shoot.</div>
+    <button class="li card mt12 w100" onclick="push('payouts')">${icon("wallet",18,"var(--green)")}<div class="grow" style="text-align:left"><div class="sm bold">Payouts</div><div class="xs muted2">Money waiting for you, and every payout with its slip</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
     ${month.length ? `<div class="sec-title mt20">This month</div><div class="card list">${month.map(earningRow).join("")}</div>` : ""}
     ${earlier.length ? `<div class="sec-title mt20">Earlier</div><div class="card list">${earlier.map(earningRow).join("")}</div>` : ""}
     ${!done.length ? emptyState("💸", "No earnings yet", "When you complete a shoot, the customer and your share show up here.") : ""}
@@ -3059,12 +3064,14 @@ async function jobStep(id, to){
 /* ---------- profile, portfolio, editing ---------- */
 function pgProfileExtras(){
   const pg = S.pg || {};
+  if(typeof loadMyPayouts === "function") loadMyPayouts();
   return `<div class="card mt16 list">
     <button class="li" onclick="push('pg',{id:'${pg.id}'})">${icon("user",18,"var(--muted)")}<div class="grow"><div class="sm bold">See your public profile</div><div class="xs muted2">What customers see</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
     <button class="li" onclick="push('portfolio')">${icon("image",18,"var(--muted)")}<div class="grow"><div class="sm bold">Portfolio</div><div class="xs muted2">${(pg.portfolio||[]).length} item${(pg.portfolio||[]).length===1?"":"s"}${S.storage ? " · " + fmtBytes(S.storage.used) + " of " + fmtBytes(S.storage.quota) : ""}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
     <button class="li" onclick="push('kyc')">${icon("shield",18,kycDone() ? "var(--green)" : "var(--red)")}<div class="grow"><div class="sm bold">Identity verification</div><div class="xs muted2">${!S.kyc ? "ID + face photo" : S.kyc.status === "verified" ? "Verified" : S.kyc.status === "submitted" ? "Being checked" : S.kyc.status === "rejected" ? "Please re-do" : "Not done yet — required"}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
     <button class="li" onclick="push('storage')">${icon("grid",18,"var(--muted)")}<div class="grow"><div class="sm bold">Storage plan</div><div class="xs muted2">${S.storage ? (S.storage.plan === "free" ? "Free · " + fmtBytes(S.storage.quota) : esc(S.storage.plan) + " · until " + dayStr(S.storage.expires_at)) : PLAY_APP ? "Free 250 MB" : "Free 250 MB · upgrade for more"}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
-    <button class="li" onclick="push('editPayout')">${icon("wallet",18,"var(--muted)")}<div class="grow"><div class="sm bold">Payout details</div><div class="xs muted2">${S.payout && S.payout.upi_id ? esc(S.payout.upi_id) : "Add the UPI ID we pay you on"}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
+    <button class="li" onclick="push('payouts')">${icon("wallet",18,"var(--muted)")}<div class="grow"><div class="sm bold">Payouts</div><div class="xs muted2">${S.myPay && !S.myPay.err ? inr(Number(S.myPay.ready || 0) + Number(S.myPay.held || 0)) + " waiting · " + (S.myPay.payouts || []).length + " received" : "Money waiting and payouts received"}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
+    <button class="li" onclick="push('editPayout')">${icon("edit",18,"var(--muted)")}<div class="grow"><div class="sm bold">Payout details</div><div class="xs muted2">${S.payout && S.payout.upi_id ? esc(S.payout.upi_id) : "Add the UPI ID we pay you on"}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
     <button class="li" onclick="push('editPg')">${icon("edit",18,"var(--muted)")}<div class="grow"><div class="sm bold">Bio, shoot types and rates</div><div class="xs muted2">${(pg.categories||[]).map(c => esc(catById(c).name)).join(", ") || "Not set"}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
   </div>`;
 }
@@ -4362,9 +4369,11 @@ function photographerActions(){
     S.loading.payout = true;
     api.payoutDetails().then(r => { S.payout = r || {}; S.loading.payout = false; softRender(); }).catch(() => { S.loading.payout = false; });
   }
+  if(S.payout && !S.payout.upi_id && typeof loadMyPayouts === "function") loadMyPayouts();
+  const waitingPay = S.myPay && !S.myPay.err ? Number(S.myPay.ready || 0) + Number(S.myPay.held || 0) : 0;
   if(S.payout && !S.payout.upi_id)
     out.push({ key: "upi", ic: "wallet", tone: "accent", urgent: true,
-      title: "Add the UPI ID we pay you on", sub: "Without it we can't send your share after a shoot",
+      title: "Add the UPI ID we pay you on", sub: waitingPay > 0 ? inr(waitingPay) + " is waiting for you — add your UPI ID so we can send it" : "Without it we can't send your share after a shoot",
       btn: "Add", go: `push('editPayout')` });
   const stg = S.storage;
   if(stg === undefined && !S.loading.storage){ S.loading.storage = true; loadStorage().then(() => { S.loading.storage = false; softRender(); }); }
@@ -4832,6 +4841,7 @@ function openTarget(t){
   else if(t.open === "booking" && id) push(isPg() ? "job" : "booking", { id });
   else if(t.open === "chat" && id) push("chat", { id });
   else if(t.open === "reviews" && isPg()) push("pgReviews");
+  else if(t.open === "payouts" && isPg()){ S.myPay = null; push("payouts"); }
   else render();
 }
 function openTargetFromUrl(u){
@@ -4971,8 +4981,8 @@ function vMyShoots(){
     ${!isPg() && (mode === "past" || mode === "all") && S.d.requests.some(r => !reqIsOpen(r) && r.status !== "matched") ? `<div class="sec-title mt20">Requests that closed without a booking</div>${S.d.requests.filter(r => !reqIsOpen(r) && r.status !== "matched").map(requestCard).join("")}` : ""}
     ${H.data ? `<div class="card mt20" id="histPay">
       <button class="between w100" onclick="S.hist.showPay=!S.hist.showPay;render()"><span class="sec-title" style="margin:0">${isPg() ? "Payouts to you" : "Payments and refunds"} <span class="cnt-b">${pay.length}</span></span>${icon("chevron",16,"var(--muted-2)")}</button>
-      ${H.showPay ? (pay.length ? `<div class="list mt8">${pay.map(p => `<button class="li" onclick="openShoot('${p.booking_id}')">
-          <div class="grow" style="text-align:left"><div class="sm bold">${PAY_KIND[p.kind] || p.kind} · ${esc(catById(p.category).name)}</div>
+      ${H.showPay ? (pay.length ? `<div class="list mt8">${pay.map(p => `<button class="li" onclick="${p.payout_id ? `push('payoutSlip',{id:'${p.payout_id}'})` : `openShoot('${p.booking_id}')`}">
+          <div class="grow" style="text-align:left"><div class="sm bold">${PAY_KIND[p.kind] || p.kind} · ${p.payout_no ? esc(p.payout_no) + (p.shoots > 1 ? " · " + p.shoots + " shoots" : " · " + esc(catById(p.category).name)) : esc(catById(p.category).name)}</div>
             <div class="xs muted2">${p.at ? whenStr(p.at) : ""}${p.who ? " · " + esc(p.who) : ""}${p.ref ? " · ref " + esc(p.ref) : ""}${p.method ? " · " + esc(p.method.toUpperCase()) : ""}</div></div>
           <div class="bold sm ${p.amount < 0 ? "" : "green"}">${p.amount < 0 ? "− " + inr(-p.amount) : inr(p.amount)}</div></button>`).join("")}</div>`
         : `<div class="xs muted2 mt8">No ${isPg() ? "payouts" : "payments"} in this period.</div>`) : `<div class="xs muted2 mt4">Tap to see every ${isPg() ? "payout" : "payment and refund"} in this period.</div>`}
@@ -5009,8 +5019,8 @@ function downloadStatement(){
     "SHOOTS", ["Booking ref","Shoot date","Shoot type","City", isPg() ? "Customer" : "Photographer","Status","Price","Discount"].concat(isPg() ? ["Commission %","Commission","Your share","Payout","Paid out on","Payout ref"] : ["Payment"]).join(",")];
   rows.forEach(b => lines.push([bookingRef(b), d(b.start_at), catById(b.category).name, b.city, isPg() ? b.customer_name : b.photographer_name, BK_LABEL[b.status], b.price, b.discount_amount || 0]
     .concat(isPg() ? [b.commission_pct, b.commission_amount, b.photographer_amount, b.payout_status, d(b.payout_at), b.payout_ref] : [b.payment_status]).map(q).join(",")));
-  lines.push("", isPg() ? "PAYOUTS" : "PAYMENTS AND REFUNDS", ["Date","What","Amount","Shoot type",isPg() ? "Customer" : "Photographer","Reference","Method"].join(","));
-  pay.forEach(p => lines.push([d(p.at), PAY_KIND[p.kind] || p.kind, p.amount, catById(p.category).name, p.who, p.ref, p.method].map(q).join(",")));
+  lines.push("", isPg() ? "PAYOUTS" : "PAYMENTS AND REFUNDS", ["Date","What","Amount","Shoot type",isPg() ? "Customer" : "Photographer","Reference","Method", isPg() ? "Payout no" : "Receipt no"].join(","));
+  pay.forEach(p => lines.push([d(p.at), PAY_KIND[p.kind] || p.kind, p.amount, catById(p.category).name, p.who, p.ref, p.method, isPg() ? p.payout_no : p.receipt_no].map(q).join(",")));
   const blob = new Blob(["﻿" + lines.join("\n")], { type: "text/csv" });
   const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "snappro-statement-" + f + "-to-" + t + ".csv";
   document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 800);
@@ -5030,6 +5040,7 @@ function vReceipt(p){
   <div class="pad receipt">
     <div class="between"><div class="wordmark">SnapPro</div><div class="xs muted2 right">snappro.in<br>${SUPPORT_EMAIL}</div></div>
     <div class="h2 mt16">${pgSide ? "Earnings receipt" : "Payment receipt"}</div>
+    ${!pgSide && pays.some(x => x.receipt_no) ? `<div class="sm mt4">Receipt no. <b class="rcpt-no">${pays.filter(x => x.receipt_no).map(x => esc(x.receipt_no) + (pays.length > 1 ? ` <span class="xs muted2">(${x.stage === "balance" ? "balance" : "advance"})</span>` : "")).join(" · ")}</b></div>` : ""}
     <div class="xs muted2">Booking ${esc(b.ref)} · made ${whenStr(b.created_at)}</div>
     <div class="card mt16">
       ${kv("Shoot", esc(catById(b.category).name) + ", " + b.duration_hrs + " hr" + (b.duration_hrs > 1 ? "s" : ""))}${kv("When", whenStr(b.start_at))}${kv("Where", esc([b.city, b.pincode].filter(Boolean).join(" ")))}
@@ -5038,10 +5049,12 @@ function vReceipt(p){
     <div class="card mt12">
       ${kv("Price", inr(b.price))}${b.discount_amount ? kv("Reward discount", "− " + inr(b.discount_amount)) : ""}
       ${pgSide ? kv("SnapPro commission" + (b.commission_pct != null ? " (" + Number(b.commission_pct) + "%)" : ""), "− " + inr(b.commission_amount)) + kv("<b>Your share</b>", "<b>" + inr(b.photographer_amount) + "</b>")
-          + kv("Payout", b.payout_status === "paid" ? "Sent " + dayStr(b.payout_at) + (b.payout_ref ? " · ref " + esc(b.payout_ref) : "") : b.payout_status === "due" ? "On the way" : "After the shoot")
-        : pays.map(x => kv((x.stage === "balance" ? "Balance" : "Advance") + " paid · " + dayStr(x.paid_at), inr(x.amount) + (x.method ? " · " + esc(String(x.method).toUpperCase()) : "") + (x.gateway_payment_id ? `<div class="xs muted2">${esc(x.gateway_payment_id)}</div>` : ""))).join("")
+          + ((R.data.payouts || []).map(o => kv(`Paid to you · <a onclick="push('payoutSlip',{id:'${o.id}'})" class="link">${esc(o.payout_no)}</a>`, inr(o.amount) + `<div class="xs muted2">${dayStr(o.paid_at)}${o.utr ? " · ref " + esc(o.utr) : ""}</div>`)).join("")
+             + (Number(R.data.owed) > 0 ? kv("Still to come", inr(R.data.owed) + `<div class="xs muted2">${b.payout_status === "on_hold" ? "On hold" : "On the way to you"}</div>`) : "")
+             + (!(R.data.payouts || []).length && !(Number(R.data.owed) > 0) ? kv("Payout", "When the customer pays") : ""))
+        : pays.map(x => kv((x.stage === "balance" ? "Balance" : "Advance") + " paid · " + dayStr(x.paid_at), inr(x.amount) + (x.method ? " · " + esc(String(x.method).toUpperCase()) : "") + `<div class="xs muted2">${x.receipt_no ? "Receipt " + esc(x.receipt_no) : ""}${x.receipt_no && x.gateway_payment_id ? " · " : ""}${x.gateway_payment_id ? esc(x.gateway_payment_id) : ""}</div>`)).join("")
           + (refunded ? kv("Refunded", "− " + inr(refunded)) : "") + kv("<b>Total paid</b>", "<b>" + inr(paid - refunded) + "</b>")}</div>
-    <div class="xs muted2 mt12">Payments are processed securely by Razorpay. This is a receipt for your records, not a tax invoice. Questions? Write to ${SUPPORT_EMAIL} with booking ${esc(b.ref)}.</div>
+    <div class="xs muted2 mt12">Payments are processed securely by Razorpay. This is a receipt for your records, not a tax invoice. Questions? Write to ${SUPPORT_EMAIL} with ${!pgSide && pays.some(x => x.receipt_no) ? "receipt no. " + esc(pays.find(x => x.receipt_no).receipt_no) : "booking " + esc(b.ref)}.</div>
     <button class="btn primary block mt16 no-print" onclick="window.print()">${icon("doc",16,"var(--on-text)")} Print or save as PDF</button>
   </div>`;
 }
@@ -5233,6 +5246,90 @@ function clashWith(start, hours){
   return z ? "You marked yourself busy then" + (z.note ? " (" + z.note + ")" : "") : "";
 }
 
+/* ===================== PAYOUTS (photographers) =====================
+   Money waiting for you (owed as soon as the customer pays), payouts
+   received with their numbers (PO-…), and a payout slip you can save as PDF.
+   A missing UPI ID is flagged with the amount waiting. */
+
+function loadMyPayouts(force){
+  if(!isPg()) return Promise.resolve();
+  if(S.myPay && !force && S.myPay.at && Date.now() - S.myPay.at < 60000) return Promise.resolve();
+  if(S.loading.myPay) return Promise.resolve();
+  S.loading.myPay = true;
+  return sb.rpc("my_payouts").then(r => {
+    S.loading.myPay = false;
+    S.myPay = r.error ? { err: dbMsg(r.error), at: Date.now() } : Object.assign({ at: Date.now() }, r.data);
+    softRender();
+  }).catch(() => { S.loading.myPay = false; });
+}
+const PAY_STATE = { ready: "On the way to you", held: "On hold — we'll be in touch", refund_pending: "Waiting — the shoot was cancelled", recover: "Taken back — the customer was refunded" };
+const SHOOT_STATE = { done: "Shoot done", not_done: "Not done yet", cancelled: "Cancelled" };
+const PO_METHOD = { upi: "UPI", bank: "Bank transfer", cash: "Cash", other: "Other" };
+
+function vMyPayouts(){
+  loadMyPayouts();
+  const M = S.myPay;
+  if(!M) return `${topbar("Payouts")}<div class="pad"><div class="skeleton"></div><div class="skeleton"></div></div>`;
+  if(M.err) return `${topbar("Payouts")}<div class="pad"><div class="form-err">${esc(M.err)}</div></div>`;
+  const waiting = Number(M.ready || 0) + Number(M.held || 0), items = M.items || [], pays = M.payouts || [];
+  return `${topbar("Payouts", "Money from your shoots")}
+  <div class="pad">
+    ${!M.upi_id ? `<button class="todo-i accent w100 tap" style="text-align:left" onclick="push('editPayout')">${icon("wallet",20,"var(--accent)")}
+        <div class="grow"><div class="sm bold">Add the UPI ID we pay you on</div><div class="xs muted2">${waiting > 0 ? inr(waiting) + " is waiting for you. " : ""}Without it we can't send your money.</div></div>
+        <span class="xs bold nowrap">Add ${icon("chevron",12)}</span></button>` : ""}
+    <div class="grid2 ${!M.upi_id ? "mt12" : ""}">
+      <div class="stat"><div class="s-v">${inr(waiting)}</div><div class="s-l">Waiting for you</div></div>
+      <div class="stat"><div class="s-v">${inr(M.paid_out)}</div><div class="s-l">Paid to you so far</div></div>
+    </div>
+    <div class="xs muted2 mt8">Your share is counted as soon as the customer pays — the advance when they book, the rest after the shoot. ${M.upi_id ? "We send it to <b>" + esc(M.upi_id) + "</b>." : ""}</div>
+    ${Number(M.held) > 0 ? `<div class="form-err mt12">${inr(M.held)} is on hold while we check something. We'll contact you — or write to ${SUPPORT_EMAIL}.</div>` : ""}
+    ${Number(M.recover) > 0 ? `<div class="xs mt12" style="color:var(--red)">${inr(M.recover)} will come off your next payout — a customer you'd been paid for was refunded.</div>` : ""}
+
+    ${items.length ? `<div class="sec-title mt20">Waiting for you</div><div class="card list">${items.map(i => `<button class="li" onclick="openShoot('${i.booking_id}')">
+        <div class="grow" style="text-align:left"><div class="sm bold">${esc(catById(i.category).name)} · ${esc(i.customer || "")} <span class="xs muted2">(${SHOOT_STATE[i.shoot] || i.shoot})</span></div>
+          <div class="xs muted2">${i.stage === "balance" ? "Balance" : "Advance"} · ${dayStr(i.start_at)} · ${esc(i.ref)}</div>
+          <div class="xs muted2">Customer paid ${inr(i.customer_paid)} − SnapPro ${inr(i.commission)} = your ${inr(i.share)}</div>
+          <div class="xs mt2 ${i.state === "ready" ? "green" : ""}">${PAY_STATE[i.state] || i.state}</div></div>
+        <div class="bold sm ${Number(i.owed) < 0 ? "" : "green"}">${Number(i.owed) < 0 ? "− " + inr(-i.owed) : inr(i.owed)}</div></button>`).join("")}</div>` : ""}
+
+    <div class="sec-title mt20">Payouts received <span class="cnt-b">${pays.length}</span></div>
+    ${pays.length ? `<div class="card list">${pays.map(p => `<button class="li" onclick="push('payoutSlip',{id:'${p.id}'})">${icon("wallet",18,"var(--green)")}
+        <div class="grow" style="text-align:left"><div class="sm bold">${esc(p.payout_no)}</div>
+          <div class="xs muted2">${whenStr(p.paid_at)} · ${(p.lines || []).length ? new Set(p.lines.map(l => l.booking_id)).size + " shoot" + (new Set(p.lines.map(l => l.booking_id)).size === 1 ? "" : "s") : ""}${p.utr ? " · ref " + esc(p.utr) : ""}</div></div>
+        <div class="bold sm green">${inr(p.amount)}</div>${icon("chevron",16,"var(--muted-2)")}</button>`).join("")}</div>`
+      : emptyState("💸", "No payouts yet", "When we send you money it shows up here, with the shoots it covers.")}
+  </div>`;
+}
+
+function vPayoutSlip(p){
+  loadMyPayouts();
+  const M = S.myPay, po = M && (M.payouts || []).find(x => x.id === p.id);
+  if(!M) return `${topbar("Payout slip")}<div class="pad"><div class="skeleton"></div></div>`;
+  if(!po) return `${topbar("Payout slip")}<div class="pad">${emptyState("🔎", "Payout not found", "It may be older than the last 300 payouts.")}</div>`;
+  const kv = (k, v) => `<div class="kv"><span>${k}</span><span>${v}</span></div>`;
+  const lines = po.lines || [], gross = lines.reduce((t, l) => t + (Number(l.amount) > 0 ? Number(l.amount) : 0), 0), back = lines.reduce((t, l) => t + (Number(l.amount) < 0 ? -Number(l.amount) : 0), 0);
+  return `${topbar("Payout slip", po.payout_no, `<button class="iconbtn" aria-label="Print or save as PDF" onclick="window.print()">${icon("doc",17)}</button>`)}
+  <div class="pad receipt">
+    <div class="between"><div class="wordmark">SnapPro</div><div class="xs muted2 right">snappro.in<br>${SUPPORT_EMAIL}</div></div>
+    <div class="h2 mt16">Payout slip</div>
+    <div class="xs muted2">Payout no. <b>${esc(po.payout_no)}</b> · ${whenStr(po.paid_at)}</div>
+    <div class="card mt16">
+      ${kv("Paid to", esc(po.photographer_name || S.me.name || ""))}${kv("Sent to", esc(po.upi_id || "—"))}
+      ${kv("How", esc(PO_METHOD[po.method] || po.method))}${kv("Reference (UTR)", po.utr ? esc(po.utr) : "—")}</div>
+    <div class="sec-title mt16">Shoots in this payout</div>
+    <div class="card list">${lines.map(l => `<div class="li" style="cursor:default">
+        <div class="grow"><div class="sm bold">${esc(catById(l.category).name)} · ${esc(l.customer || "")}</div>
+          <div class="xs muted2">${esc(l.ref)} · ${dayStr(l.start_at)} · ${l.stage === "balance" ? "Balance" : "Advance"}</div>
+          <div class="xs muted2">Customer paid ${inr(l.customer_paid)} − SnapPro ${inr(l.commission)}</div></div>
+        <div class="bold sm">${Number(l.amount) < 0 ? "− " + inr(-l.amount) : inr(l.amount)}</div></div>`).join("")}</div>
+    <div class="card mt12">
+      ${back ? kv("Your share", inr(gross)) + kv("Taken back (refunded shoots)", "− " + inr(back)) : ""}
+      ${kv("<b>Paid to you</b>", "<b>" + inr(po.amount) + "</b>")}</div>
+    <div class="xs muted2 mt12">Keep this for your records. Questions? Write to ${SUPPORT_EMAIL} with payout ${esc(po.payout_no)}.</div>
+    <button class="btn primary block mt16 no-print" onclick="window.print()">${icon("doc",16,"var(--on-text)")} Print or save as PDF</button>
+  </div>`;
+}
+
 /* ============================================================
    NAVIGATION
    ============================================================ */
@@ -5243,7 +5340,7 @@ const STACK_VIEWS = { pg: vPgProfile, photo: vPhoto, newRequest: vNewRequest, re
                       quote: vQuote, job: vJob, portfolio: vPortfolio, editPg: vEditPg,
                       payResult: vPayResult, editPayout: vEditPayout,
                       pgEarnings: vPgEarnings, pgDone: vPgDone, pgReviews: vPgReviews, how: vHow, storage: vStorage, rewards: vRewards, invite: vInvite, kyc: vKyc, deleteAccount: vDeleteAccount, receipt: vReceipt, busyNew: vBusyNew,
-                      report: vReport, blockedPeople: vBlockedPeople };
+                      report: vReport, blockedPeople: vBlockedPeople, payouts: vMyPayouts, payoutSlip: vPayoutSlip };
 const CUST_TABS = [ ["home","Home","home",vCustHome], ["explore","Explore","search",vExplore], ["activity","My shoots","calendar",vActivity], ["messages","Messages","chat",vMessages], ["profile","Profile","user",vProfile] ];
 const PG_TABS   = [ ["home","Home","home",vPgHome], ["requests","Requests","bolt",vPgRequests], ["calendar","Calendar","calendar",vCalendar], ["jobs","My shoots","list",vJobs], ["messages","Messages","chat",vMessages], ["profile","Profile","user",vProfile] ];
 const tabsFor = () => isPg() ? PG_TABS : CUST_TABS;
