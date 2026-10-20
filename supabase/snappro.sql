@@ -4797,6 +4797,7 @@ begin
   delete from public.push_subscriptions where user_id = p_user;          -- stop notifications to their phones
   delete from public.saved_photographers where user_id = p_user or photographer_id = p_user;
   delete from public.chat_reads where user_id = p_user;
+  delete from public.busy_blocks where photographer_id = p_user;
   perform set_config('snappro.system', '', true);
 
   -- close the login: free the email and stop sign-in (skipped quietly if the database doesn't allow it)
@@ -5665,6 +5666,135 @@ grant execute on function public.my_history(date, date)  to authenticated;
 grant execute on function public.my_receipt(uuid)        to authenticated;
 -- <<< 8j history
 
+-- >>> 8k calendar
+-- =====================================================================
+-- 8k. PHOTOGRAPHER CALENDAR + SHOOT REMINDERS
+--     • Busy times: photographers block time (holiday, other work) so
+--       they don't double-book. Requests that clash are flagged.
+--     • my_calendar(): bookings and busy times for a date range, with
+--       everything a photographer needs for each shoot.
+--     • Reminders to both the photographer and the customer:
+--         8 pm the evening before, and 2 hours before the shoot.
+--       send_due_reminders() runs every 5 minutes (pg_cron).
+-- =====================================================================
+
+create table if not exists public.busy_blocks (
+  id              bigserial primary key,
+  photographer_id uuid not null references public.photographers(id) on delete cascade,
+  starts_at       timestamptz not null,
+  ends_at         timestamptz not null,
+  note            text,
+  created_at      timestamptz not null default now(),
+  constraint busy_blocks_order check (ends_at > starts_at),
+  constraint busy_blocks_span check (ends_at - starts_at <= interval '62 days')
+);
+create index if not exists idx_busy_pg on public.busy_blocks(photographer_id, starts_at);
+alter table public.busy_blocks enable row level security;
+drop policy if exists busy_own_read on public.busy_blocks;
+create policy busy_own_read on public.busy_blocks for select to authenticated using (photographer_id = auth.uid());
+drop policy if exists busy_own_add on public.busy_blocks;
+create policy busy_own_add on public.busy_blocks for insert to authenticated with check (photographer_id = auth.uid());
+drop policy if exists busy_own_change on public.busy_blocks;
+create policy busy_own_change on public.busy_blocks for update to authenticated using (photographer_id = auth.uid()) with check (photographer_id = auth.uid());
+drop policy if exists busy_own_remove on public.busy_blocks;
+create policy busy_own_remove on public.busy_blocks for delete to authenticated using (photographer_id = auth.uid());
+create or replace function public.busy_before_write()
+returns trigger language plpgsql
+as $$ begin
+  new.note := nullif(left(trim(coalesce(new.note, '')), 120), '');
+  if tg_op = 'INSERT' then new.created_at := now(); end if;
+  return new;
+end $$;
+drop trigger if exists busy_before_write on public.busy_blocks;
+create trigger busy_before_write before insert or update on public.busy_blocks for each row execute function public.busy_before_write();
+
+-- my calendar for a date range: shoots (with what I need on the day) and busy times
+create or replace function public.my_calendar(p_from date, p_to date)
+returns jsonb language plpgsql stable security definer set search_path = public
+as $$
+declare me uuid := auth.uid(); f timestamptz; t timestamptz;
+begin
+  if me is null then raise exception 'Please log in again'; end if;
+  f := (coalesce(p_from, (now() at time zone 'Asia/Kolkata')::date)::timestamp) at time zone 'Asia/Kolkata';
+  t := ((coalesce(p_to, p_from + 42) + 1)::timestamp) at time zone 'Asia/Kolkata';
+  if t - f > interval '93 days' then raise exception 'Choose up to 3 months at a time'; end if;
+  return jsonb_build_object(
+    'shoots', (select coalesce(jsonb_agg(z order by z.start_at), '[]') from (
+        select b.id, b.status, b.category, b.start_at, b.start_at + make_interval(hours => coalesce(b.duration_hrs, 2)) end_at, b.duration_hrs,
+               b.customer_id, b.customer_name, b.address, b.city, b.pincode, b.price, b.photographer_amount, b.payment_status, b.balance_status,
+               r.notes, r.deliverables, r.budget,
+               (select count(*) from public.messages m where m.booking_id = b.id)::int messages
+          from public.bookings b left join public.requests r on r.id = b.request_id
+         where b.photographer_id = me and b.status in ('confirmed','enroute','arrived','shooting','completed')
+           and b.start_at < t and b.start_at + make_interval(hours => coalesce(b.duration_hrs, 2)) > f) z),
+    'busy', (select coalesce(jsonb_agg(z order by z.starts_at), '[]') from (
+        select id, starts_at, ends_at, note from public.busy_blocks where photographer_id = me and starts_at < t and ends_at > f) z));
+end $$;
+
+-- ---------- reminders ----------
+create table if not exists public.booking_reminders (
+  booking_id uuid not null references public.bookings(id) on delete cascade,
+  kind       text not null check (kind in ('eve','2h')),
+  sent_at    timestamptz not null default now(),
+  primary key (booking_id, kind)
+);
+alter table public.booking_reminders enable row level security;
+revoke all on public.booking_reminders from anon, authenticated;
+
+create or replace function public._fmt_time(t timestamptz) returns text language sql stable
+as $$ select to_char(t at time zone 'Asia/Kolkata', 'FMHH12:MI AM') $$;
+
+create or replace function public.send_due_reminders()
+returns int language plpgsql security definer set search_path = public
+as $$
+declare b record; n int := 0; eve timestamptz; cat text; where_ text; dayw text;
+begin
+  for b in select * from public.bookings
+            where status in ('confirmed','enroute') and start_at > now() and start_at < now() + interval '30 hours' loop
+    cat := public._cat_name(b.category);
+    where_ := coalesce(nullif(trim(coalesce(b.city, '') || ' ' || coalesce(b.pincode, '')), ''), 'the address in the app');
+    -- 8 pm (India time) the evening before the shoot day
+    eve := (((b.start_at at time zone 'Asia/Kolkata')::date - 1)::timestamp + interval '20 hours') at time zone 'Asia/Kolkata';
+    dayw := case when (b.start_at at time zone 'Asia/Kolkata')::date = (now() at time zone 'Asia/Kolkata')::date then 'Today ' else 'Tomorrow ' end;
+    if now() >= eve and b.start_at - now() > interval '2 hours 15 minutes' and b.created_at < eve
+       and not exists (select 1 from public.booking_reminders r where r.booking_id = b.id and r.kind = 'eve') then
+      insert into public.booking_reminders (booking_id, kind) values (b.id, 'eve');
+      perform public._push(b.photographer_id, 'reminder', dayw || public._fmt_time(b.start_at) || ' — ' || initcap(cat) || ' shoot with ' || public._first(b.customer_id),
+        where_ || ' · ' || coalesce(b.duration_hrs, 2) || ' hr' || case when coalesce(b.duration_hrs, 2) = 1 then '' else 's' end || '. Tap for the address and details.',
+        '/app.html?open=booking&id=' || b.id, 'rem-' || b.id);
+      perform public._push(b.customer_id, 'reminder', dayw || public._fmt_time(b.start_at) || ' — your ' || cat || ' shoot',
+        public._first(b.photographer_id) || ' is booked for you. Tap to see the booking or send a message.', '/app.html?open=booking&id=' || b.id, 'rem-' || b.id);
+      n := n + 1;
+    end if;
+    -- 2 hours before (only if it was booked more than 2 hours ahead)
+    if now() >= b.start_at - interval '2 hours' and b.created_at < b.start_at - interval '2 hours'
+       and not exists (select 1 from public.booking_reminders r where r.booking_id = b.id and r.kind = '2h') then
+      insert into public.booking_reminders (booking_id, kind) values (b.id, '2h');
+      perform public._push(b.photographer_id, 'reminder', 'In 2 hours — ' || initcap(cat) || ' with ' || public._first(b.customer_id),
+        'Starts ' || public._fmt_time(b.start_at) || ' in ' || where_ || '. Leave in time — tap for the map.', '/app.html?open=booking&id=' || b.id, 'rem-' || b.id);
+      perform public._push(b.customer_id, 'reminder', 'Your ' || cat || ' shoot is in 2 hours',
+        public._first(b.photographer_id) || ' arrives around ' || public._fmt_time(b.start_at) || '. You''ll see when they''re on the way.', '/app.html?open=booking&id=' || b.id, 'rem-' || b.id);
+      n := n + 1;
+    end if;
+  end loop;
+  delete from public.booking_reminders where sent_at < now() - interval '60 days';
+  return n;
+end $$;
+
+-- run every 5 minutes (needs the pg_cron extension: Supabase → Database → Extensions → pg_cron)
+do $$ begin
+  begin execute 'create extension if not exists pg_cron'; exception when others then null; end;
+  if exists (select 1 from pg_extension where extname = 'pg_cron') then
+    begin execute 'select cron.unschedule(''snappro-reminders'')'; exception when others then null; end;
+    execute 'select cron.schedule(''snappro-reminders'', ''*/5 * * * *'', ''select public.send_due_reminders()'')';
+  end if;
+exception when others then raise notice 'Reminder schedule skipped: %', sqlerrm; end $$;
+
+revoke all on function public.send_due_reminders()      from public, anon, authenticated;
+revoke all on function public.my_calendar(date, date)   from public, anon;
+grant execute on function public.my_calendar(date, date) to authenticated;
+-- <<< 8k calendar
+
 -- =====================================================================
 -- 9. ONE-OFF CLEAN-UP
 -- =====================================================================
@@ -5746,4 +5876,6 @@ select
   exists (select 1 from information_schema.columns where table_name = 'photographers' and column_name = 'travel')   as travel_ready,
   exists (select 1 from pg_trigger where tgname = 'push_from_event')   as notifications_ready,
   exists (select 1 from pg_proc where proname = 'admin_commission_overview')   as admin_tools_ready,
-  exists (select 1 from pg_proc where proname = 'my_history')   as history_ready;
+  exists (select 1 from pg_proc where proname = 'my_history')   as history_ready,
+  exists (select 1 from pg_proc where proname = 'send_due_reminders')   as calendar_ready,
+  exists (select 1 from pg_extension where extname = 'pg_cron')   as reminders_scheduled;

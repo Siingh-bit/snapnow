@@ -604,6 +604,34 @@ html[data-theme=dark] .feat{background:#3a2f15;color:#e8c46a}
   #tabs,.topbar .iconbtn,.no-print,#toasts{display:none!important}
   .card{break-inside:avoid;border-color:#ccc!important}
 }
+/* ---------- calendar ---------- */
+.tabbar.six .tab{font-size:10px}
+.tabbar.six .tab svg{width:19px;height:19px}
+.cal{padding:12px}
+.cal-head{margin-bottom:8px}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+.cal-dow span{font-size:11px;font-weight:600;color:var(--muted-2);text-align:center;padding:4px 0}
+.cal-d{display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:3px;padding:6px 0 5px;border-radius:9px;min-height:46px}
+.cal-d .n{font-size:14px;font-weight:600;width:28px;height:28px;display:grid;place-items:center;border-radius:50%}
+.cal-d.out .n{color:var(--muted-2);opacity:.55}
+.cal-d.today .n{color:var(--accent);font-weight:800}
+.cal-d.sel .n{background:var(--text);color:var(--paper)}
+.cal-d:hover{background:var(--surface-2)}
+.marks{display:flex;gap:2px;align-items:center;min-height:6px}
+.marks .dot,.cal-key .dot{width:6px;height:6px;border-radius:50%;background:var(--accent);display:inline-block}
+.marks .dot.done,.cal-key .dot.done{background:var(--green)}
+.marks .bar,.cal-key .bar{width:10px;height:4px;border-radius:2px;background:var(--muted-2);display:inline-block}
+.cal-key span{display:inline-flex;align-items:center;gap:5px}
+.agenda{display:flex;flex-direction:column;gap:8px}
+.ev{border:1px solid var(--border);border-left:4px solid var(--accent);border-radius:10px;background:var(--paper);overflow:hidden}
+.ev.st-completed{border-left-color:var(--green)}
+.ev.busy{border-left-color:var(--muted-2);background:var(--surface-2)}
+.ev-head{display:flex;align-items:center;gap:12px;width:100%;padding:12px}
+.ev-time{display:flex;flex-direction:column;min-width:64px;font-size:13px;text-align:left}
+.ev-time span{color:var(--muted-2);font-size:12px}
+.ev-body{padding:0 12px 12px;border-top:1px solid var(--border-soft)}
+.ev.open{box-shadow:0 6px 18px -10px rgba(0,0,0,.25)}
+.clash{display:flex;gap:6px;align-items:flex-start;font-size:12.5px;color:var(--red);background:color-mix(in srgb,var(--red) 8%,transparent);border-radius:8px;padding:7px 9px}
 
 </style>
 </head>
@@ -1267,6 +1295,7 @@ async function refresh(fromPoll){
   if(S.ublocks === undefined){ S.ublocks = null; loadUserBlocks().then(softRender); }
   pushSync();
   loadConversations().then(() => { const t = el("tabs"); if(t && t.innerHTML) t.innerHTML = tabbarHtml(); if(S.tab === "messages" && !S.stack.length) softRender(); });
+  if(isPg() && !CAL.data && !CAL.busy) loadCalendar();
   if(isCustomer() && S.saved === undefined){ S.saved = null; loadSaved().then(softRender); }
   if(S.rewards === undefined && !S.loading.rewards){ S.loading.rewards = true; loadRewards().then(() => { S.loading.rewards = false; softRender(); }); }
   try{
@@ -2044,6 +2073,7 @@ async function logout(){
   pwReset(); S.stack = []; S.tab = "home"; S.draft = null; S.payout = undefined; S.payState = null;
   S.d = { requests: [], offers: {}, bookings: [], openRequests: [], myOffers: [], pgs: {}, pgList: [], pgListAt: 0, reviews: {}, reviewed: {}, msgs: {} };
   S.convos = undefined; S.hist = undefined; S.saved = undefined; S.rcpt = null; S.chatReadFor = null;
+  CAL.month = null; CAL.data = null; CAL.key = ""; CAL.open = null;
   S.auth = { step: "login", email: "" };
   render(); scrollTop();
 }
@@ -2754,6 +2784,7 @@ function reqCardPg(r, compact){
         <div class="xs muted2">${esc(r.customer_name||"Customer")} · ${esc(r.city||"")} ${esc(r.pincode||"")}</div></div></div>
       <div class="stack right"><div class="bold sm">${inr(r.budget)}</div><div class="xs muted2">budget</div></div></div>
     <div class="row gap8 mt8 xs muted">${icon("calendar",13)} ${whenStr(r.start_at)} <span class="muted2">·</span> <span data-until="${esc(r.expires_at)}">${leftStr(r.expires_at)}</span> to quote</div>
+    ${!mine && clashWith(r.start_at, r.duration_hrs) ? `<div class="clash mt8">${icon("calendar",13,"var(--red)")} You're busy then — ${esc(clashWith(r.start_at, r.duration_hrs))}</div>` : ""}
     ${!compact && (r.deliverables||[]).length ? `<div class="chips mt8">${r.deliverables.map(x => `<span class="chip">${esc(x)}</span>`).join("")}</div>` : ""}
     ${!compact && r.notes ? `<div class="quote mt8">“${esc(r.notes)}”</div>` : ""}
     ${!compact ? `<div class="right mt6">${safetyLink(r.customer_id, r.customer_name, "request", r.id)}</div>` : ""}
@@ -2926,6 +2957,7 @@ function vQuote(p){
       <div class="chips">${[15,30,45,60,90].map(m => `<button class="chip lg ${S.quote.eta===m?'accent':''}" onclick="S.quote.eta=${m};render()">${m} min</button>`).join("")}</div></div>` : ""}
     <div class="field"><label for="qNote">Message to the customer <span class="muted2">(optional)</span></label>
       <textarea id="qNote" class="input" rows="3" maxlength="500" placeholder="e.g. I shoot on a full-frame camera and deliver 50+ edited photos within 48 hours." oninput="S.quote.note=this.value">${esc(S.quote.note)}</textarea></div>
+    ${clashWith(r.start_at, r.duration_hrs) ? `<div class="clash mt12">${icon("calendar",14,"var(--red)")} <span><b>You're busy then.</b> ${esc(clashWith(r.start_at, r.duration_hrs))}. Only quote if you can really make it.</span></div>` : ""}
     ${hint("quote", "Set one price for the whole shoot. The customer sees it next to other quotes. You can withdraw it until they book.")}
     <div class="note">${icon("wallet",18,"var(--green)")}<div>The customer pays ${S.advance}% online when they book and the rest online after the shoot. SnapPro keeps ${myCommission()}% and transfers the rest to you once the shoot is done and fully paid.</div></div>
     <button class="btn primary block mt16" ${S.loading.quote?"disabled":""} onclick="sendQuote('${r.id}')">${S.loading.quote ? "Sending…" : icon("send",16,"var(--on-text)") + " Send quote"}</button>
@@ -5041,6 +5073,167 @@ async function toggleSave(id, ev){
 const heartBtn = (id, cls) => `<button class="iconbtn heart ${isSaved(id) ? "on" : ""} ${cls || ""}" aria-label="${isSaved(id) ? "Remove from saved" : "Save photographer"}" aria-pressed="${isSaved(id)}" onclick="toggleSave('${id}', event)">${icon("heart",17, isSaved(id) ? "var(--accent)" : "currentColor")}</button>`;
 
 /* ============================================================
+   PHOTOGRAPHER CALENDAR
+   Month view with a dot on every day that has a shoot or busy time.
+   Tap a day to see its agenda; tap a shoot to open its details
+   (like an event in Google Calendar). "Mark busy time" blocks time
+   so clashing requests are flagged.
+   ============================================================ */
+const CAL = { month: null, sel: null, data: null, busy: false, key: "", open: null };
+const ymd = d => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+const dayKey = v => ymd(new Date(toMs(v)));
+function calInit(){ if(!CAL.month){ const n = new Date(); CAL.month = new Date(n.getFullYear(), n.getMonth(), 1); CAL.sel = ymd(n); } }
+async function loadCalendar(force){
+  calInit();
+  const y = CAL.month.getFullYear(), m = CAL.month.getMonth();
+  const from = ymd(new Date(y, m, 1 - 7)), to = ymd(new Date(y, m + 1, 7)), key = from + to;
+  if(!force && CAL.key === key && CAL.data) return;
+  CAL.busy = true; CAL.key = key;
+  const { data, error } = await sb.rpc("my_calendar", { p_from: from, p_to: to });
+  if(CAL.key !== key) return;
+  CAL.busy = false; CAL.err = error ? dbMsg(error) : null; if(!error) CAL.data = data;
+  softRender();
+}
+/* everything on one day: shoots and busy blocks that touch it */
+function dayItems(key){
+  const s = new Date(key + "T00:00:00").getTime(), e = s + 864e5, D = CAL.data || {};
+  const shoots = (D.shoots || []).map(x => Object.assign({}, x, S.d.bookings.find(b => b.id === x.id) || {}, { end_at: x.end_at }))
+    .filter(x => toMs(x.start_at) < e && toMs(x.end_at) > s && x.status !== "cancelled");
+  const busy = (D.busy || []).filter(x => toMs(x.starts_at) < e && toMs(x.ends_at) > s);
+  return { shoots, busy };
+}
+function calShift(n){ CAL.month = new Date(CAL.month.getFullYear(), CAL.month.getMonth() + n, 1); CAL.open = null; loadCalendar(); render(); }
+function calToday(){ const n = new Date(); CAL.month = new Date(n.getFullYear(), n.getMonth(), 1); CAL.sel = ymd(n); CAL.open = null; loadCalendar(); render(); }
+function calPick(k){ CAL.sel = k; CAL.open = null; render(); const a = el("calDay"); if(a && a.scrollIntoView) a.scrollIntoView({ behavior: "smooth", block: "start" }); }
+const hhmm = v => new Date(toMs(v)).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" });
+
+function vCalendar(){
+  calInit();
+  if(!CAL.data && !CAL.busy) loadCalendar();
+  const y = CAL.month.getFullYear(), m = CAL.month.getMonth(), first = new Date(y, m, 1), today = ymd(new Date());
+  const start = new Date(y, m, 1 - ((first.getDay() + 6) % 7));            // weeks start on Monday
+  const cells = []; for(let i = 0; i < 42; i++){ const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i); cells.push(d); }
+  const weeks = cells[35].getMonth() !== m ? 5 : 6;
+  const sel = CAL.sel, it = dayItems(sel), selDate = new Date(sel + "T00:00:00");
+  const monthShoots = ((CAL.data || {}).shoots || []).filter(x => new Date(toMs(x.start_at)).getMonth() === m && x.status !== "cancelled");
+  return `<div class="pad">
+    ${pageHead("Calendar", "Your booked shoots and busy times. Tap a day, then a shoot, to see where, when and what for.",
+      `<button class="btn sm" onclick="push('busyNew',{day:'${sel}'})">${icon("plus",14)} Busy time</button>`)}
+    ${hint("cal", "A <b>dot</b> means you have a shoot that day; a <b>grey bar</b> means you marked yourself busy. Requests that clash with either are marked <b>You're busy then</b>.")}
+    <div class="cal card">
+      <div class="between cal-head">
+        <button class="iconbtn" aria-label="Previous month" onclick="calShift(-1)">${icon("back",16)}</button>
+        <div class="center"><div class="h3">${first.toLocaleDateString("en-IN", { month: "long", year: "numeric" })}</div>
+          <div class="xs muted2">${monthShoots.length ? monthShoots.length + " shoot" + (monthShoots.length === 1 ? "" : "s") + " this month" : "No shoots this month"}${CAL.busy ? " · loading…" : ""}</div></div>
+        <button class="iconbtn" aria-label="Next month" onclick="calShift(1)" style="transform:scaleX(-1)">${icon("back",16)}</button>
+      </div>
+      <div class="cal-grid cal-dow">${["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].map(d => `<span>${d}</span>`).join("")}</div>
+      <div class="cal-grid">${cells.slice(0, weeks * 7).map(d => { const k = ymd(d), x = dayItems(k), out = d.getMonth() !== m;
+        return `<button class="cal-d ${out ? "out" : ""} ${k === today ? "today" : ""} ${k === sel ? "sel" : ""}" onclick="calPick('${k}')" aria-label="${d.toDateString()}${x.shoots.length ? ", " + x.shoots.length + " shoot" + (x.shoots.length > 1 ? "s" : "") : ""}">
+          <span class="n">${d.getDate()}</span>
+          <span class="marks">${x.shoots.slice(0, 3).map(s => `<i class="dot ${s.status === "completed" ? "done" : ""}"></i>`).join("")}${x.busy.length ? `<i class="bar"></i>` : ""}</span></button>`; }).join("")}</div>
+      <div class="row gap12 xs muted2 mt8 cal-key"><span><i class="dot"></i> Shoot</span><span><i class="dot done"></i> Done</span><span><i class="bar"></i> Busy</span>
+        <button class="linkish xs accent bold" style="margin-left:auto" onclick="calToday()">Today</button></div>
+    </div>
+    ${CAL.err ? `<div class="form-err">${esc(CAL.err)}</div>` : ""}
+    <div id="calDay" class="sec-title mt20">${sel === today ? "Today · " : ""}${selDate.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" })}</div>
+    ${!it.shoots.length && !it.busy.length ? `<div class="card soft center sm muted">Nothing booked — you're free this day.
+        <div class="mt8"><button class="btn sm" onclick="push('busyNew',{day:'${sel}'})">Mark busy time</button></div></div>`
+      : `<div class="agenda">${[...it.shoots.map(s => ({ t: toMs(s.start_at), h: agendaShoot(s) })), ...it.busy.map(b => ({ t: toMs(b.starts_at), h: agendaBusy(b) }))].sort((a, b) => a.t - b.t).map(x => x.h).join("")}</div>`}
+    ${upcomingWeek()}
+  </div>`;
+}
+function agendaShoot(s){
+  const open = CAL.open === s.id, cat = catById(s.category), share = s.photographer_amount != null ? s.photographer_amount : s.price;
+  const maps = s.address ? "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent([s.address, s.city, s.pincode].filter(Boolean).join(", ")) : "";
+  return `<div class="ev ${open ? "open" : ""} st-${s.status}">
+    <button class="ev-head" onclick="CAL.open=CAL.open==='${s.id}'?null:'${s.id}';render()">
+      <div class="ev-time"><b>${hhmm(s.start_at)}</b><span>${hhmm(s.end_at)}</span></div>
+      <div class="grow" style="text-align:left"><div class="sm bold">${esc(cat.name)} shoot · ${esc(s.customer_name || "Customer")}</div>
+        <div class="xs muted2">${esc([s.city, s.pincode].filter(Boolean).join(" "))} · ${s.duration_hrs || 2} hr${(s.duration_hrs || 2) > 1 ? "s" : ""}</div></div>
+      ${statusChip(BK_LABEL[s.status], BK_CHIP[s.status])}</button>
+    ${open ? `<div class="ev-body">
+      <div class="kv top"><span>${icon("pin",13)} Where</span><span class="right">${esc(s.address || "—")}<br><span class="xs muted2">${esc(s.city || "")} ${esc(s.pincode || "")}</span></span></div>
+      <div class="kv"><span>${icon("clock",13)} When</span><span>${whenStr(s.start_at)} – ${hhmm(s.end_at)}</span></div>
+      <div class="kv"><span>${icon("cam",13)} Shoot</span><span>${esc(cat.name)}, ${s.duration_hrs || 2} hr${(s.duration_hrs || 2) > 1 ? "s" : ""}</span></div>
+      ${(s.deliverables || []).length ? `<div class="kv top"><span>Wants</span><span class="right">${s.deliverables.map(esc).join(", ")}</span></div>` : ""}
+      ${s.notes ? `<div class="quote mt8">“${esc(s.notes)}”</div>` : ""}
+      <div class="kv"><span>${icon("wallet",13)} You'll be paid</span><span class="bold">${inr(share)}</span></div>
+      <div class="kv"><span>Booking</span><span>${bookingRef(s)}</span></div>
+      <div class="row gap8 mt12" style="flex-wrap:wrap">
+        ${maps && s.status !== "completed" ? `<a class="btn sm grow" href="${maps}" target="_blank" rel="noopener">${icon("pin",14)} Map</a>` : ""}
+        <button class="btn sm grow" onclick="openChatFor('${s.id}')">${icon("chat",14)} Message${s.messages ? " (" + s.messages + ")" : ""}</button>
+        <button class="btn sm primary grow" onclick="openShoot('${s.id}')">Open shoot</button></div>
+    </div>` : ""}
+  </div>`;
+}
+function agendaBusy(b){
+  const sameDay = dayKey(b.starts_at) === ymd(new Date(toMs(b.ends_at) - 1));
+  return `<div class="ev busy"><div class="ev-head">
+    <div class="ev-time"><b>${hhmm(b.starts_at)}</b><span>${sameDay ? hhmm(b.ends_at) : dayStr(b.ends_at)}</span></div>
+    <div class="grow"><div class="sm bold">Busy${b.note ? " · " + esc(b.note) : ""}</div><div class="xs muted2">You marked this time as busy</div></div>
+    <button class="btn sm" onclick="deleteBusy(${b.id})">Remove</button></div></div>`;
+}
+/* the next 7 days at a glance */
+function upcomingWeek(){
+  const now = Date.now(), end = now + 7 * 864e5;
+  const list = ((CAL.data || {}).shoots || []).filter(s => toMs(s.start_at) >= now - 3600e3 && toMs(s.start_at) < end && s.status !== "completed" && s.status !== "cancelled");
+  if(!list.length) return "";
+  return `<div class="sec-title mt20">Next 7 days</div><div class="card list">${list.map(s => `<button class="li" onclick="CAL.sel='${dayKey(s.start_at)}';CAL.open='${s.id}';render();scrollTop()">
+      <div class="ev-time sm"><b>${dayStr(s.start_at)}</b><span>${hhmm(s.start_at)}</span></div>
+      <div class="grow" style="text-align:left"><div class="sm bold">${esc(catById(s.category).name)} · ${esc(s.customer_name || "")}</div><div class="xs muted2">${esc(s.city || "")} · ${s.duration_hrs || 2} hrs</div></div>${icon("chevron",16,"var(--muted-2)")}</button>`).join("")}</div>`;
+}
+
+/* ---------- mark busy time ---------- */
+function vBusyNew(p){
+  if(!S.busyDraft || S.busyDraft.for !== p.day) S.busyDraft = { for: p.day, day: p.day, from: "10:00", to: "18:00", allDay: false, until: p.day, note: "" };
+  const d = S.busyDraft;
+  return `${topbar("Mark busy time", "Customers' requests at this time will be marked as a clash")}
+  <div class="pad">
+    <label class="row gap8 sm" style="cursor:pointer"><input type="checkbox" ${d.allDay ? "checked" : ""} onchange="S.busyDraft.allDay=this.checked;render()"> Whole day(s) — holiday, travel</label>
+    <div class="field mt12"><label for="bzDay">${d.allDay ? "From day" : "Day"}</label><input id="bzDay" class="input" type="date" value="${esc(d.day)}" onchange="S.busyDraft.day=this.value;if(S.busyDraft.until<this.value)S.busyDraft.until=this.value"></div>
+    ${d.allDay ? `<div class="field"><label for="bzUntil">Until (last day)</label><input id="bzUntil" class="input" type="date" value="${esc(d.until)}" onchange="S.busyDraft.until=this.value"></div>`
+      : `<div class="row gap8"><div class="field grow"><label for="bzFrom">From</label><input id="bzFrom" class="input" type="time" value="${esc(d.from)}" onchange="S.busyDraft.from=this.value"></div>
+         <div class="field grow"><label for="bzTo">To</label><input id="bzTo" class="input" type="time" value="${esc(d.to)}" onchange="S.busyDraft.to=this.value"></div></div>`}
+    <div class="field"><label for="bzNote">Note for yourself <span class="muted2">(optional)</span></label><input id="bzNote" class="input" maxlength="120" placeholder="e.g. Family function" value="${esc(d.note)}" oninput="S.busyDraft.note=this.value"></div>
+    <button class="btn primary block mt8" ${S.loading.busy ? "disabled" : ""} onclick="saveBusy()">${S.loading.busy ? "Saving…" : "Save busy time"}</button>
+    <div id="formErr">${errHtml(S.formErr)}</div>
+    <div class="xs muted2 mt12">Only you can see this. It doesn't change bookings you already have.</div>
+  </div>`;
+}
+async function saveBusy(){
+  const d = S.busyDraft; if(!d) return;
+  ["bzDay","bzUntil","bzFrom","bzTo","bzNote"].forEach(id => { const n = el(id); if(n){ const k = { bzDay: "day", bzUntil: "until", bzFrom: "from", bzTo: "to", bzNote: "note" }[id]; d[k] = n.value; } });
+  const s = d.allDay ? new Date(d.day + "T00:00:00") : new Date(d.day + "T" + d.from + ":00");
+  const e = d.allDay ? new Date(new Date(d.until + "T00:00:00").getTime() + 864e5) : new Date(d.day + "T" + d.to + ":00");
+  if(!d.day || isNaN(s) || isNaN(e)){ S.formErr = "Pick the day and times."; render(); return; }
+  if(e <= s){ S.formErr = d.allDay ? "The last day can't be before the first day." : "The end time must be after the start time."; render(); return; }
+  if(e - s > 62 * 864e5){ S.formErr = "Mark up to 2 months at a time."; render(); return; }
+  S.loading.busy = true; S.formErr = null; render();
+  const { error } = await sb.from("busy_blocks").insert({ photographer_id: S.me.id, starts_at: s.toISOString(), ends_at: e.toISOString(), note: (d.note || "").trim() || null });
+  S.loading.busy = false;
+  if(error){ S.formErr = dbMsg(error); render(); return; }
+  S.busyDraft = null; CAL.sel = d.day; toast("Busy time saved", "Clashing requests will be marked", "calendar");
+  pop(); loadCalendar(true);
+}
+async function deleteBusy(id){
+  if(!confirm("Remove this busy time?")) return;
+  const { error } = await sb.from("busy_blocks").delete().eq("id", id);
+  if(error){ toast("Couldn't remove", dbMsg(error), "x"); return; }
+  toast("Busy time removed", "", "check"); loadCalendar(true);
+}
+
+/* ---------- clash check for requests ---------- */
+function clashWith(start, hours){
+  const s = toMs(start), e = s + (hours || 2) * 3600e3, D = CAL.data || {};
+  const b = (D.shoots || []).concat(S.d.bookings.filter(activeBk).map(x => Object.assign({}, x, { end_at: new Date(toMs(x.start_at) + (x.duration_hrs || 2) * 3600e3).toISOString() })))
+    .find(x => x.status !== "cancelled" && x.status !== "completed" && toMs(x.start_at) < e && toMs(x.end_at) > s);
+  if(b) return "You have a " + catById(b.category).name.toLowerCase() + " shoot then";
+  const z = (D.busy || []).find(x => toMs(x.starts_at) < e && toMs(x.ends_at) > s);
+  return z ? "You marked yourself busy then" + (z.note ? " (" + z.note + ")" : "") : "";
+}
+
+/* ============================================================
    NAVIGATION
    ============================================================ */
 const AUTH_VIEWS = { welcome: vWelcome, signup: vSignup, otp: vOtp, login: vLogin, reset: vReset, newpw: vNewPw,
@@ -5049,10 +5242,10 @@ const STACK_VIEWS = { pg: vPgProfile, photo: vPhoto, newRequest: vNewRequest, re
                       booking: vBooking, rate: vRate, chat: vChat, editName: vEditName, editLoc: vEditLoc,
                       quote: vQuote, job: vJob, portfolio: vPortfolio, editPg: vEditPg,
                       payResult: vPayResult, editPayout: vEditPayout,
-                      pgEarnings: vPgEarnings, pgDone: vPgDone, pgReviews: vPgReviews, how: vHow, storage: vStorage, rewards: vRewards, invite: vInvite, kyc: vKyc, deleteAccount: vDeleteAccount, receipt: vReceipt,
+                      pgEarnings: vPgEarnings, pgDone: vPgDone, pgReviews: vPgReviews, how: vHow, storage: vStorage, rewards: vRewards, invite: vInvite, kyc: vKyc, deleteAccount: vDeleteAccount, receipt: vReceipt, busyNew: vBusyNew,
                       report: vReport, blockedPeople: vBlockedPeople };
 const CUST_TABS = [ ["home","Home","home",vCustHome], ["explore","Explore","search",vExplore], ["activity","My shoots","calendar",vActivity], ["messages","Messages","chat",vMessages], ["profile","Profile","user",vProfile] ];
-const PG_TABS   = [ ["home","Home","home",vPgHome], ["requests","Requests","bolt",vPgRequests], ["jobs","My shoots","calendar",vJobs], ["messages","Messages","chat",vMessages], ["profile","Profile","user",vProfile] ];
+const PG_TABS   = [ ["home","Home","home",vPgHome], ["requests","Requests","bolt",vPgRequests], ["calendar","Calendar","calendar",vCalendar], ["jobs","My shoots","list",vJobs], ["messages","Messages","chat",vMessages], ["profile","Profile","user",vProfile] ];
 const tabsFor = () => isPg() ? PG_TABS : CUST_TABS;
 
 function scrollTop(){ try{ window.scrollTo(0, 0); }catch(e){} }
@@ -5074,7 +5267,7 @@ function replaceStack(v, p){
   if(S.stack.length) S.stack[S.stack.length - 1] = { v, p: p || {} }; else { S.stack.push({ v, p: p || {} }); try{ history.pushState({ snap: 1 }, ""); }catch(e){} }
   render(); scrollTop();
 }
-function go(tab){ if(tab === "messages") loadConversations().then(softRender); if((tab === "activity" || tab === "jobs") && S.hist && !S.hist.busy) loadHistory();
+function go(tab){ if(tab === "calendar") loadCalendar(true); if(tab === "messages") loadConversations().then(softRender); if((tab === "activity" || tab === "jobs") && S.hist && !S.hist.busy) loadHistory();
   S.tab = tab; S.stack = []; S.formErr = null; navMark(tab === "home"); render(); scrollTop(); }
 window.addEventListener("popstate", () => {
   if(ignorePop){ ignorePop--; return; }
@@ -5090,7 +5283,7 @@ function tabBadge(id){
   return 0;
 }
 function tabbarHtml(){
-  return `<nav class="tabbar">${tabsFor().map(([id, label, ic]) => {
+  return `<nav class="tabbar ${tabsFor().length > 5 ? "six" : ""}">${tabsFor().map(([id, label, ic]) => {
     const n = tabBadge(id);
     return `<button class="tab ${S.tab===id?'on':''}" onclick="go('${id}')" aria-label="${label}">${icon(ic,21)}<span>${label}</span>${n ? `<span class="badge">${n}</span>` : ""}</button>`;
   }).join("")}</nav>`;
