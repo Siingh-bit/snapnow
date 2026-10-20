@@ -577,6 +577,15 @@ html[data-theme=dark] .feat{background:#3a2f15;color:#e8c46a}
 .qr-box svg{width:100%;height:auto;display:block}
 .ref-steps{display:flex;gap:3px;margin-top:8px}.ref-steps i{flex:1;height:4px;border-radius:3px;background:var(--border)}.ref-steps i.on{background:var(--green)}
 .invite-hero .btn{background:rgba(255,255,255,.12);color:#fff;border-color:rgba(255,255,255,.25)}
+/* ---------- easy reading ---------- */
+.sec-title{font-size:14px;font-weight:700;color:var(--text);letter-spacing:-.1px}
+.cnt-b{display:inline-grid;place-items:center;min-width:20px;height:20px;padding:0 6px;margin-left:6px;border-radius:10px;background:var(--accent);color:var(--on-accent,#fff);font-size:11.5px;font-weight:700;vertical-align:1px}
+.page-head{margin-bottom:14px}
+.page-sub{font-size:13.5px;color:var(--muted);margin-top:4px;line-height:1.45}
+.hint{display:flex;align-items:flex-start;gap:10px;margin:12px 0;padding:11px 12px;border-radius:10px;background:var(--surface-2);border:1px dashed var(--border);font-size:13px;line-height:1.45;color:var(--muted)}
+.hint svg{flex:0 0 auto;margin-top:1px}
+.hint b{color:var(--text)}
+.hint-x{flex:0 0 auto;font-size:12px;font-weight:700;color:var(--accent-ink,var(--accent));padding:2px 4px;white-space:nowrap}
 
 </style>
 </head>
@@ -1312,8 +1321,14 @@ const REGIONS = {
 const TRAVEL = [["city","Only my city"],["nearby","Nearby cities"],["anywhere","Anywhere in India"]];
 const lc = v => String(v || "").trim().toLowerCase();
 function regionOf(city, state){ const c = lc(city); for(const k in REGIONS) if(REGIONS[k].includes(c)) return k; return "state:" + lc(state); }
-function nearbyText(city, state){ const k = regionOf(city, state); return k === "ncr" ? "Delhi NCR" : k === "mumbai" ? "Mumbai and around" : k === "tricity" ? "Chandigarh tricity"
-  : k === "hyderabad" ? "Hyderabad and Secunderabad" : k === "kolkata" ? "Kolkata and Howrah" : "anywhere in " + (state || "your state"); }
+const REGION_NAMES = { ncr: "Delhi NCR", mumbai: "Mumbai area", tricity: "Chandigarh tricity", hyderabad: "Hyderabad", kolkata: "Kolkata area" };
+const titleCase = t => t.replace(/(^|[\s-])\w/g, m => m.toUpperCase());
+function nearbyText(city, state){
+  const k = regionOf(city, state);
+  if(!REGIONS[k]) return "anywhere in " + (state || "your state");
+  const others = REGIONS[k].filter(c => c !== lc(city) && c !== "new delhi" && c !== "gurgaon").slice(0, 3).map(titleCase);
+  return REGION_NAMES[k] + (others.length ? " (" + others.join(", ") + ")" : "");
+}
 function pgCovers(pg, city, state){
   if(!pg) return false;
   const t = pg.travel || "city";
@@ -2150,7 +2165,7 @@ function vExplore(){
   const f = S.prefs.ex;
   if(Date.now() - S.d.pgListAt > 60000 && !S.loading.pgs){ S.loading.pgs = true; api.photographers().then(() => { S.loading.pgs = false; setHtml("exResults", exResultsHtml()); }).catch(() => S.loading.pgs = false); }
   return `<div class="sticky-head pad">
-    <div class="h2 mb12">Photographers</div>
+    ${pageHead("Photographers", "See their past work and reviews. To get prices, post your shoot — photographers send you quotes.")}
     <div class="search">${icon("search",16,"var(--muted-2)")}<input id="exQ" type="search" placeholder="Search by name or style" value="${esc(f.q)}" oninput="exSearch(this.value)"></div>
     <div class="chips mt12">
       <button class="chip ${f.scope==='city'?'accent':''}" onclick="exSet('scope','city')">${icon("pin",11)} ${esc(meCity()||"My city")}</button>
@@ -2324,6 +2339,7 @@ function vRequest(p){
     ${r.status === "cancelled" ? `<div class="card soft">You cancelled this request.</div>` : ""}
     ${(!bk || bk.status === "pending_payment") && r.status !== "cancelled" ? (offers.length ? `
       <div class="between"><div><div class="h2">${offers.length} quote${offers.length===1?"":"s"}</div><div class="xs muted2">${open ? `Still open · <span data-until="${esc(r.expires_at)}">${leftStr(r.expires_at)}</span>` : "Pick one to book"}</div></div></div>
+      ${hint("quotes", "Compare the price, past work and reviews. Tap <b>Book</b> on the one you like — you pay " + S.advance + "% now and the rest after the shoot.")}
       <div class="chips mt12">${[["best","Best match"],["price","Lowest price"],["fast","Soonest"],["rating","Top rated"]].map(([k,l]) => `<button class="chip ${(S.prefs.offerSort||"best")===k?'accent':''}" onclick="S.prefs.offerSort='${k}';savePrefs();render()">${l}</button>`).join("")}</div>
       <div class="stack gap10 mt12">${offers.map((o,i) => offerCard(r, o, soon, i === 0 && (S.prefs.offerSort||"best") === "best")).join("")}</div>`
     : open ? `
@@ -2630,8 +2646,8 @@ function vActivity(){
   const past = S.d.bookings.filter(b => !activeBk(b));
   const closed = S.d.requests.filter(r => !reqIsOpen(r) && r.status !== "matched");
   if(!open.length && !S.d.bookings.length && !closed.length)
-    return `<div class="pad"><div class="h2">Your shoots</div></div>` + emptyState("📷", "No shoots yet", "When you post a shoot, it'll show up here.", `<button class="btn primary sm mt12" onclick="startRequest()">Book a photographer</button>`);
-  return `<div class="pad"><div class="between"><div class="h2">Your shoots</div><button class="btn sm" onclick="startRequest()">${icon("plus",14)} New shoot</button></div>
+    return `<div class="pad">${pageHead("Your shoots", "Every shoot you post or book shows up here.")}</div>` + emptyState("📷", "No shoots yet", "When you post a shoot, it'll show up here.", `<button class="btn primary sm mt12" onclick="startRequest()">Book a photographer</button>`);
+  return `<div class="pad">${pageHead("Your shoots", "Upcoming first. Tap a shoot to see details, message your photographer or pay.", `<button class="btn sm" onclick="startRequest()">${icon("plus",14)} New shoot</button>`)}
     ${actionsHtml(customerActions())}
     ${up.length ? `<div class="sec-title mt16">Upcoming</div>${up.map(bookingCard).join("")}` : ""}
     ${open.length ? `<div class="sec-title mt16">Waiting for quotes</div>${open.map(requestCard).join("")}` : ""}
@@ -2645,13 +2661,15 @@ function vProfile(){
     <div class="row gap16 mt8">${avatarHtml(me.id, me.name, "av-72")}
       <div class="grow"><div class="h2">${esc(me.name)}</div><div class="sm muted">${esc(S.email)}</div>
         <div class="chips mt8"><span class="chip">${isPg() ? "Photographer" : "Customer"}</span>${me.public_id ? `<button class="chip" title="Copy" onclick="navigator.clipboard&&navigator.clipboard.writeText('${esc(me.public_id)}');toast('SnapPro ID copied','${esc(me.public_id)}','check')">ID ${esc(me.public_id)}</button>` : ""}</div></div></div>
-    <div class="card mt16 list">
+    <div class="sec-title mt20">Notifications &amp; rewards</div>
+    <div class="card list">
       ${pushRow()}
       <button class="li" onclick="push('rewards')">${icon("star",18,"var(--accent)")}<div class="grow"><div class="sm bold">Offers &amp; rewards</div><div class="xs muted2">${S.rewards ? ((S.rewards.offers||[]).length ? (S.rewards.offers.length + " offer" + (S.rewards.offers.length === 1 ? "" : "s") + " to claim · ") : "") + ((S.rewards.benefits||[]).length) + " active reward" + ((S.rewards.benefits||[]).length === 1 ? "" : "s") : "Promo codes and rewards"}</div></div>${S.rewards && (S.rewards.offers||[]).length ? `<span class="badge-dot">${S.rewards.offers.length}</span>` : ""}${icon("chevron",16,"var(--muted-2)")}</button>
       <button class="li" onclick="push('invite')">${icon("send",18,"var(--muted)")}<div class="grow"><div class="sm bold">Invite friends</div><div class="xs muted2">Share your SnapPro ID${S.rewards && S.rewards.referral && S.rewards.referral.enabled ? " — you both get rewarded" : ""}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
     </div>
-    ${isPg() ? pgProfileExtras() : ""}
-    <div class="card mt16 list">
+    ${isPg() ? `<div class="sec-title mt20">Your photographer profile</div>` + pgProfileExtras() : ""}
+    <div class="sec-title mt20">Your account</div>
+    <div class="card list">
       <button class="li" onclick="push('editName')">${icon("user",18,"var(--muted)")}<div class="grow"><div class="sm bold">Name</div><div class="xs muted2">${esc(me.name)}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
       <button class="li" onclick="push('editLoc')">${icon("pin",18,"var(--muted)")}<div class="grow"><div class="sm bold">Location</div><div class="xs muted2">${esc([me.city, me.state, me.pincode].filter(Boolean).join(", ") || "Not set")}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
       <button class="li" onclick="push('blockedPeople')">${icon("shield",18,"var(--muted)")}<div class="grow"><div class="sm bold">Blocked people</div><div class="xs muted2">${(S.ublocks || []).length ? S.ublocks.length + " blocked" : "No one blocked"}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
@@ -2741,6 +2759,7 @@ function vPgHome(){
       <button class="toggle ${pg.is_online?'on':''}" onclick="toggleOnline()" aria-pressed="${!!pg.is_online}"><i></i><span>${pg.is_online ? "Available" : "Away"}</span></button>
     </div>
 
+    ${actionsHtml(photographerActions())}
     ${!photos ? `<button class="card tap warn-card mt16" onclick="push('portfolio')">${icon("image",20,"var(--accent)")}<div class="grow" style="text-align:left"><div class="bold sm">Add photos of your work</div><div class="xs muted">Customers compare portfolios before booking. Profiles with photos get chosen far more often.</div></div>${icon("chevron",16,"var(--muted-2)")}</button>` : ""}
 
     <div class="grid3 mt16">
@@ -2751,10 +2770,9 @@ function vPgHome(){
 
     ${(pg.travel || "city") === "city" && !S.prefs.travelAsked ? `<div class="card mt16">
       <div class="bold sm">${icon("pin",14,"var(--accent)")} Do you travel for shoots?</div>
-      <div class="xs muted mt4">Get requests from customers outside ${esc(meCity() || "your city")} too — for example ${esc(nearbyText(pg.city || meCity(), pg.state || S.me.state))}. You can change this any time.</div>
+      <div class="xs muted mt4">Also get requests from customers in ${esc(nearbyText(pg.city || meCity(), pg.state || S.me.state))}, or from anywhere in India. You can change this any time.</div>
       <div class="row gap8 mt12" style="flex-wrap:wrap"><button class="btn sm primary" onclick="setTravel('nearby')">Nearby cities</button><button class="btn sm" onclick="setTravel('anywhere')">Anywhere in India</button>
         <button class="btn sm" onclick="S.prefs.travelAsked=1;savePrefs();render()">Only ${esc(meCity() || "my city")}</button></div></div>` : ""}
-    ${actionsHtml(photographerActions())}
     ${howCard()}
     ${active.length ? `<div class="between mt20"><div class="sec-title" style="margin:0">Upcoming shoots</div><button class="xs accent bold" onclick="go('jobs')">See all</button></div>${active.map(bookingCard).join("")}` : ""}
 
@@ -2773,7 +2791,8 @@ function vPgRequests(){
   else list = list.filter(r => !r.city || pgCovers(myCover(), r.city, r.state));
   const quoted = S.d.myOffers.map(o => ({ o, r: S.d.openRequests.find(r => r.id === o.request_id) }));
   return `<div class="pad">
-    <div class="h2">Requests</div>
+    ${pageHead("Requests", "Shoots customers have posted near you. Send your price before the timer runs out.")}
+    ${hint("pgreq", "Tap <b>Send a quote</b> to offer your price. The customer compares quotes and books one — you'll get an alert when they do. Tap <b>Not for me</b> to hide a request.")}
     <div class="chips mt12">
       <button class="chip ${mode==='match'?'accent':''}" onclick="S.prefs.reqMode='match';savePrefs();render()">For you</button>
       <button class="chip ${mode==='city'?'accent':''}" onclick="S.prefs.reqMode='city';savePrefs();render()">Everything ${(S.pg && S.pg.travel || "city") === "city" ? "in " + esc(meCity()||"your city") : "you cover"}</button>
@@ -2892,6 +2911,7 @@ function vQuote(p){
       <div class="chips">${[15,30,45,60,90].map(m => `<button class="chip lg ${S.quote.eta===m?'accent':''}" onclick="S.quote.eta=${m};render()">${m} min</button>`).join("")}</div></div>` : ""}
     <div class="field"><label for="qNote">Message to the customer <span class="muted2">(optional)</span></label>
       <textarea id="qNote" class="input" rows="3" maxlength="500" placeholder="e.g. I shoot on a full-frame camera and deliver 50+ edited photos within 48 hours." oninput="S.quote.note=this.value">${esc(S.quote.note)}</textarea></div>
+    ${hint("quote", "Set one price for the whole shoot. The customer sees it next to other quotes. You can withdraw it until they book.")}
     <div class="note">${icon("wallet",18,"var(--green)")}<div>The customer pays ${S.advance}% online when they book and the rest online after the shoot. SnapPro keeps ${myCommission()}% and transfers the rest to you once the shoot is done and fully paid.</div></div>
     <button class="btn primary block mt16" ${S.loading.quote?"disabled":""} onclick="sendQuote('${r.id}')">${S.loading.quote ? "Sending…" : icon("send",16,"var(--on-text)") + " Send quote"}</button>
     <div id="formErr">${errHtml(S.formErr)}</div>
@@ -2931,7 +2951,7 @@ function vJobs(){
   const up = S.d.bookings.filter(activeBk).sort((a,b) => toMs(a.start_at) - toMs(b.start_at));
   const past = S.d.bookings.filter(b => !activeBk(b));
   return `<div class="pad">
-    <div class="h2">Your shoots</div>
+    ${pageHead("Your shoots", "Tap a shoot to see the address, update its status as you go and chat with the customer.")}
     <div class="grid2 mt12">
       <button class="stat tap" onclick="push('pgEarnings')"><div class="s-v">${inr(e.month)}</div><div class="s-l">Earned this month · ${e.monthJobs} shoot${e.monthJobs===1?"":"s"} ${icon("chevron",11,"var(--muted-2)")}</div></button>
       <button class="stat tap" onclick="push('pgEarnings')"><div class="s-v">${inr(e.total)}</div><div class="s-l">All time · ${e.jobs} shoot${e.jobs===1?"":"s"} ${icon("chevron",11,"var(--muted-2)")}</div></button>
@@ -2977,6 +2997,7 @@ function vJob(p){
       <div class="kv top"><span>Address</span><span class="right">${esc(b.address||"—")}<br><span class="xs muted2">${esc(b.city||"")} ${esc(b.pincode||"")}</span></span></div>
       ${maps && b.status !== "cancelled" && b.status !== "completed" ? `<a class="btn sm block mt8" href="${maps}" target="_blank" rel="noopener">${icon("pin",14)} Open in Maps</a>` : ""}
     </div>
+    ${nx ? hint("job", "Tap the big button as you go: <b>On my way</b> → <b>Arrived</b> → <b>Start the shoot</b> → <b>Mark as complete</b>. The customer sees every step.") : ""}
     ${nx ? `<button class="btn primary block mt16" ${S.loading.step?"disabled":""} onclick="jobStep('${b.id}','${nx.to}')">${icon(nx.ic,16,"var(--on-text)")} ${nx.label}</button>` : ""}
     ${b.status === "completed" ? `<div class="note mt16">${icon("check",18,"var(--green)")}<div>${b.payment_status === "not_required"
         ? "Shoot complete. Collect " + inr(b.price) + " from " + esc(firstName(b.customer_name)) + " if you haven't already."
@@ -4337,10 +4358,21 @@ function rewardTodo(out){
   if(n) out.push({ key: "offers", ic: "star", tone: "green", title: n === 1 ? "You have an offer to claim" : "You have " + n + " offers to claim",
     sub: esc((S.rewards.offers[0] || {}).title || ""), btn: "View", go: `push('rewards')` });
 }
+/* ---------- easy reading: a page title with one plain line under it, and tips you can dismiss ---------- */
+function pageHead(title, sub, right){
+  return `<div class="page-head"><div class="between"><div class="h2">${title}</div>${right || ""}</div>${sub ? `<div class="page-sub">${sub}</div>` : ""}</div>`;
+}
+function hint(key, html){
+  if((S.prefs.hints || {})[key]) return "";
+  return `<div class="hint">${icon("help",16,"var(--accent)")}<div class="grow">${html}</div><button class="hint-x" onclick="hideHint('${key}')">Got it</button></div>`;
+}
+function hideHint(k){ S.prefs.hints = Object.assign({}, S.prefs.hints, { [k]: 1 }); savePrefs(); render(); }
+function showHintsAgain(){ S.prefs.hints = {}; S.prefs.hideHow = false; savePrefs(); toast("Tips are back", "You'll see the helpful tips again", "help"); render(); }
+
 function actionsHtml(list){
   if(!list.length) return "";
   const shown = S.showAllActions ? list : list.slice(0, 3);
-  return `<div class="sec-title mt20">To do</div>
+  return `<div class="sec-title mt20">To do — what needs you next <span class="cnt-b">${list.length}</span></div>
   <div class="todo">${shown.map(a => `<div class="todo-i ${a.tone || ""}">
       <button class="todo-main" onclick="${a.open || a.go}">${icon(a.ic, 18, a.tone === "green" ? "var(--green)" : a.tone === "accent" ? "var(--accent)" : "var(--muted)")}
         <div class="grow"><div class="sm bold">${a.title}</div><div class="xs muted">${a.sub}</div></div></button>
@@ -4418,6 +4450,7 @@ function helpCard(){
     <button class="li" onclick="push('how')">${icon("help",18,"var(--muted)")}<div class="grow"><div class="sm bold">How SnapPro works</div><div class="xs muted2">${isPg() ? "Quoting, shoots and getting paid" : "Booking, paying and cancelling"}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
     <a class="li" href="/refunds.html" target="_blank" rel="noopener">${icon("doc",18,"var(--muted)")}<div class="grow"><div class="sm bold">Cancellation &amp; refunds</div></div>${icon("chevron",16,"var(--muted-2)")}</a>
     <a class="li" href="/terms.html" target="_blank" rel="noopener">${icon("doc",18,"var(--muted)")}<div class="grow"><div class="sm bold">Terms &amp; privacy</div></div>${icon("chevron",16,"var(--muted-2)")}</a>
+    <button class="li" onclick="showHintsAgain()">${icon("help",18,"var(--muted)")}<div class="grow"><div class="sm bold">Show tips again</div><div class="xs muted2">Bring back the small help tips on each screen</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
   </div>`;
 }
 
