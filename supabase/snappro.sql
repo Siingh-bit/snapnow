@@ -6364,6 +6364,117 @@ grant execute on function public.admin_find_payout(text)               to authen
 grant execute on function public.my_payouts()                          to authenticated;
 -- <<< 8l payouts
 
+-- >>> 8m partner agreement
+-- =====================================================================
+-- 8m. PHOTOGRAPHER PARTNER AGREEMENT
+--     • Photographers accept the Partner Agreement in the app, ticking each
+--       key part separately. Every acceptance is kept: who, which version,
+--       which ticks, when, from which device and IP address.
+--     • Paper agreements signed with bigger photographers are recorded by
+--       an admin (who, when, where the signed copy is kept).
+--     • A new version (platform setting partner_agreement_version) asks
+--       everyone to accept again before sending quotes.
+-- =====================================================================
+
+insert into public.platform_settings (key, value) values ('partner_agreement_version', '"1.0"')
+on conflict (key) do nothing;
+
+create table if not exists public.partner_agreements (
+  id            bigserial primary key,
+  user_id       uuid references public.profiles(id) on delete set null,
+  public_id     text,                 -- kept as evidence even if the account is deleted
+  name          text,
+  email         text,
+  version       text not null,
+  items         text[] not null default '{}',
+  method        text not null default 'app' check (method in ('app','paper')),
+  ip            text,
+  user_agent    text,
+  recorded_by   uuid,                 -- admin who recorded a paper agreement
+  note          text,                 -- e.g. where the signed original is kept
+  signed_on     date,                 -- paper: the date on the execution page
+  accepted_at   timestamptz not null default now()
+);
+create index if not exists idx_partner_agreements_user on public.partner_agreements(user_id, accepted_at desc);
+alter table public.partner_agreements enable row level security;
+revoke all on public.partner_agreements from anon, authenticated;
+drop policy if exists partner_agreements_own_read on public.partner_agreements;
+create policy partner_agreements_own_read on public.partner_agreements for select to authenticated using (user_id = auth.uid());
+grant select on public.partner_agreements to authenticated;
+
+create or replace function public.partner_agreement_version() returns text
+language sql stable security definer set search_path = public
+as $$ select coalesce((select value #>> '{}' from public.platform_settings where key = 'partner_agreement_version'), '1.0') $$;
+
+-- the photographer accepts in the app (one tick per key part)
+create or replace function public.accept_partner_agreement(p_version text, p_items text[], p_user_agent text)
+returns jsonb language plpgsql security definer set search_path = public
+as $$
+declare me uuid := auth.uid(); cur text := public.partner_agreement_version(); need text[] := array['basics','payments','service','customers','content','full'];
+        pr record; hdr jsonb; ipaddr text; rid bigint;
+begin
+  if me is null then raise exception 'Please log in again'; end if;
+  if not exists (select 1 from public.photographers where id = me) then raise exception 'Only photographers sign the Partner Agreement'; end if;
+  if p_version is distinct from cur then raise exception 'A newer version of the agreement is available. Please reopen it and read it again.'; end if;
+  if not (coalesce(p_items, '{}') @> need) then raise exception 'Please tick every box to accept the agreement'; end if;
+  begin hdr := nullif(current_setting('request.headers', true), '')::jsonb; exception when others then hdr := null; end;
+  ipaddr := left(trim(split_part(coalesce(hdr->>'x-forwarded-for', hdr->>'cf-connecting-ip', hdr->>'x-real-ip', ''), ',', 1)), 64);
+  select p.public_id, p.name, u.email into pr from public.profiles p left join auth.users u on u.id = p.id where p.id = me;
+  insert into public.partner_agreements (user_id, public_id, name, email, version, items, method, ip, user_agent)
+  values (me, pr.public_id, pr.name, pr.email, cur, p_items, 'app', nullif(ipaddr, ''), left(coalesce(p_user_agent, ''), 300))
+  returning id into rid;
+  perform public._ev('agreement_accepted', 'user', me, me, null, null, null, null, jsonb_build_object('version', cur));
+  return jsonb_build_object('id', rid, 'version', cur, 'accepted_at', now());
+end $$;
+
+create or replace function public.my_partner_agreement()
+returns jsonb language sql stable security definer set search_path = public
+as $$ select jsonb_build_object('current', public.partner_agreement_version(),
+          'accepted', (select jsonb_build_object('version', version, 'accepted_at', accepted_at, 'method', method)
+                         from public.partner_agreements where user_id = auth.uid() order by (version = public.partner_agreement_version()) desc, accepted_at desc limit 1)) $$;
+
+-- admin: see a photographer's acceptances; record a paper agreement
+create or replace function public.admin_partner_agreements(p_user uuid)
+returns jsonb language plpgsql stable security definer set search_path = public
+as $$
+begin
+  if not public.is_staff() then raise exception 'Not allowed'; end if;
+  return jsonb_build_object('current', public.partner_agreement_version(),
+    'list', (select coalesce(jsonb_agg(jsonb_build_object('version', a.version, 'method', a.method, 'items', a.items, 'accepted_at', a.accepted_at,
+               'signed_on', a.signed_on, 'note', a.note, 'ip', case when public._money_ok() then a.ip end, 'user_agent', case when public._money_ok() then a.user_agent end,
+               'recorded_by', (select email from public.staff s where s.id = a.recorded_by)) order by a.accepted_at desc), '[]')
+             from public.partner_agreements a where a.user_id = p_user));
+end $$;
+
+create or replace function public.admin_record_paper_agreement(p_user uuid, p_signed_on date, p_note text)
+returns bigint language plpgsql security definer set search_path = public
+as $$
+declare pr record; rid bigint; cur text := public.partner_agreement_version();
+begin
+  if not public._money_ok() then raise exception 'Only admins can record agreements'; end if;
+  if not exists (select 1 from public.photographers where id = p_user) then raise exception 'That person is not a photographer'; end if;
+  if p_signed_on is null or p_signed_on > (now() at time zone 'Asia/Kolkata')::date then raise exception 'Enter the date it was signed'; end if;
+  if length(trim(coalesce(p_note, ''))) < 3 then raise exception 'Say where the signed original is kept'; end if;
+  select p.public_id, p.name, u.email into pr from public.profiles p left join auth.users u on u.id = p.id where p.id = p_user;
+  insert into public.partner_agreements (user_id, public_id, name, email, version, items, method, recorded_by, note, signed_on)
+  values (p_user, pr.public_id, pr.name, pr.email, cur, array['basics','payments','service','customers','content','full'], 'paper', auth.uid(), left(trim(p_note), 300), p_signed_on)
+  returning id into rid;
+  perform public._audit('Recorded paper agreement', 'photographer', p_user::text, pr.name, jsonb_build_object('version', cur, 'signed_on', p_signed_on, 'note', left(trim(p_note), 300)));
+  return rid;
+end $$;
+
+revoke all on function public.partner_agreement_version()                      from public, anon;
+revoke all on function public.accept_partner_agreement(text, text[], text)      from public, anon;
+revoke all on function public.my_partner_agreement()                            from public, anon;
+revoke all on function public.admin_partner_agreements(uuid)                    from public, anon;
+revoke all on function public.admin_record_paper_agreement(uuid, date, text)    from public, anon;
+grant execute on function public.partner_agreement_version()                    to authenticated;
+grant execute on function public.accept_partner_agreement(text, text[], text)   to authenticated;
+grant execute on function public.my_partner_agreement()                         to authenticated;
+grant execute on function public.admin_partner_agreements(uuid)                 to authenticated;
+grant execute on function public.admin_record_paper_agreement(uuid, date, text) to authenticated;
+-- <<< 8m partner agreement
+
 -- =====================================================================
 -- 9. ONE-OFF CLEAN-UP
 -- =====================================================================
@@ -6448,4 +6559,5 @@ select
   exists (select 1 from pg_proc where proname = 'my_history')   as history_ready,
   exists (select 1 from pg_proc where proname = 'send_due_reminders')   as calendar_ready,
   exists (select 1 from pg_extension where extname = 'pg_cron')   as reminders_scheduled,
-  (select count(*) = 4 from information_schema.tables where table_schema = 'public' and table_name in ('payouts','payout_lines','payout_holds','doc_counters'))   as payouts_ready;
+  (select count(*) = 4 from information_schema.tables where table_schema = 'public' and table_name in ('payouts','payout_lines','payout_holds','doc_counters'))   as payouts_ready,
+  exists (select 1 from pg_proc where proname = 'accept_partner_agreement')   as agreement_ready;

@@ -13,6 +13,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Build the public site (grouped folders -> same web addresses as before)
+        run: python3 tools/build_site.py dist
+
       - name: Prepare connection details
         id: prep
         run: |
@@ -35,6 +38,7 @@ jobs:
           server: ${{ steps.prep.outputs.server }}
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
+          local-dir: ./dist/
           server-dir: ./
           timeout: 180000
           exclude: |
@@ -62,6 +66,7 @@ jobs:
           server: ${{ steps.prep.outputs.server }}
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
+          local-dir: ./dist/
           server-dir: ./
           timeout: 180000
           exclude: |
@@ -82,7 +87,7 @@ jobs:
         continue-on-error: true
         run: |
           sleep 20
-          URLS=$(grep -o '<loc>[^<]*</loc>' sitemap.xml | sed -e 's/<loc>//' -e 's/<\/loc>//' | head -10000 | python3 -c "import sys,json;print(json.dumps([l.strip() for l in sys.stdin if l.strip()]))")
+          URLS=$(grep -o '<loc>[^<]*</loc>' dist/sitemap.xml | sed -e 's/<loc>//' -e 's/<\/loc>//' | head -10000 | python3 -c "import sys,json;print(json.dumps([l.strip() for l in sys.stdin if l.strip()]))")
           curl -s -o /dev/null -w "IndexNow HTTP %{http_code}\n" -X POST "https://api.indexnow.org/indexnow" \
             -H "Content-Type: application/json; charset=utf-8" \
             -d "{\"host\":\"snappro.in\",\"key\":\"82cecc9137fe281e140598bacd5da529\",\"keyLocation\":\"https://snappro.in/82cecc9137fe281e140598bacd5da529.txt\",\"urlList\":$URLS}"

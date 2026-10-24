@@ -10,17 +10,23 @@ commission and pays the photographer their share after the shoot. See [PAYMENTS.
 
 ## What's in this repository
 
-| Path | What it is |
-| --- | --- |
-| `index.html` | The home page at snappro.in: what SnapPro is, with sign-up and log-in links |
-| `app.html` | The app for customers and photographers (opens at `#signup`, `#join` or `#login`) |
-| `admin.html` | Staff console at snappro.in/admin.html (super admin, admin, manager) |
-| `supabase/snappro.sql` | Complete database set-up: tables, security rules, triggers, storage, invite emails, payments. Safe to run again. |
-| `supabase/functions/` | Server functions (Supabase Edge Functions): Razorpay payments and webhooks, portfolio media on S3, and `push` (phone notifications, Web Push with VAPID) |
-| `terms.html`, `privacy.html`, `refunds.html`, `delivery.html`, `contact.html`, `delete-account.html` | Policy pages (delete-account is the account-deletion page Google Play links to) |
-| `site.webmanifest`, `sw.js`, `offline.html`, `icon-*.png` | Makes the app installable; the service worker only shows the offline page and never caches the app |
-| `.well-known/assetlinks.json` | (added after the first Play upload) proves the Android app `in.snappro.app` belongs to snappro.in |
-| `.github/workflows/deploy.yml` | Uploads the site to Hostinger on every push to `main` |
+The website files are grouped into folders so the project is easy to find your way around.
+When you push to `main`, `tools/build_site.py` lays them out flat again, so **every web address stays the same**
+(e.g. `site/city-pages/birthday-photographers/birthday-photographers-in-pune/` is published as
+`snappro.in/birthday-photographers-in-pune/`). To see exactly what gets published: `python3 tools/build_site.py` → `dist/`.
+
+| Path | What it is | Published at |
+| --- | --- | --- |
+| `site/main/` | `index.html` (home page), `app.html` (customer and photographer app), `admin.html` (staff console), `sw.js`, `site.webmanifest`, `offline.html`, `.well-known/assetlinks.json` (links the Android app to snappro.in) | `/` |
+| `site/seo-and-ai/` | `sitemap.xml`, `robots.txt`, `llms.txt`, `llms-full.txt` (for AI assistants), the IndexNow key | `/` |
+| `site/images/` | Icons, favicons, `og.png` (share image) | `/` |
+| `site/legal/` | `terms.html`, `privacy.html`, `refunds.html`, `delivery.html`, `contact.html`, `delete-account.html`, `photographer-agreement.html` | `/` |
+| `site/pages/` | About, FAQ, guides, how it works, photography prices, for photographers | `/<page>/` |
+| `site/city-pages/<type>/` | One folder per shoot type (wedding, birthday, …), holding the type's page and every city page for it | `/<page>/` |
+| `supabase/snappro.sql` | Complete database set-up: tables, security rules, triggers, payments, payouts. Safe to run again. | not published |
+| `supabase/functions/` | Server functions (Supabase Edge Functions): Razorpay payments and webhooks, portfolio media on S3, `push` | not published |
+| `tools/build_site.py` | Builds the public site from `site/` (used by the deploy) | not published |
+| `.github/workflows/deploy.yml` | Builds the site and uploads it to Hostinger on every push to `main` | not published |
 
 ## How it works
 

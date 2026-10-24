@@ -3820,6 +3820,49 @@ render = function(){
   }
 };
 
+/* ===================== PARTNER AGREEMENT (admin) =====================
+   On a photographer's page: whether they accepted the Partner Agreement
+   (in the app, or on paper), when, which version — and a button to record
+   a paper agreement signed in person. */
+S.agrAdm = {};
+async function loadAgrAdm(id){
+  S.agrAdm[id] = { loading: true };
+  const { data, error } = await sb.rpc("admin_partner_agreements", { p_user: id });
+  S.agrAdm[id] = error ? { err: /function/i.test(error.message) ? "Run the latest supabase/snappro.sql to see agreements." : error.message } : data;
+  render();
+}
+function agrAdmCard(id){
+  const A = S.agrAdm[id];
+  if(!A){ setTimeout(() => loadAgrAdm(id)); return ""; }
+  if(A.loading) return "";
+  if(A.err) return `<div class="card mt16 agr-adm"><div class="sec">Partner Agreement</div><div class="xs muted2">${esc(A.err)}</div></div>`;
+  const cur = (A.list || []).find(x => x.version === A.current), money = S.me.role !== "manager";
+  const row = x => `<div class="kvr"><span>${x.method === "paper" ? "Signed on paper" : "Accepted in the app"} · v${esc(x.version)}</span><span>${x.method === "paper" ? fmt(x.signed_on) + (x.note ? ` · <span class="muted">${esc(x.note)}</span>` : "") + (x.recorded_by ? ` <span class="xs muted2">(recorded by ${esc(x.recorded_by)})</span>` : "") : dt(x.accepted_at) + (x.ip ? ` <span class="xs muted2">· IP ${esc(x.ip)}</span>` : "")}</span></div>`;
+  return `<div class="card mt16 agr-adm"><div class="between" style="flex-wrap:wrap;gap:8px"><div class="sec" style="margin:0">Partner Agreement</div>
+      <div class="row">${cur ? `<span class="chip green">Accepted v${esc(cur.version)}</span>` : `<span class="chip amber">Not accepted (v${esc(A.current)})</span>`}
+        ${money ? `<button class="btn sm" onclick="recordPaperAgreement('${id}')">Record paper agreement</button>` : ""}<a class="btn sm" href="/photographer-agreement.html" target="_blank" rel="noopener">Read it</a></div></div>
+    ${(A.list || []).length ? `<div class="mt8">${A.list.map(row).join("")}</div>` : `<div class="xs muted2 mt8">They'll be asked to accept it in the app before they can send quotes.</div>`}</div>`;
+}
+async function recordPaperAgreement(id){
+  const d = prompt("Date the paper agreement was signed (YYYY-MM-DD):", istToday());
+  if(d === null) return;
+  if(!/^\d{4}-\d\d-\d\d$/.test(d.trim())){ S.err = "Enter the date as YYYY-MM-DD."; render(); return; }
+  const note = prompt("Where is the signed original kept? (e.g. Office file A-12, scan in Google Drive)");
+  if(note === null) return;
+  const { error } = await sb.rpc("admin_record_paper_agreement", { p_user: id, p_signed_on: d.trim(), p_note: note.trim() });
+  if(error){ S.err = error.message; render(); return; }
+  S.err = ""; S.note = "Paper agreement recorded."; loadAgrAdm(id);
+}
+const _renderAgr = render;
+render = function(){
+  _renderAgr();
+  if(S.view !== "console" || !S.u360 || !S.u360.data || !S.u360.data.profile || S.u360.data.profile.role !== "photographer") return;
+  const sh = [...document.querySelectorAll(".sheet[aria-label=Person]")].pop(), id = S.u360.data.profile.id;
+  if(!sh || sh.querySelector(".agr-adm")) return;
+  const grid = sh.querySelector(".grid"), html = agrAdmCard(id);
+  if(grid && html) grid.insertAdjacentHTML("afterend", html);
+};
+
 /* ============================ render ========================== */
 
 function render(){

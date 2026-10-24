@@ -19,3 +19,6 @@ package-lock.json
 .env
 .env.local
 *.log
+
+# Built website (made by tools/build_site.py when deploying)
+dist/

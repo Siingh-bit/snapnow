@@ -636,6 +636,13 @@ html[data-theme=dark] .feat{background:#3a2f15;color:#e8c46a}
 .receipt a.link{color:var(--accent-ink,var(--accent));font-weight:600;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
 .rcpt-no{font-variant-numeric:tabular-nums;letter-spacing:.2px}
 .xs.green,.sm.green{color:var(--green)}
+/* ---------- partner agreement ---------- */
+.agr-g{padding:14px}
+.agr-pts{margin:8px 0 10px;padding-left:18px}.agr-pts li{margin:5px 0;line-height:1.45}
+.agr-tick{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--border);border-radius:10px;cursor:pointer;background:var(--paper)}
+.agr-tick.on{border-color:var(--green);background:var(--green-soft)}
+.agr-tick input{width:20px;height:20px;margin-top:1px;accent-color:var(--green);flex:0 0 auto}
+.agr-done{display:flex;gap:12px;align-items:center;padding:14px}
 
 </style>
 </head>
@@ -2074,7 +2081,7 @@ async function logout(){
   await pushForget();
   S.me = null; S.pg = null;
   try{ if(sb) await sb.auth.signOut(); }catch(e){}
-  pwReset(); S.stack = []; S.tab = "home"; S.draft = null; S.payout = undefined; S.payState = null; S.myPay = null;
+  pwReset(); S.stack = []; S.tab = "home"; S.draft = null; S.payout = undefined; S.payState = null; S.myPay = null; S.agr = undefined; S.agrTicks = {};
   S.d = { requests: [], offers: {}, bookings: [], openRequests: [], myOffers: [], pgs: {}, pgList: [], pgListAt: 0, reviews: {}, reviewed: {}, msgs: {} };
   S.convos = undefined; S.hist = undefined; S.saved = undefined; S.rcpt = null; S.chatReadFor = null;
   CAL.month = null; CAL.data = null; CAL.key = ""; CAL.open = null;
@@ -3070,6 +3077,7 @@ function pgProfileExtras(){
     <button class="li" onclick="push('portfolio')">${icon("image",18,"var(--muted)")}<div class="grow"><div class="sm bold">Portfolio</div><div class="xs muted2">${(pg.portfolio||[]).length} item${(pg.portfolio||[]).length===1?"":"s"}${S.storage ? " · " + fmtBytes(S.storage.used) + " of " + fmtBytes(S.storage.quota) : ""}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
     <button class="li" onclick="push('kyc')">${icon("shield",18,kycDone() ? "var(--green)" : "var(--red)")}<div class="grow"><div class="sm bold">Identity verification</div><div class="xs muted2">${!S.kyc ? "ID + face photo" : S.kyc.status === "verified" ? "Verified" : S.kyc.status === "submitted" ? "Being checked" : S.kyc.status === "rejected" ? "Please re-do" : "Not done yet — required"}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
     <button class="li" onclick="push('storage')">${icon("grid",18,"var(--muted)")}<div class="grow"><div class="sm bold">Storage plan</div><div class="xs muted2">${S.storage ? (S.storage.plan === "free" ? "Free · " + fmtBytes(S.storage.quota) : esc(S.storage.plan) + " · until " + dayStr(S.storage.expires_at)) : PLAY_APP ? "Free 250 MB" : "Free 250 MB · upgrade for more"}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
+    <button class="li" onclick="push('agreement')">${icon("doc",18,typeof agreementOk === "function" && !agreementOk() && S.agr ? "var(--red)" : "var(--muted)")}<div class="grow"><div class="sm bold">Partner Agreement</div><div class="xs muted2">${typeof agreementLabel === "function" ? agreementLabel() : ""}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
     <button class="li" onclick="push('payouts')">${icon("wallet",18,"var(--muted)")}<div class="grow"><div class="sm bold">Payouts</div><div class="xs muted2">${S.myPay && !S.myPay.err ? inr(Number(S.myPay.ready || 0) + Number(S.myPay.held || 0)) + " waiting · " + (S.myPay.payouts || []).length + " received" : "Money waiting and payouts received"}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
     <button class="li" onclick="push('editPayout')">${icon("edit",18,"var(--muted)")}<div class="grow"><div class="sm bold">Payout details</div><div class="xs muted2">${S.payout && S.payout.upi_id ? esc(S.payout.upi_id) : "Add the UPI ID we pay you on"}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
     <button class="li" onclick="push('editPg')">${icon("edit",18,"var(--muted)")}<div class="grow"><div class="sm bold">Bio, shoot types and rates</div><div class="xs muted2">${(pg.categories||[]).map(c => esc(catById(c).name)).join(", ") || "Not set"}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
@@ -3132,8 +3140,9 @@ async function saveEditPg(){
 }
 
 /* ---------- waiting for approval ---------- */
-const WAITING_OK = ["portfolio","editPg","editLoc","editName","pg","photo","editPayout","storage","kyc"];
+const WAITING_OK = ["portfolio","editPg","editLoc","editName","pg","photo","editPayout","storage","kyc","agreement"];
 function vPgReview(){
+  if(typeof loadAgreement === "function") loadAgreement();
   const pg = S.pg || {}, photos = (pg.portfolio || []).length, rejected = pg.approval_status === "rejected";
   const cats = (pg.categories || []).map(c => esc(catById(c).name)).join(", ");
   const done = [
@@ -3142,6 +3151,7 @@ function vPgReview(){
     [!!cats, "Shoot types chosen" + (cats ? " — " + cats : "")],
     [!!(pg.bio && pg.bio.trim().length >= 20), "Short bio written"],
     [photos >= 6, photos >= 6 ? photos + " portfolio photos" : "Portfolio photos (" + photos + " of at least 6)"],
+    [typeof agreementOk === "function" && agreementOk(), typeof agreementOk === "function" && agreementOk() ? "Partner Agreement accepted" : `<a class="linkish accent bold" onclick="push('agreement')">Accept the Partner Agreement</a>`],
     [kycDone(), S.kyc && S.kyc.status === "verified" ? "ID & face verified" : S.kyc && S.kyc.status === "submitted" ? "ID & face photo submitted — being checked" : S.kyc && S.kyc.status === "rejected" ? "ID check — please re-do" : "Verify your ID & face (required)"]
   ];
   return `<div class="pad review">
@@ -5330,6 +5340,104 @@ function vPayoutSlip(p){
   </div>`;
 }
 
+/* generated from agreement/ack.js — keep in sync with the Partner Agreement */
+const AGREEMENT_VERSION = "1.0";
+const AGREEMENT_KEYS = [["I am an independent professional, not an employee, and SnapPro does not guarantee any minimum bookings or earnings.","2.2, 2.5","basics"],["All payments for SnapPro bookings go through SnapPro. I will not take cash or direct payment from SnapPro customers.","4.3","payments"],["I will do each booking myself and will not send someone else in my place without approval.","4.4","service"],["Cancellation, no-show and late-delivery fees in Schedule 2 apply and can be deducted from my payouts.","6, Sch. 2","service"],["SnapPro keeps a Commission (plus GST where applicable) on every booking, as set out in Schedule 1.","7, Sch. 1","payments"],["SnapPro may hold payouts, set off amounts I owe (including refunds made after I was paid), and recover any shortfall from me.","8.3 – 8.6","payments"],["SnapPro may deduct taxes (TDS/TCS) from my payouts where the law requires.","9","payments"],["If I work directly with a customer I met through SnapPro (during this agreement or for 12 months after), I owe an introduction fee of 25% of the job value or ₹10,000, whichever is higher.","10.3","customers"],["I keep the copyright in my photos, and SnapPro may use my portfolio and shared booking photos to run and market SnapPro.","11.3","content"],["I will use customer data only for the booking, keep it safe, and delete it as set out in Schedule 4.","12, Sch. 4","content"],["I will follow the Code of Conduct in Schedule 3; serious breaches can lead to immediate suspension.","13, Sch. 3, 15","service"],["I indemnify SnapPro for claims arising from my work, and SnapPro's liability to me is capped (but my earned payouts are never capped).","16.2, 17.4, 17.5","basics"],["SnapPro may change these terms or the standard Commission with 30 days' notice; I can leave before a change takes effect.","18.2","basics"],["Disputes go to arbitration seated in Mumbai.","20.3","basics"]];
+
+/* ===================== PARTNER AGREEMENT (photographers) =====================
+   Photographers accept the SnapPro Partner Agreement by ticking each key part
+   separately (plus the full agreement). Needed before sending quotes; a new
+   version asks again. The full text lives at /photographer-agreement.html. */
+
+const AGR_GROUPS = [
+  ["basics", "The basics", "How we work together, liability, changes and disputes"],
+  ["payments", "Money", "Commission, payouts, deductions and taxes"],
+  ["service", "Bookings and conduct", "Doing the shoot yourself, cancellations, no-shows and the Code of Conduct"],
+  ["customers", "SnapPro customers stay on SnapPro", "No going around SnapPro"],
+  ["content", "Your photos and customer data", "Copyright, SnapPro's licence and data handling"]
+];
+const AGR_URL = "/photographer-agreement.html";
+
+function loadAgreement(force){
+  if(!isPg()) return Promise.resolve();
+  if(S.agr && !force) return Promise.resolve();
+  if(S.loading.agr) return Promise.resolve();
+  S.loading.agr = true;
+  return sb.rpc("my_partner_agreement").then(r => {
+    S.loading.agr = false;
+    S.agr = r.error ? { err: dbMsg(r.error), current: AGREEMENT_VERSION } : r.data;
+    softRender();
+  }).catch(() => { S.loading.agr = false; });
+}
+const agreementOk = () => !!(S.agr && S.agr.accepted && S.agr.accepted.version === S.agr.current);
+const agreementLabel = () => !S.agr ? "SnapPro Partner Agreement" : agreementOk()
+  ? "Accepted v" + esc(S.agr.accepted.version) + " · " + dayStr(S.agr.accepted.accepted_at) + (S.agr.accepted.method === "paper" ? " (signed on paper)" : "")
+  : S.agr.accepted ? "New version " + esc(S.agr.current) + " — please accept" : "Not accepted yet — needed to send quotes";
+
+function vAgreement(){
+  loadAgreement();
+  const A = S.agr;
+  if(!A) return `${topbar("Partner Agreement")}<div class="pad"><div class="skeleton"></div><div class="skeleton"></div></div>`;
+  const ver = A.current || AGREEMENT_VERSION, done = agreementOk();
+  if(done) return `${topbar("Partner Agreement", "Version " + esc(ver))}
+  <div class="pad">
+    <div class="card agr-done">${icon("check",20,"var(--green)")}<div class="grow"><div class="sm bold">You've accepted the SnapPro Partner Agreement</div>
+      <div class="xs muted2">Version ${esc(A.accepted.version)} · ${whenStr(A.accepted.accepted_at)}${A.accepted.method === "paper" ? " · signed on paper" : ""}</div></div></div>
+    <div class="sec-title mt20">What you agreed to</div>
+    <div class="card list">${AGREEMENT_KEYS.map(k => `<div class="li" style="cursor:default">${icon("check",14,"var(--green)")}<div class="grow xs">${esc(k[0])} <span class="muted2">(Clause ${esc(k[1])})</span></div></div>`).join("")}</div>
+    <a class="btn block mt16" href="${AGR_URL}" target="_blank" rel="noopener">${icon("doc",15)} Read or save the full agreement</a>
+    <div class="xs muted2 mt12">Questions? Write to ${SUPPORT_EMAIL}.</div>
+  </div>`;
+  const t = S.agrTicks || (S.agrTicks = {});
+  const all = AGR_GROUPS.every(g => t[g[0]]) && t.full;
+  const box = (key, inner) => `<label class="agr-tick ${t[key] ? "on" : ""}"><input type="checkbox" id="agr_${key}" ${t[key] ? "checked" : ""} onchange="S.agrTicks['${key}']=this.checked;render()"><div class="grow">${inner}</div></label>`;
+  return `${topbar("Partner Agreement", "Version " + esc(ver))}
+  <div class="pad">
+    <div class="h2">${A.accepted ? "We've updated the Partner Agreement" : "Before you send quotes"}</div>
+    <p class="sm muted mt4">This is the agreement between you and SnapPro. Please read each part and tick it. You can read the full agreement at any time — it's what applies.</p>
+    <a class="btn block mt12" href="${AGR_URL}" target="_blank" rel="noopener">${icon("doc",15)} Read the full agreement</a>
+    ${AGR_GROUPS.map(([key, title, sub]) => `<div class="card mt12 agr-g">
+      <div class="sm bold">${title}</div><div class="xs muted2">${sub}</div>
+      <ul class="agr-pts">${AGREEMENT_KEYS.filter(k => k[2] === key).map(k => `<li class="xs">${esc(k[0])} <span class="muted2">(Clause ${esc(k[1])})</span></li>`).join("")}</ul>
+      ${box(key, `<span class="sm">I have read and agree to this</span>`)}
+    </div>`).join("")}
+    <div class="card mt12 agr-g">${box("full", `<span class="sm">I have read the full <b>SnapPro Photographer Partner Agreement (version ${esc(ver)})</b>, including its Schedules, had the chance to ask questions, and agree to be bound by it.</span>`)}</div>
+    ${S.formErr ? `<div class="form-err">${esc(S.formErr)}</div>` : ""}
+    <button class="btn primary block mt16" ${all && !S.loading.agrSave ? "" : "disabled"} onclick="acceptAgreement()">${S.loading.agrSave ? "Saving…" : "Agree and continue"}</button>
+    <div class="xs muted2 mt8">We keep a record of when you accepted, the version and your device, as proof for both of us. A copy is always in Profile → Partner Agreement.</div>
+  </div>`;
+}
+async function acceptAgreement(){
+  const t = S.agrTicks || {}, items = AGR_GROUPS.map(g => g[0]).filter(k => t[k]).concat(t.full ? ["full"] : []);
+  S.loading.agrSave = true; S.formErr = null; render();
+  const { data, error } = await sb.rpc("accept_partner_agreement", { p_version: (S.agr && S.agr.current) || AGREEMENT_VERSION, p_items: items, p_user_agent: navigator.userAgent || "" });
+  S.loading.agrSave = false;
+  if(error){ S.formErr = dbMsg(error); if(/newer version/i.test(error.message || "")){ S.agr = null; S.agrTicks = {}; loadAgreement(true); } render(); return; }
+  S.agr = Object.assign({}, S.agr, { accepted: { version: data.version, accepted_at: data.accepted_at, method: "app" } }); S.agrTicks = {};
+  toast("Agreement accepted", "Thanks — you can send quotes now", "check");
+  pop();
+}
+
+/* quotes need the agreement */
+const _sendQuoteAgr = sendQuote;
+sendQuote = async function(id){
+  if(!agreementOk()){ await loadAgreement(true); if(!agreementOk()){ S.formErr = null; push("agreement"); return; } }
+  return _sendQuoteAgr(id);
+};
+/* Home: an urgent to-do until it's accepted */
+const _photographerActionsAgr = photographerActions;
+photographerActions = function(){
+  const out = _photographerActionsAgr();
+  if(isPg()){
+    if(S.agr === undefined) loadAgreement();
+    else if(S.agr && !S.agr.err && !agreementOk())
+      out.unshift({ key: "agreement", ic: "doc", tone: "accent", urgent: true,
+        title: S.agr.accepted ? "Please accept the updated Partner Agreement" : "Accept the SnapPro Partner Agreement",
+        sub: "Needed before you can send quotes — takes 2 minutes", btn: "Open", go: `push('agreement')` });
+  }
+  return out;
+};
+
 /* ============================================================
    NAVIGATION
    ============================================================ */
@@ -5340,7 +5448,7 @@ const STACK_VIEWS = { pg: vPgProfile, photo: vPhoto, newRequest: vNewRequest, re
                       quote: vQuote, job: vJob, portfolio: vPortfolio, editPg: vEditPg,
                       payResult: vPayResult, editPayout: vEditPayout,
                       pgEarnings: vPgEarnings, pgDone: vPgDone, pgReviews: vPgReviews, how: vHow, storage: vStorage, rewards: vRewards, invite: vInvite, kyc: vKyc, deleteAccount: vDeleteAccount, receipt: vReceipt, busyNew: vBusyNew,
-                      report: vReport, blockedPeople: vBlockedPeople, payouts: vMyPayouts, payoutSlip: vPayoutSlip };
+                      report: vReport, blockedPeople: vBlockedPeople, payouts: vMyPayouts, payoutSlip: vPayoutSlip, agreement: vAgreement };
 const CUST_TABS = [ ["home","Home","home",vCustHome], ["explore","Explore","search",vExplore], ["activity","My shoots","calendar",vActivity], ["messages","Messages","chat",vMessages], ["profile","Profile","user",vProfile] ];
 const PG_TABS   = [ ["home","Home","home",vPgHome], ["requests","Requests","bolt",vPgRequests], ["calendar","Calendar","calendar",vCalendar], ["jobs","My shoots","list",vJobs], ["messages","Messages","chat",vMessages], ["profile","Profile","user",vProfile] ];
 const tabsFor = () => isPg() ? PG_TABS : CUST_TABS;
