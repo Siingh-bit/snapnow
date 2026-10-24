@@ -1701,6 +1701,7 @@ function vWelcome(){
    Google sends the person back to app.html, where Supabase finishes the
    sign-in; the role they picked is remembered across that round trip. */
 function googleBtn(label){
+  if(typeof IOS_APP !== "undefined" && IOS_APP) return "";     /* Google blocks its sign-in page inside iPhone apps */
   return `<button class="btn block gbtn" ${S.auth.busy ? "disabled" : ""} onclick="googleSignIn()">${icon("google",18)} ${label}</button>
     <div class="or-line"><span>or use your email</span></div>`;
 }
@@ -1722,7 +1723,7 @@ function vSignup(){
   return `${authTop(isPgType ? "Join as a photographer" : "Create your account", "Step 1 of 2", "pwReset();authGo('welcome')")}
   <div class="pad">
     <div class="h2">Create your account</div>
-    <div class="sm muted mt4">Fastest: continue with your Google account. Or use your email — we'll send a 6-digit code to confirm it's you.</div>
+    <div class="sm muted mt4">${IOS_APP ? "Use your email — we'll send a 6-digit code to confirm it's you." : "Fastest: continue with your Google account. Or use your email — we'll send a 6-digit code to confirm it's you."}</div>
     <div class="mt16">${googleBtn("Continue with Google")}</div>
     <div class="field"><label for="authEmail">Email address</label>
       <input id="authEmail" class="input" type="email" inputmode="email" autocomplete="email" autocapitalize="off" spellcheck="false"
@@ -4574,11 +4575,19 @@ function softBack(){
    android-app://in.snappro.app). Google Play only allows its own billing for digital
    purchases, so storage plans aren't sold in the Play app — only on the website.
    Remembered for this app session. */
+/* Opened inside the SnapPro iPhone app? The iOS app (Capacitor) adds "SnapProApp-iOS" to the
+   browser's user agent. Apple, like Google, only allows its own payments for digital purchases,
+   so the iPhone app follows the same store rules as the Play app (no storage plans for sale).
+   Google sign-in is also hidden there: Google blocks its login page inside apps. */
+const IOS_APP = (function(){ try{
+  if(/SnapProApp-iOS/.test(navigator.userAgent || "")) sessionStorage.setItem("snappro.ios", "1");
+  return sessionStorage.getItem("snappro.ios") === "1";
+}catch(e){ return /SnapProApp-iOS/.test(navigator.userAgent || ""); } })();
 const PLAY_APP = (function(){ try{
   const q = new URLSearchParams(location.search);
   if(q.get("utm_source") === "android_app" || /^android-app:\/\/in\.snappro\.app/.test(document.referrer || "")) sessionStorage.setItem("snappro.play", "1");
-  return sessionStorage.getItem("snappro.play") === "1";
-}catch(e){ return false; } })();
+  return sessionStorage.getItem("snappro.play") === "1" || IOS_APP;
+}catch(e){ return IOS_APP; } })();
 
 /* offline page for the installed app */
 if("serviceWorker" in navigator && location.protocol === "https:"){
@@ -4761,7 +4770,7 @@ async function pushKey(){
 }
 function keyBytes(s){ s = String(s).replace(/-/g, "+").replace(/_/g, "/"); while(s.length % 4) s += "="; const b = atob(s), u = new Uint8Array(b.length); for(let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u; }
 const keyText = buf => btoa(String.fromCharCode.apply(null, new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-const pushDevice = () => { const ua = navigator.userAgent || ""; return (PLAY_APP ? "Android app" : /Android/i.test(ua) ? "Android" : /iPhone|iPad/i.test(ua) ? "iPhone" : "Computer") + " · " + (/Edg\//.test(ua) ? "Edge" : /Chrome/.test(ua) ? "Chrome" : /Firefox/.test(ua) ? "Firefox" : /Safari/.test(ua) ? "Safari" : "Browser"); };
+const pushDevice = () => { const ua = navigator.userAgent || ""; return (IOS_APP ? "iPhone app" : PLAY_APP ? "Android app" : /Android/i.test(ua) ? "Android" : /iPhone|iPad/i.test(ua) ? "iPhone" : "Computer") + " · " + (/Edg\//.test(ua) ? "Edge" : /Chrome/.test(ua) ? "Chrome" : /Firefox/.test(ua) ? "Firefox" : /Safari/.test(ua) ? "Safari" : "Browser"); };
 const pushPerm = () => pushOK() ? Notification.permission : "unsupported";
 
 /* ask = true when the person tapped "Turn on"; false = quietly keep an existing permission in sync */
