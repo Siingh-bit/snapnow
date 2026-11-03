@@ -10,6 +10,9 @@
 //   VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY  — made with SnapPro-Push-Keys.html
 //   PUSH_HOOK_SECRET                     — the same value saved in Vault as push_hook_secret
 //   optional: VAPID_SUBJECT (default mailto:snappro.support@gmail.com)
+//   FIREBASE_SERVICE_ACCOUNT — the whole JSON key file of a Firebase service account (Firebase →
+//     Project settings → Service accounts → Generate new private key). Used to send to the
+//     SnapPro Android app 1.2+ through Firebase Cloud Messaging (subscriptions saved as "fcm:<token>").
 
 export function config(env) {
   return {
@@ -18,7 +21,14 @@ export function config(env) {
     hook: env.PUSH_HOOK_SECRET || "",
     supabaseUrl: (env.SUPABASE_URL || "").replace(/\/$/, ""),
     serviceKey: env.SUPABASE_SERVICE_ROLE_KEY || "",
+    fcm: parseServiceAccount(env.FIREBASE_SERVICE_ACCOUNT),
   };
+}
+function parseServiceAccount(raw) {
+  try {
+    const j = JSON.parse(raw || "");
+    return j && j.client_email && j.private_key && j.project_id ? j : null;
+  } catch (_) { return null; }
 }
 const enc = new TextEncoder();
 const subtle = () => globalThis.crypto.subtle;
@@ -65,6 +75,7 @@ export async function vapidHeader(cfg, endpoint) {
 
 const ALLOWED = /^https:\/\/(fcm\.googleapis\.com|android\.googleapis\.com|[a-z0-9.-]+\.push\.services\.mozilla\.com|web\.push\.apple\.com|[a-z0-9.-]+\.push\.apple\.com|[a-z0-9.-]+\.notify\.windows\.com)\//i;
 export async function sendOne(cfg, fetchImpl, sub, msg) {
+  if (String(sub.endpoint).startsWith("fcm:")) return sendFcm(cfg, fetchImpl, sub, msg);
   if (!ALLOWED.test(sub.endpoint)) return "gone";
   const urgent = msg.kind === "call" || msg.kind === "message";
   const payload = JSON.stringify({ title: msg.title, body: msg.body || "", url: msg.url || "/app.html", tag: msg.tag || "", kind: msg.kind });
@@ -76,6 +87,54 @@ export async function sendOne(cfg, fetchImpl, sub, msg) {
     if (r.status === 404 || r.status === 410) return "gone";
     return r.status >= 200 && r.status < 300 ? "ok" : "bad";
   } catch (_) { return "bad"; }
+}
+
+/* ---------- Firebase Cloud Messaging (HTTP v1) for the Android app ---------- */
+let fcmAuth = null;                                   // { token, exp, email }
+const unb64 = (s) => { const b = atob(s); const u = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) u[i] = b.charCodeAt(i); return u; };
+export async function fcmAccessToken(cfg, fetchImpl) {
+  const sa = cfg.fcm;
+  if (fcmAuth && fcmAuth.email === sa.client_email && fcmAuth.exp > Date.now() + 60_000) return fcmAuth.token;
+  const now = Math.floor(Date.now() / 1000), aud = sa.token_uri || "https://oauth2.googleapis.com/token";
+  const head = b64u(enc.encode(JSON.stringify({ alg: "RS256", typ: "JWT" })));
+  const claim = b64u(enc.encode(JSON.stringify({ iss: sa.client_email, scope: "https://www.googleapis.com/auth/firebase.messaging", aud, iat: now, exp: now + 3600 })));
+  const der = unb64(String(sa.private_key).replace(/-----[^-]+-----/g, "").replace(/\\n/g, "").replace(/\s+/g, ""));
+  const key = await subtle().importKey("pkcs8", der, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["sign"]);
+  const sig = b64u(await subtle().sign("RSASSA-PKCS1-v1_5", key, enc.encode(head + "." + claim)));
+  const r = await fetchImpl(aud, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: "grant_type=" + encodeURIComponent("urn:ietf:params:oauth:grant-type:jwt-bearer") + "&assertion=" + head + "." + claim + "." + sig });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || !j.access_token) throw new Error("Firebase sign-in failed (" + r.status + ")");
+  fcmAuth = { token: j.access_token, exp: Date.now() + (Number(j.expires_in) || 3600) * 1000, email: sa.client_email };
+  return fcmAuth.token;
+}
+export async function sendFcm(cfg, fetchImpl, sub, msg) {
+  if (!cfg.fcm) return "bad";
+  const token = sub.endpoint.slice(4), call = msg.kind === "call", urgent = call || msg.kind === "message";
+  const message = {
+    token,
+    notification: { title: msg.title, body: msg.body || "" },
+    data: { url: msg.url || "/app.html", tag: msg.tag || "", kind: msg.kind || "" },
+    android: {
+      priority: urgent ? "HIGH" : "NORMAL",
+      ttl: call ? "60s" : "86400s",
+      notification: { channel_id: call ? "calls" : "general", icon: "ic_notification_icon", color: "#1D1A16", default_sound: true,
+                      ...(msg.tag ? { tag: msg.tag } : {}) },
+    },
+  };
+  try {
+    let tok = await fcmAccessToken(cfg, fetchImpl);
+    const send = () => fetchImpl("https://fcm.googleapis.com/v1/projects/" + encodeURIComponent(cfg.fcm.project_id) + "/messages:send", {
+      method: "POST", headers: { Authorization: "Bearer " + tok, "Content-Type": "application/json" }, body: JSON.stringify({ message }) });
+    let r = await send();
+    if (r.status === 401) { fcmAuth = null; tok = await fcmAccessToken(cfg, fetchImpl); r = await send(); }
+    if (r.ok) return "ok";
+    const t = await r.text();
+    if (r.status === 404 || /UNREGISTERED|registration-token-not-registered/i.test(t)) return "gone";
+    if (r.status === 400 && /INVALID_ARGUMENT/.test(t) && /token/i.test(t)) return "gone";
+    console.error("fcm:", r.status, t.slice(0, 200));
+    return "bad";
+  } catch (e) { console.error("fcm:", e && e.message); return "bad"; }
 }
 
 async function rpc(cfg, fetchImpl, name, args) {
@@ -92,7 +151,7 @@ export async function handler(req, env, fetchImpl) {
   const cfg = config(env);
   if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
   if (!cfg.hook || !same(req.headers.get("x-push-secret") || "", cfg.hook)) return json({ error: "Not allowed" }, 401);
-  if (!cfg.pub || !cfg.priv || !cfg.supabaseUrl || !cfg.serviceKey) return json({ error: "Notifications aren't set up yet." }, 503);
+  if (!((cfg.pub && cfg.priv) || cfg.fcm) || !cfg.supabaseUrl || !cfg.serviceKey) return json({ error: "Notifications aren't set up yet." }, 503);
   let sent = 0, gone = 0;
   try {
     for (let round = 0; round < 5; round++) {

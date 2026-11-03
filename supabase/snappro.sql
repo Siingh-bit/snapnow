@@ -6510,7 +6510,66 @@ end $$;
 drop trigger if exists profiles_phone_check on public.profiles;
 create trigger profiles_phone_check before insert or update of phone on public.profiles
   for each row execute function public.profiles_phone_check();
+
+
+-- A mobile number is required to post a shoot, send a quote or book (the app asks first;
+-- this makes sure it can't be skipped). Only checked for signed-in people acting themselves.
+create or replace function public.require_phone()
+returns trigger language plpgsql security definer set search_path = public
+as $$
+begin
+  if auth.uid() is not null and public.snappro_system() is not true
+     and not exists (select 1 from public.profiles where id = auth.uid() and phone is not null) then
+    raise exception 'Add your mobile number first (Profile → Mobile number).';
+  end if;
+  return new;
+end $$;
+drop trigger if exists requests_require_phone on public.requests;
+create trigger requests_require_phone before insert on public.requests for each row execute function public.require_phone();
+drop trigger if exists offers_require_phone on public.offers;
+create trigger offers_require_phone before insert on public.offers for each row execute function public.require_phone();
+drop trigger if exists bookings_require_phone on public.bookings;
+create trigger bookings_require_phone before insert on public.bookings for each row execute function public.require_phone();
 -- <<< 8n phone
+
+-- >>> 8o app notifications
+-- =====================================================================
+-- 8o. APP NOTIFICATIONS (Firebase Cloud Messaging, Android app 1.2+)
+--     The SnapPro Android app gets a Firebase token for the phone and opens
+--     app.html?fcm_token=…; the web app saves it here for whoever is signed
+--     in. It's stored in push_subscriptions as endpoint "fcm:<token>", so
+--     everything that already sends notifications (bookings, quotes,
+--     messages, calls, reminders, payouts) reaches the app automatically.
+--     The "push" Edge Function sends these through FCM.
+-- =====================================================================
+create or replace function public.push_register_fcm(p_token text, p_device text default null)
+returns text language plpgsql security definer set search_path = public
+as $$
+declare me uuid := auth.uid();
+begin
+  if me is null then raise exception 'Please log in again'; end if;
+  if coalesce(p_token, '') !~ '^[A-Za-z0-9_:-]+$' or length(p_token) not between 100 and 4096 then raise exception 'That notification token looks wrong'; end if;
+  insert into public.push_subscriptions (user_id, endpoint, p256dh, auth, device, permission)
+  values (me, 'fcm:' || p_token, 'fcm', 'fcm', left(coalesce(nullif(p_device, ''), 'Android app'), 80) || ' (native)', 'granted')
+  on conflict (endpoint) do update set user_id = me, device = excluded.device, fails = 0, permission = 'granted';
+  -- this phone's old browser-style subscriptions from the Android app never showed; drop them
+  delete from public.push_subscriptions where user_id = me and endpoint not like 'fcm:%' and device like 'Android app%';
+  delete from public.push_subscriptions where user_id = me and id not in
+    (select id from public.push_subscriptions where user_id = me order by created_at desc limit 5);
+  return 'on';
+end $$;
+
+create or replace function public.push_unregister_fcm(p_token text)
+returns void language plpgsql security definer set search_path = public
+as $$ begin
+  delete from public.push_subscriptions where endpoint = 'fcm:' || coalesce(p_token, '') and user_id = auth.uid();
+end $$;
+
+revoke all on function public.push_register_fcm(text, text) from public, anon;
+revoke all on function public.push_unregister_fcm(text)     from public, anon;
+grant execute on function public.push_register_fcm(text, text) to authenticated;
+grant execute on function public.push_unregister_fcm(text)     to authenticated;
+-- <<< 8o app notifications
 
 -- =====================================================================
 -- 9. ONE-OFF CLEAN-UP
@@ -6598,4 +6657,5 @@ select
   exists (select 1 from pg_extension where extname = 'pg_cron')   as reminders_scheduled,
   (select count(*) = 4 from information_schema.tables where table_schema = 'public' and table_name in ('payouts','payout_lines','payout_holds','doc_counters'))   as payouts_ready,
   exists (select 1 from pg_proc where proname = 'accept_partner_agreement')   as agreement_ready,
-  exists (select 1 from pg_trigger where tgname = 'profiles_phone_check')   as phone_ready;
+  exists (select 1 from pg_trigger where tgname = 'profiles_phone_check')   as phone_ready,
+  exists (select 1 from pg_proc where proname = 'push_register_fcm')   as app_push_ready;

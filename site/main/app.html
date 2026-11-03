@@ -664,6 +664,16 @@ body.gal-open{overflow:hidden}
 .phone-in{display:flex;align-items:stretch}
 .phone-in .cc{display:flex;align-items:center;padding:0 12px;border:1px solid var(--border);border-right:0;border-radius:var(--r-sm,10px) 0 0 var(--r-sm,10px);background:var(--surface-2);font-weight:600;font-size:15px;color:var(--muted)}
 .phone-in .input{border-top-left-radius:0;border-bottom-left-radius:0}
+/* ---------- shoot address ---------- */
+.addr-types{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.addr-types .addr-t{font-size:13px;padding:7px 11px;cursor:pointer}
+.addr-types .addr-t.on{background:var(--text);border-color:var(--text);color:var(--on-text)}
+.mb8{margin-bottom:8px}.mb12{margin-bottom:12px}
+/* ---------- new requests banner (photographer home) ---------- */
+.req-banner{display:flex;align-items:center;gap:12px;width:100%;background:var(--accent);border-color:var(--accent);color:#fff}
+.req-banner .xs{color:rgba(255,255,255,.88)}
+.req-bell{position:relative;width:40px;height:40px;border-radius:12px;background:rgba(0,0,0,.18);display:grid;place-items:center;flex:0 0 auto}
+.req-bell span{position:absolute;top:-6px;right:-6px;min-width:20px;height:20px;padding:0 5px;border-radius:10px;background:#fff;color:var(--accent);font-size:12px;font-weight:700;display:grid;place-items:center}
 
 </style>
 </head>
@@ -2107,7 +2117,7 @@ async function logout(){
   await pushForget();
   S.me = null; S.pg = null;
   try{ if(sb) await sb.auth.signOut(); }catch(e){}
-  pwReset(); S.stack = []; S.tab = "home"; S.draft = null; S.payout = undefined; S.payState = null; S.myPay = null; S.agr = undefined; S.agrTicks = {};
+  pwReset(); S.stack = []; S.tab = "home"; S.draft = null; S.payout = undefined; S.payState = null; S.myPay = null; S.agr = undefined; S.agrTicks = {}; S.addr = {}; if(S.prefs){ delete S.prefs.lastAddr; savePrefs(); }
   S.d = { requests: [], offers: {}, bookings: [], openRequests: [], myOffers: [], pgs: {}, pgList: [], pgListAt: 0, reviews: {}, reviewed: {}, msgs: {} };
   S.convos = undefined; S.hist = undefined; S.saved = undefined; S.rcpt = null; S.chatReadFor = null;
   CAL.month = null; CAL.data = null; CAL.key = ""; CAL.open = null;
@@ -2502,7 +2512,7 @@ function vConfirm(p){
   if(S.confirmFor !== o.id){
     S.confirmFor = o.id;
     const prev = S.d.bookings.find(b => b.request_id === o.request_id && b.status === "pending_payment");
-    S.confirmAddr = prev ? (prev.address || "") : "";
+    S.confirmAddr = prev ? (prev.address || "") : ""; S.addr.bk = null;
     S.confirmPhone = (S.me && S.me.phone) || "";
   }
   return `${topbar("Confirm booking", pg.display_name)}
@@ -2517,9 +2527,8 @@ function vConfirm(p){
       <div class="kv"><span>Duration</span><span>${r.duration_hrs} hr${r.duration_hrs>1?'s':''}</span></div>
       <div class="kv"><span>Area</span><span>${esc(r.city||"")} ${esc(r.pincode||"")}</span></div>
     </div>
-    <div class="field mt16"><label for="bkAddr">Exact address for the shoot</label>
-      <textarea id="bkAddr" class="input" rows="2" maxlength="300" autocomplete="street-address" placeholder="Flat / house, building, street, landmark" oninput="S.confirmAddr=this.value;setHtml('formErr','')">${esc(S.confirmAddr)}</textarea>
-      <div class="xs muted2 mt6">Only ${esc(firstName(pg.display_name))} will see this, and only after you book.</div></div>
+    ${addrFormHtml("bk", "Where is the shoot?")}
+    <div class="xs muted2 mb12">In ${esc(r.city || "")} ${esc(r.pincode || "")}. Only ${esc(firstName(pg.display_name))} will see the address, and only after you book.</div>
     <div class="field"><label for="bkPhone">Mobile number</label>
       <input id="bkPhone" class="input" type="tel" inputmode="numeric" autocomplete="tel-national" maxlength="14" placeholder="10-digit mobile number" value="${esc(S.confirmPhone)}" oninput="S.confirmPhone=this.value;setHtml('formErr','')">
       <div class="xs muted2 mt6">For payment receipts and for ${esc(firstName(pg.display_name))} to reach you on the day.</div></div>
@@ -2529,9 +2538,10 @@ function vConfirm(p){
   </div>`;
 }
 async function confirmBooking(offerId){
-  const addr = (S.confirmAddr || "").trim();
+  const aerr = addrError("bk");
+  if(aerr){ S.formErr = aerr; setHtml("formErr", errHtml(S.formErr)); return; }
+  const addr = addrText("bk");
   const phone = normPhone(S.confirmPhone);
-  if(addr.length < 8){ S.formErr = "Add the full address so your photographer can find you."; setHtml("formErr", errHtml(S.formErr)); return; }
   if(!phone){ S.formErr = "Enter a valid 10-digit mobile number."; setHtml("formErr", errHtml(S.formErr)); return; }
   const o = findOffer(offerId); if(!o) return;
   S.loading.book = true; S.formErr = null; render();
@@ -2548,7 +2558,7 @@ async function confirmBooking(offerId){
       S.d.bookings.unshift(b);
       const r = S.d.requests.find(x => x.id === b.request_id); if(r) r.status = "matched";
     }
-    S.loading.book = false;
+    S.loading.book = false; addrRemember("bk");
     await startPayment(b.id);
   }catch(e){ S.loading.book = false; S.formErr = e.message; render(); }
 }
@@ -2604,7 +2614,7 @@ function vBooking(p){
       <div class="kv"><span>Payment</span><span class="right">${paymentLine(b, pg)}</span></div>
       <div class="kv"><span>Booking ref</span><span>${bookingRef(b)}</span></div>
       <div class="kv top"><span>Address</span><span class="right">${S.editAddr === b.id ? "" : esc(b.address||"—")}</span></div>
-      ${S.editAddr === b.id ? `<textarea id="addrEdit" class="input mt8" rows="2" maxlength="300">${esc(b.address||"")}</textarea>
+      ${S.editAddr === b.id ? `${addrFormHtml("edit" + b.id, "Change the address — where is the shoot?")}
         <div class="row gap8 mt8"><button class="btn sm grow" onclick="S.editAddr=null;render()">Cancel</button><button class="btn sm primary grow" onclick="saveAddr('${b.id}')">Save address</button></div>`
         : (b.status === "confirmed" || unpaid) ? `<div class="right mt6"><button class="xs accent bold" onclick="S.editAddr='${b.id}';render()">Edit address</button></div>` : ""}
     </div>
@@ -2617,9 +2627,9 @@ function vBooking(p){
   </div>`;
 }
 async function saveAddr(id){
-  const v = (el("addrEdit") ? el("addrEdit").value : "").trim();
-  if(v.length < 8){ toast("Add the full address", "", "x"); return; }
-  try{ const b = await api.setBooking(id, { address: v }); Object.assign(S.d.bookings.find(x => x.id === id), b); S.editAddr = null; toast("Address updated", "", "check"); render(); }
+  const err = addrError("edit" + id); if(err){ toast("Check the address", err, "x"); return; }
+  const v = addrText("edit" + id);
+  try{ const b = await api.setBooking(id, { address: v }); Object.assign(S.d.bookings.find(x => x.id === id), b); addrRemember("edit" + id); S.editAddr = null; S.addr["edit" + id] = null; toast("Address updated", "", "check"); render(); }
   catch(e){ toast("Couldn't update address", e.message, "x"); }
 }
 function paymentLine(b, pg){
@@ -2841,6 +2851,7 @@ function vPgHome(){
       <button class="toggle ${pg.is_online?'on':''}" onclick="toggleOnline()" aria-pressed="${!!pg.is_online}"><i></i><span>${pg.is_online ? "Available" : "Away"}</span></button>
     </div>
 
+    ${pgRequestsBlock(fresh, pg)}
     ${actionsHtml(photographerActions())}
     ${!photos ? `<button class="card tap warn-card mt16" onclick="push('portfolio')">${icon("image",20,"var(--accent)")}<div class="grow" style="text-align:left"><div class="bold sm">Add photos of your work</div><div class="xs muted">Customers compare portfolios before booking. Profiles with photos get chosen far more often.</div></div>${icon("chevron",16,"var(--muted-2)")}</button>` : ""}
 
@@ -2858,32 +2869,44 @@ function vPgHome(){
     ${howCard()}
     ${active.length ? `<div class="between mt20"><div class="sec-title" style="margin:0">Upcoming shoots</div><button class="xs accent bold" onclick="go('jobs')">See all</button></div>${active.map(bookingCard).join("")}` : ""}
 
-    <div class="between mt20"><div class="sec-title" style="margin:0">New requests for you</div>
-      <button class="xs accent bold" onclick="go('requests')">See all</button></div>
-    ${fresh.length ? fresh.slice(0,5).map(r => reqCardPg(r, true)).join("")
-      : `<div class="card soft mt12 center"><div class="bold sm">No new requests right now</div>
-         <div class="xs muted mt4">When a customer in ${esc(meCity() || "your city")} posts a ${esc((pg.categories||[]).map(c => catById(c).name.toLowerCase()).join(", ") || "shoot")} request, it'll show up here and you'll get an alert while the app is open.</div></div>`}
   </div>`;
 }
 
+/* New requests sit at the very top of Home, so they're the first thing a photographer sees */
+function pgRequestsBlock(fresh, pg){
+  const others = S.d.openRequests.filter(r => !myOfferFor(r.id) && !matchesMe(r) && (!r.city || pgCovers(myCover(), r.city, r.state))).length;
+  if(fresh.length) return `<button class="card tap req-banner mt16" onclick="go('requests')">
+      <div class="req-bell">${icon("bolt",20,"#fff")}<span>${fresh.length}</span></div>
+      <div class="grow" style="text-align:left"><div class="bold">${fresh.length === 1 ? "1 new request for you" : fresh.length + " new requests for you"}</div>
+        <div class="xs">Customers are waiting — send your price before the timer runs out</div></div>${icon("chevron",18,"currentColor")}</button>
+    ${fresh.slice(0, 3).map(r => reqCardPg(r, true)).join("")}
+    ${fresh.length > 3 ? `<button class="btn block mt8" onclick="go('requests')">See all ${fresh.length} requests</button>` : ""}`;
+  return `<div class="card soft mt16"><div class="between"><div class="bold sm">${icon("bolt",14,"var(--accent)")} No new requests right now</div><button class="xs accent bold" onclick="go('requests')">Open Requests</button></div>
+    <div class="xs muted mt4">When a customer in ${esc(meCity() || "your city")} posts a ${esc((pg.categories||[]).map(c => catById(c).name.toLowerCase()).join(", ") || "shoot")} request, it shows up here first and you get a notification.${others ? ` <button class="linkish accent" onclick="S.prefs.reqMode='city';savePrefs();go('requests')"><b>${others} other request${others === 1 ? "" : "s"} near you</b></button> (other shoot types).` : ""}</div></div>`;
+}
 function vPgRequests(){
   const mode = S.prefs.reqMode || "match";
   let list = S.d.openRequests.filter(r => !myOfferFor(r.id));
   if(mode === "match") list = list.filter(r => matchesMe(r) && !isPassed(r.id));
   else list = list.filter(r => !r.city || pgCovers(myCover(), r.city, r.state));
   const quoted = S.d.myOffers.map(o => ({ o, r: S.d.openRequests.find(r => r.id === o.request_id) }));
+  const open = S.d.openRequests.filter(r => !myOfferFor(r.id));
+  const nFor = open.filter(r => matchesMe(r) && !isPassed(r.id)).length, nAll = open.filter(r => !r.city || pgCovers(myCover(), r.city, r.state)).length;
   return `<div class="pad">
     ${pageHead("Requests", "Shoots customers have posted near you. Send your price before the timer runs out.")}
     ${hint("pgreq", "Tap <b>Send a quote</b> to offer your price. The customer compares quotes and books one — you'll get an alert when they do. Tap <b>Not for me</b> to hide a request.")}
     <div class="chips mt12">
-      <button class="chip ${mode==='match'?'accent':''}" onclick="S.prefs.reqMode='match';savePrefs();render()">For you</button>
-      <button class="chip ${mode==='city'?'accent':''}" onclick="S.prefs.reqMode='city';savePrefs();render()">Everything ${(S.pg && S.pg.travel || "city") === "city" ? "in " + esc(meCity()||"your city") : "you cover"}</button>
+      <button class="chip ${mode==='match'?'accent':''}" onclick="S.prefs.reqMode='match';savePrefs();render()">For you${nFor ? " (" + nFor + ")" : ""}</button>
+      <button class="chip ${mode==='city'?'accent':''}" onclick="S.prefs.reqMode='city';savePrefs();render()">Everything ${(S.pg && S.pg.travel || "city") === "city" ? "in " + esc(meCity()||"your city") : "you cover"}${nAll ? " (" + nAll + ")" : ""}</button>
       <button class="chip ${mode==='quoted'?'accent':''}" onclick="S.prefs.reqMode='quoted';savePrefs();render()">Your quotes${S.d.myOffers.length ? " (" + S.d.myOffers.length + ")" : ""}</button>
     </div>
     ${mode === "quoted"
       ? (quoted.length ? quoted.map(({o, r}) => r ? reqCardPg(r) : quoteStateCard(o)).join("")
         : emptyState("💬", "No quotes yet", "Quotes you send appear here until the customer decides."))
       : (list.length ? list.map(r => reqCardPg(r)).join("")
+        : mode === "match" && nAll ? `<div class="card soft mt16 center"><div class="bold sm">Nothing in your shoot types right now</div>
+            <div class="xs muted mt4">But ${nAll} other request${nAll === 1 ? " is" : "s are"} open near you.</div>
+            <button class="btn primary sm mt12" onclick="S.prefs.reqMode='city';savePrefs();render()">Show ${nAll === 1 ? "it" : "them"}</button></div>`
         : emptyState("📭", "Nothing open right now", (mode === "match" ? "Try “Everything” to see other types of shoot. " : "New requests appear here automatically. ")
             + ((S.pg && S.pg.travel || "city") === "city" ? `Travel for shoots? <button class="linkish accent" onclick="push('editPg')"><b>Get requests from nearby cities</b></button>` : "")))}
     ${mode === "match" && S.prefs.passed.length ? `<div class="center mt16"><button class="linkish xs" onclick="S.prefs.passed=[];savePrefs();render()">Show requests you passed on</button></div>` : ""}
@@ -4785,7 +4808,24 @@ function vBlockedPeople(){
    server sends through the "push" Edge Function; sw.js shows them.
    Tapping one opens app.html?open=…&id=… (handled by openTarget).
    ============================================================ */
-const pushOK = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window && location.protocol === "https:";
+/* SnapPro Android app 1.2+ has its own notifications (Firebase Cloud Messaging), like WhatsApp:
+   it opens app.html?fcm_token=… and we save that phone's token for whoever is signed in.
+   Web Push is then switched off inside the app so nothing arrives twice. */
+const NATIVE_PUSH = (function(){ try{
+  const q = new URLSearchParams(location.search), t = q.get("fcm_token");
+  if(t !== null){
+    if(/^[A-Za-z0-9_:\-]{100,4096}$/.test(t)) localStorage.setItem("snappro.fcm", t);
+    q.delete("fcm_token"); history.replaceState(history.state, "", location.pathname + (q.toString() ? "?" + q.toString() : "") + location.hash);
+  }
+  return localStorage.getItem("snappro.fcm") || "";
+}catch(e){ return ""; } })();
+async function nativePushSync(){
+  if(!NATIVE_PUSH || !S.me || !sb || S.pushFor === S.me.id || S.pushSyncing) return;
+  S.pushSyncing = true;
+  try{ const { error } = await sb.rpc("push_register_fcm", { p_token: NATIVE_PUSH, p_device: IOS_APP ? "iPhone app" : "Android app" }); if(!error) S.pushFor = S.me.id; }catch(e){}
+  S.pushSyncing = false; softRender();
+}
+const pushOK = () => !NATIVE_PUSH && "serviceWorker" in navigator && "PushManager" in window && "Notification" in window && location.protocol === "https:";
 let PUSH_KEY;                                      // VAPID public key (undefined = not loaded, null = not set up)
 async function pushKey(){
   if(PUSH_KEY !== undefined) return PUSH_KEY;
@@ -4828,12 +4868,14 @@ async function enablePush(){
 }
 /* this phone stops getting this account's notifications (log out) */
 async function pushForget(){
+  if(NATIVE_PUSH){ try{ if(sb) await sb.rpc("push_unregister_fcm", { p_token: NATIVE_PUSH }); }catch(e){} S.pushFor = null; return; }
   try{ if(!pushOK()) return; const reg = await navigator.serviceWorker.getRegistration(); const sub = reg && await reg.pushManager.getSubscription();
        if(sub && sb) await sb.rpc("push_unsubscribe", { p_endpoint: sub.endpoint }); }catch(e){}
   S.pushFor = null;
 }
 /* once per session: keep this phone's subscription saved for whoever is signed in */
 function pushSync(){
+  if(NATIVE_PUSH){ nativePushSync(); return; }
   if(!S.me || S.pushFor === S.me.id || S.pushSyncing || !pushOK()) return;
   S.pushSyncing = true;
   pushKey().then(k => k && Notification.permission === "granted" ? pushSubscribe(false) : null).catch(() => {}).then(() => { S.pushSyncing = false; softRender(); });
@@ -4846,6 +4888,8 @@ function pushTodo(out){
     btn: "Turn on", go: "enablePush()" });
 }
 function pushRow(){
+  if(NATIVE_PUSH) return `<button class="li" onclick="testPush()">${icon("bellring",18,"var(--green)")}
+    <div class="grow"><div class="sm bold">Notifications</div><div class="xs muted2">On in the SnapPro app · tap to send a test</div></div>${icon("chevron",16,"var(--muted-2)")}</button>`;
   if(!pushOK()) return "";
   const p = pushPerm(), on = p === "granted" && S.pushFor === (S.me && S.me.id);
   return `<button class="li" onclick="${on ? "testPush()" : "enablePush()"}">${icon("bellring",18,on ? "var(--green)" : "var(--muted)")}
@@ -4853,6 +4897,14 @@ function pushRow(){
 }
 /* sends a notification to this account's phones, to check everything works */
 async function testPush(){
+  if(NATIVE_PUSH){
+    try{ if(S.pushFor !== (S.me && S.me.id)) await nativePushSync();
+      const { data, error } = await sb.rpc("push_test"); if(error) throw new Error(dbMsg(error));
+      if(!data || !data.phones) toast("Notifications aren't connected yet", "Close SnapPro completely and open it again", "x");
+      else toast("Test sent", "It should appear in a few seconds — even if you close SnapPro now", "bellring");
+    }catch(e){ toast("Couldn't send a test", e.message, "x"); }
+    return;
+  }
   try{
     if(S.pushFor !== (S.me && S.me.id)) await pushSubscribe(true);
     const { data, error } = await sb.rpc("push_test");
@@ -5597,6 +5649,72 @@ async function savePhone(inputId){
     toast("Mobile number saved", fmtPhone(phone), "check");
     if(S.stack.length && S.stack[S.stack.length - 1].v === "editPhone") pop(); else render();
   }catch(e){ S.loading.phone = false; S.formErr = e.message; setHtml("formErr", errHtml(S.formErr)); }
+}
+
+/* ===================== SHOOT ADDRESS (booking) =====================
+   The customer first picks what kind of place the shoot is at (home, restaurant,
+   banquet hall, hotel, office, outdoors, studio, somewhere else), then fills the
+   fields that make sense for that place. It is saved as one clear line, e.g.
+   "Banquet hall · Rose Garden, Hall 2 (2nd floor), Linking Road, Bandra West · Landmark: opp. KFC".
+   City and pincode come from the shoot request. The last address is remembered on
+   this phone so the next booking is quicker. */
+
+const PLACE_TYPES = [
+  ["home", "Home / flat", "home"], ["restaurant", "Restaurant / café", "cup"], ["hall", "Banquet hall / venue", "star"],
+  ["hotel", "Hotel / resort", "bed"], ["office", "Office / shop", "briefcase"], ["outdoor", "Outdoor / park / beach", "pin"],
+  ["studio", "Studio", "cam"], ["other", "Somewhere else", "dots"]
+];
+/* [field, label, placeholder, required] for each type */
+const PLACE_FIELDS = {
+  home:       [["house", "Flat / house no.", "e.g. Flat 402, B-wing", true], ["building", "Building / society", "e.g. Sea View Apartments", false], ["street", "Street and area", "e.g. Hill Road, Bandra West", true], ["landmark", "Landmark", "e.g. near Elco Market", false]],
+  restaurant: [["venue", "Restaurant / café name", "e.g. The Bombay Canteen", true], ["part", "Floor / section", "e.g. Rooftop, 1st floor", false], ["street", "Street and area", "e.g. Kamala Mills, Lower Parel", true], ["landmark", "Landmark", "", false]],
+  hall:       [["venue", "Venue name", "e.g. Rose Garden Banquets", true], ["part", "Hall name / floor", "e.g. Hall 2, 2nd floor", false], ["street", "Street and area", "e.g. Linking Road, Bandra West", true], ["landmark", "Landmark", "e.g. opposite KFC", false]],
+  hotel:      [["venue", "Hotel / resort name", "e.g. Taj Lands End", true], ["part", "Room / hall / lawn", "e.g. Crystal Ballroom", false], ["street", "Street and area", "e.g. Bandstand, Bandra West", true], ["landmark", "Landmark", "", false]],
+  office:     [["venue", "Company / shop name", "e.g. Acme Pvt Ltd", true], ["house", "Office / shop no. and floor", "e.g. Unit 7, 3rd floor", true], ["building", "Building", "e.g. Trade Centre", false], ["street", "Street and area", "e.g. BKC", true], ["landmark", "Landmark", "", false]],
+  outdoor:    [["venue", "Place", "e.g. Juhu Beach, Lodhi Garden", true], ["meet", "Exact meeting point", "e.g. Gate 3, near the lighthouse", true], ["landmark", "Landmark", "", false]],
+  studio:     [["venue", "Studio name", "e.g. Light Box Studio", true], ["house", "Unit / floor", "e.g. Unit 12, 1st floor", false], ["street", "Street and area", "e.g. Andheri West", true], ["landmark", "Landmark", "", false]],
+  other:      [["venue", "Place name (if any)", "e.g. Community centre", false], ["street", "Full address", "House / building, street, area", true], ["landmark", "Landmark", "", false]]
+};
+S.addr = S.addr || {};
+function addrInit(key, fromPrefs){
+  if(S.addr[key]) return S.addr[key];
+  const last = fromPrefs && S.prefs && S.prefs.lastAddr;
+  S.addr[key] = last && PLACE_FIELDS[last.type] ? { type: last.type, f: Object.assign({}, last.f), reused: true } : { type: "", f: {} };
+  return S.addr[key];
+}
+function addrType(key, t){ const a = S.addr[key]; if(!a) return; a.type = t; a.reused = false; setHtml("formErr", ""); render(); }
+function addrSet(key, k, v){ const a = S.addr[key]; if(a){ a.f[k] = v; a.reused = false; } setHtml("formErr", ""); }
+function addrFormHtml(key, intro){
+  const a = S.addr[key] || addrInit(key, true);
+  const typeLabel = (PLACE_TYPES.find(p => p[0] === a.type) || [])[1];
+  return `<div class="addr-form" id="addr_${key}">
+    <div class="field mt16"><label>${intro || "Where is the shoot?"}</label>
+      <div class="addr-types">${PLACE_TYPES.map(([t, l, ic]) => `<button type="button" class="chip addr-t ${a.type === t ? "on" : ""}" aria-pressed="${a.type === t}" onclick="addrType('${key}','${t}')">${l}</button>`).join("")}</div></div>
+    ${a.type ? `${a.reused ? `<div class="xs muted2 mb8">Filled in from your last booking — check it's right.</div>` : ""}
+      ${PLACE_FIELDS[a.type].map(([k, l, ph, req]) => `<div class="field"><label for="addr_${key}_${k}">${l}${req ? "" : ` <span class="muted2">(optional)</span>`}</label>
+        <input id="addr_${key}_${k}" class="input" maxlength="80" placeholder="${esc(ph)}" value="${esc(a.f[k] || "")}" oninput="addrSet('${key}','${k}',this.value)" ${k === "street" ? 'autocomplete="street-address"' : ""}></div>`).join("")}`
+      : `<div class="xs muted2">Pick one so we can ask for the right details (a ${esc((typeLabel || "home").toLowerCase())} needs a flat number, a hall needs the venue name, and so on).</div>`}
+  </div>`;
+}
+function addrError(key){
+  const a = S.addr[key];
+  if(!a || !a.type) return "Choose where the shoot is — home, restaurant, hall, outdoors…";
+  for(const [k, l, , req] of PLACE_FIELDS[a.type]) if(req && (a.f[k] || "").trim().length < 2) return "Add the " + l.toLowerCase() + ".";
+  if(addrText(key).length > 300) return "The address is too long — shorten a field.";
+  return null;
+}
+function addrText(key){
+  const a = S.addr[key]; if(!a || !a.type) return "";
+  const f = k => (a.f[k] || "").trim().replace(/\s+/g, " ");
+  const label = (PLACE_TYPES.find(p => p[0] === a.type) || [, "Place"])[1];
+  const main = a.type === "outdoor"
+    ? [f("venue"), f("meet") ? "meet at " + f("meet") : ""]
+    : [f("house"), f("venue"), f("part"), f("building"), f("street")];
+  return [label, main.filter(Boolean).join(", "), f("landmark") ? "Landmark: " + f("landmark") : ""].filter(Boolean).join(" · ");
+}
+function addrRemember(key){
+  const a = S.addr[key]; if(!a || !a.type) return;
+  S.prefs.lastAddr = { type: a.type, f: Object.assign({}, a.f) }; savePrefs();
 }
 
 /* ============================================================
