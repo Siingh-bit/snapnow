@@ -6475,6 +6475,43 @@ grant execute on function public.admin_partner_agreements(uuid)                 
 grant execute on function public.admin_record_paper_agreement(uuid, date, text) to authenticated;
 -- <<< 8m partner agreement
 
+-- >>> 8n phone
+-- =====================================================================
+-- 8n. MOBILE NUMBERS
+--     Every account needs a mobile number (the app asks for it at sign-up,
+--     and existing accounts are asked before they continue). The database
+--     stores it as 10 digits (9876543210) and rejects anything that isn't a
+--     valid Indian mobile number. Old values are left alone until changed.
+-- =====================================================================
+create or replace function public._norm_phone(p text) returns text language plpgsql immutable
+as $$
+declare d text := regexp_replace(coalesce(p, ''), '\D', '', 'g');
+begin
+  if length(d) = 12 and left(d, 2) = '91' then d := substr(d, 3); end if;
+  if length(d) = 11 and left(d, 1) = '0' then d := substr(d, 2); end if;
+  return case when d ~ '^[6-9][0-9]{9}$' then d end;
+end $$;
+
+create or replace function public.profiles_phone_check()
+returns trigger language plpgsql
+as $$
+declare d text;
+begin
+  if tg_op = 'UPDATE' and new.phone is not distinct from old.phone then return new; end if;
+  if new.phone is null or btrim(new.phone) = '' then new.phone := null; return new; end if;
+  d := public._norm_phone(new.phone);
+  if d is null then
+    if tg_op = 'INSERT' then new.phone := null; return new; end if;      -- never block a sign-up
+    raise exception 'Enter a valid 10-digit Indian mobile number';
+  end if;
+  new.phone := d;
+  return new;
+end $$;
+drop trigger if exists profiles_phone_check on public.profiles;
+create trigger profiles_phone_check before insert or update of phone on public.profiles
+  for each row execute function public.profiles_phone_check();
+-- <<< 8n phone
+
 -- =====================================================================
 -- 9. ONE-OFF CLEAN-UP
 -- =====================================================================
@@ -6560,4 +6597,5 @@ select
   exists (select 1 from pg_proc where proname = 'send_due_reminders')   as calendar_ready,
   exists (select 1 from pg_extension where extname = 'pg_cron')   as reminders_scheduled,
   (select count(*) = 4 from information_schema.tables where table_schema = 'public' and table_name in ('payouts','payout_lines','payout_holds','doc_counters'))   as payouts_ready,
-  exists (select 1 from pg_proc where proname = 'accept_partner_agreement')   as agreement_ready;
+  exists (select 1 from pg_proc where proname = 'accept_partner_agreement')   as agreement_ready,
+  exists (select 1 from pg_trigger where tgname = 'profiles_phone_check')   as phone_ready;

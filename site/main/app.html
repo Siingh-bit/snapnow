@@ -643,6 +643,27 @@ html[data-theme=dark] .feat{background:#3a2f15;color:#e8c46a}
 .agr-tick.on{border-color:var(--green);background:var(--green-soft)}
 .agr-tick input{width:20px;height:20px;margin-top:1px;accent-color:var(--green);flex:0 0 auto}
 .agr-done{display:flex;gap:12px;align-items:center;padding:14px}
+/* ---------- portfolio viewer ---------- */
+.pgrid.ig{gap:2px;margin:0 -2px}
+.pgrid.ig .pgrid-i{border-radius:0;cursor:pointer}
+.pgrid.ig .pgrid-i:active{opacity:.85}
+body.gal-open{overflow:hidden}
+.gal{position:fixed;inset:0;z-index:95;background:#000;display:flex;flex-direction:column;color:#fff;touch-action:pan-x}
+.gal-top{display:flex;align-items:center;gap:10px;padding:calc(10px + env(safe-area-inset-top)) 12px 10px;position:relative;z-index:2}
+.gal-x{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;background:rgba(255,255,255,.12)}
+.gal-name{font-weight:600;font-size:15px;line-height:1.2}.gal-count{font-size:12.5px;color:rgba(255,255,255,.7);font-variant-numeric:tabular-nums}
+.gal-track{flex:1;display:flex;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;scrollbar-width:none;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch;padding-bottom:env(safe-area-inset-bottom)}
+.gal-track::-webkit-scrollbar{display:none}
+.gal-s{flex:0 0 100%;width:100%;height:100%;scroll-snap-align:center;scroll-snap-stop:always;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.gal-s img,.gal-s video{max-width:100%;max-height:100%;object-fit:contain;user-select:none;-webkit-user-select:none}
+.gal-nav{position:absolute;top:50%;transform:translateY(-50%);width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.14);display:grid;place-items:center;z-index:2}
+.gal-nav.prev{left:12px}.gal-nav.prev svg{transform:rotate(180deg)}.gal-nav.next{right:12px}
+.gal.first .gal-nav.prev,.gal.last .gal-nav.next{display:none}
+@media (hover:none){.gal-nav{display:none}}
+/* ---------- mobile number ---------- */
+.phone-in{display:flex;align-items:stretch}
+.phone-in .cc{display:flex;align-items:center;padding:0 12px;border:1px solid var(--border);border-right:0;border-radius:var(--r-sm,10px) 0 0 var(--r-sm,10px);background:var(--surface-2);font-weight:600;font-size:15px;color:var(--muted)}
+.phone-in .input{border-top-left-radius:0;border-bottom-left-radius:0}
 
 </style>
 </head>
@@ -1946,7 +1967,7 @@ async function afterAuth(withFlash){
       const type = S.auth.type || picked || (S.me.role === "photographer" ? "photographer" : null);
       const nm = S.me.name && S.me.name !== (S.email||"").split("@")[0] ? S.me.name : "";
       S.auth = { step: type ? (type === "photographer" ? "setupPg" : "setupCust") : "setupRole", type, email: S.email,
-                 draft: { name: nm, bio:"", years: 2, cats: [], priceMult: 1, step: 1 } };
+                 draft: { name: nm, phone: S.me.phone || "", bio:"", years: 2, cats: [], priceMult: 1, step: 1 } };
       locInit("setup", S.me);
       render(); scrollTop(); return;
     }
@@ -1988,6 +2009,7 @@ function vSetupCust(){
     <div class="sm muted mt4">Photographers see your first name. Your exact address is only shared after you book.</div>
     <div class="field mt16"><label for="setupName">Your name</label>
       <input id="setupName" class="input" autocapitalize="words" autocomplete="name" placeholder="e.g. John Doe" value="${esc(d.name)}" oninput="nameInput(this.value)"></div>
+    ${phoneFieldHtml("setupPhone", S.auth.draft.phone, "S.auth.draft.phone=this.value;setHtml('authErr','')", "For booking updates, and so the photographer you book can reach you on the day. It's never shown on a profile.")}
     ${locFieldsHtml("setup")}
     <button class="btn primary block mt8" ${S.auth.busy?"disabled":""} onclick="saveSetupCust()">${S.auth.busy ? "Saving…" : "Continue"}</button>
     <div id="authErr">${errHtml(S.auth.err)}</div>
@@ -1996,10 +2018,11 @@ function vSetupCust(){
 async function saveSetupCust(){
   const name = (S.auth.draft.name || "").trim();
   if(name.length < 2){ S.auth.err = "Enter your name."; render(); return; }
+  const phone = normPhone(S.auth.draft.phone); if(!phone){ S.auth.err = "Enter your 10-digit mobile number."; render(); return; }
   const lerr = locError("setup"); if(lerr){ S.auth.err = lerr; render(); return; }
   S.auth.busy = true; S.auth.err = null; render();
   try{
-    await api.saveProfile(Object.assign({ name, role: "customer" }, locValue("setup")));
+    await api.saveProfile(Object.assign({ name, phone, role: "customer" }, locValue("setup")));
     S.auth.busy = false; toast("You're all set, " + firstName(name) + "!", "Book your first photographer", "check");
     enterApp();
   }catch(e){ S.auth.busy = false; S.auth.err = e.message; render(); }
@@ -2021,6 +2044,7 @@ function vSetupPg(){
       <div class="sm muted mt4">This is the top of your public profile.</div>
       <div class="field mt16"><label for="setupName">Name customers will see</label>
         <input id="setupName" class="input" autocapitalize="words" autocomplete="name" placeholder="e.g. John Doe" value="${esc(d.name)}" oninput="nameInput(this.value)"></div>
+      ${phoneFieldHtml("setupPhone", d.phone, "S.auth.draft.phone=this.value;setHtml('authErr','')", "So SnapPro and the customers you're booked with can reach you. It isn't shown on your public profile.")}
       <div class="field"><label for="setupBio">Short bio</label>
         <textarea id="setupBio" class="input" rows="3" maxlength="600" placeholder="What you shoot, your style, your gear." oninput="S.auth.draft.bio=this.value">${esc(d.bio)}</textarea></div>
       <div class="field"><label>Years of experience — <span id="yrsVal">${d.years}</span></label>
@@ -2058,6 +2082,7 @@ function pgPricePreview(){
 function pgSetupNext(st){
   const d = S.auth.draft;
   if(st === 1 && (d.name||"").trim().length < 2){ S.auth.err = "Enter your name."; render(); return; }
+  if(st === 1 && !normPhone(d.phone)){ S.auth.err = "Enter your 10-digit mobile number."; render(); return; }
   if(st === 2 && !d.cats.length){ S.auth.err = "Pick at least one type of shoot."; render(); return; }
   d.step = st + 1; S.auth.err = null; render(); scrollTop();
 }
@@ -2067,7 +2092,7 @@ async function saveSetupPg(){
   const loc = locValue("setup"), name = d.name.trim();
   S.auth.busy = true; S.auth.err = null; render();
   try{
-    await api.saveProfile(Object.assign({ name, role: "photographer" }, loc));
+    await api.saveProfile(Object.assign({ name, phone: normPhone(d.phone), role: "photographer" }, loc));
     await api.savePg({ display_name: name, bio: (d.bio||"").trim(), categories: d.cats, years_exp: d.years,
                        price_multiplier: d.priceMult, city: loc.city, state: loc.state, pincode: loc.pincode, travel: d.travel || "city", is_online: true }, !S.pg);
     S.auth.busy = false;
@@ -2272,9 +2297,7 @@ function vPgProfile(p){
       <div class="stat"><div class="s-v">${pg.years_exp||0}</div><div class="s-l">Years experience</div></div>
       <div class="stat"><div class="s-v">${inr(fromPrice(pg))}</div><div class="s-l">From, 2 hrs</div></div>
     </div>
-    <div class="sec-title mt24">Portfolio</div>
-    ${photos.length ? `<div class="pgrid">${photos.map(u => `<button class="pgrid-i" onclick="push('photo',{url:'${esc(u)}'})">${mediaThumb(u)}</button>`).join("")}</div>`
-      : `<div class="card soft sm muted">${esc(firstName(pg.display_name))} hasn't added portfolio photos yet.</div>`}
+    ${portfolioGrid(pg)}
     <div class="sec-title mt24">Reviews</div>
     ${reviews === undefined ? `<div class="skeleton sm"></div>`
       : reviews.length ? `<div class="stack gap10">${reviews.map(r => `<div class="card"><div class="between"><b class="sm">${esc(r.customer_name||"Customer")}</b><span class="rating">${"★".repeat(r.stars)}<span class="muted2">${"★".repeat(5-r.stars)}</span></span></div>${r.body ? `<div class="sm muted mt6 prose">${esc(r.body)}</div>` : ""}<div class="between mt6"><span class="xs muted2">${timeAgo(r.created_at)}</span>${safetyLink(r.customer_id, r.customer_name, "review", r.id)}</div></div>`).join("")}</div>`
@@ -2727,6 +2750,7 @@ function vProfile(){
     ${isPg() ? `<div class="sec-title mt20">Your photographer profile</div>` + pgProfileExtras() : ""}
     <div class="sec-title mt20">Your account</div>
     <div class="card list">
+      <button class="li" onclick="push('editPhone')">${icon("phone",18,"var(--muted)")}<div class="grow"><div class="sm bold">Mobile number</div><div class="xs muted2">${esc(fmtPhone(me.phone) || "Add your mobile number")}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
       <button class="li" onclick="push('editName')">${icon("user",18,"var(--muted)")}<div class="grow"><div class="sm bold">Name</div><div class="xs muted2">${esc(me.name)}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
       <button class="li" onclick="push('editLoc')">${icon("pin",18,"var(--muted)")}<div class="grow"><div class="sm bold">Location</div><div class="xs muted2">${esc([me.city, me.state, me.pincode].filter(Boolean).join(", ") || "Not set")}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
       <button class="li" onclick="push('blockedPeople')">${icon("shield",18,"var(--muted)")}<div class="grow"><div class="sm bold">Blocked people</div><div class="xs muted2">${(S.ublocks || []).length ? S.ublocks.length + " blocked" : "No one blocked"}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
@@ -3091,11 +3115,12 @@ function vPortfolio(){
   return `${topbar("Portfolio", np + " photo" + (np === 1 ? "" : "s") + (nv ? " · " + nv + " video" + (nv === 1 ? "" : "s") : ""))}
   <div class="pad">
     <div class="sm muted">Show your best work — photos and short videos. Photos are resized automatically. Videos: MP4, MOV or WebM, up to 100 MB each.</div>
+    <div class="note mt12 own-work">${icon("shield",16,"var(--accent)")}<div class="xs"><b>Only upload your own work.</b> You confirm you took these photos and videos (or have the owner's written permission) and that people in them agreed. Using someone else's work is your responsibility, not SnapPro's, and can get your account closed — see <a href="/terms.html" target="_blank" rel="noopener">Terms</a> §8 and the <a href="/photographer-agreement.html" target="_blank" rel="noopener">Partner Agreement</a> §11.7.</div></div>
     ${storageMeter()}
     <label class="btn primary block mt16 file-btn">${icon("plus",16,"var(--on-text)")} Add photos or videos
       <input type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/webm" multiple onchange="uploadPortfolio(this.files);this.value=''"></label>
     <div id="busyNote" class="busy-note" style="display:none"></div>
-    ${ph.length ? `<div class="pgrid mt16">${ph.map(u => `<div class="pgrid-i">${mediaThumb(u)}<button class="del" aria-label="Remove" onclick="removePortfolio('${esc(u)}')">${icon("trash",14,"#fff")}</button></div>`).join("")}</div>`
+    ${ph.length ? `<div class="pgrid mt16">${ph.map((u, i) => `<div class="pgrid-i" style="cursor:pointer" onclick="if(!event.target.closest('.del'))openGallery('${esc(S.pg.id)}',${i})">${mediaThumb(u)}<button class="del" aria-label="Remove" onclick="removePortfolio('${esc(u)}')">${icon("trash",14,"#fff")}</button></div>`).join("")}</div>`
       : emptyState("🖼️", "No photos yet", "Add 6–12 of your best shots across the types of shoot you do.")}
   </div>`;
 }
@@ -5447,6 +5472,133 @@ photographerActions = function(){
   return out;
 };
 
+/* ===================== PORTFOLIO VIEWER (Instagram-style) =====================
+   A photographer's portfolio shows as a 3-column square grid. Tapping a photo opens
+   it full screen; swipe left/right (or use the arrows / ← → keys) to go through the
+   whole portfolio, with "3 / 42" at the top. Videos play when you reach them.
+   The viewer lives outside #screen, so the app refreshing in the background
+   doesn't interrupt a swipe. Back / Close returns to the profile. */
+
+function galleryList(id){
+  const pg = (S.d.pgs && S.d.pgs[id]) || (S.pg && S.pg.id === id ? S.pg : null);
+  return (pg && pg.portfolio) || [];
+}
+function openGallery(id, i){ push("gallery", { id, i: i || 0 }); }
+function vGallery(){ return `<div class="gal-ph"></div>`; }   /* the real viewer is drawn by galleryAfterRender */
+
+function galleryAfterRender(){
+  const top = S.stack.length ? S.stack[S.stack.length - 1] : null;
+  let g = document.getElementById("gal");
+  if(!top || top.v !== "gallery"){ if(g) g.remove(); document.body.classList.remove("gal-open"); return; }
+  const p = top.p, list = galleryList(p.id);
+  if(g && g.dataset.id === p.id && Number(g.dataset.n) === list.length) return;   /* already showing — leave it alone */
+  if(g) g.remove();
+  if(!list.length){ setTimeout(pop, 0); return; }
+  const pg = S.d.pgs[p.id] || S.pg || {};
+  const i0 = Math.max(0, Math.min(list.length - 1, p.i || 0));
+  g = document.createElement("div");
+  g.id = "gal"; g.className = "gal"; g.dataset.id = p.id; g.dataset.n = list.length;
+  g.setAttribute("role", "dialog"); g.setAttribute("aria-label", "Portfolio");
+  g.innerHTML = `<div class="gal-top">
+      <button class="gal-x" aria-label="Close" onclick="pop()">${icon("x", 22, "#fff")}</button>
+      <div class="grow"><div class="gal-name">${esc(pg.display_name || "Portfolio")}</div><div class="gal-count" id="galCount">${i0 + 1} / ${list.length}</div></div>
+    </div>
+    <div class="gal-track" id="galTrack">${list.map((u, i) => `<div class="gal-s" data-i="${i}">${isVideoUrl(u)
+      ? `<video src="${esc(u)}" controls playsinline preload="${Math.abs(i - i0) <= 1 ? "metadata" : "none"}"></video>`
+      : `<img src="${esc(u)}" alt="Photo ${i + 1} of ${list.length}" ${Math.abs(i - i0) <= 2 ? "" : 'loading="lazy"'} decoding="async" draggable="false">`}</div>`).join("")}</div>
+    <button class="gal-nav prev" aria-label="Previous photo" onclick="galleryStep(-1)">${icon("chevron", 26, "#fff")}</button>
+    <button class="gal-nav next" aria-label="Next photo" onclick="galleryStep(1)">${icon("chevron", 26, "#fff")}</button>`;
+  document.body.appendChild(g);
+  document.body.classList.add("gal-open");
+  const tr = g.querySelector("#galTrack");
+  const go = () => { tr.scrollLeft = i0 * tr.clientWidth; galleryMark(i0); };
+  go(); requestAnimationFrame(go);
+  let t = null;
+  tr.addEventListener("scroll", () => { clearTimeout(t); t = setTimeout(() => galleryMark(galleryIndex()), 60); }, { passive: true });
+}
+function galleryIndex(){
+  const tr = document.getElementById("galTrack"), top = S.stack[S.stack.length - 1];
+  if(!tr || !tr.clientWidth) return top && top.v === "gallery" ? (top.p.i || 0) : 0;
+  return Math.round(tr.scrollLeft / tr.clientWidth);
+}
+function galleryMark(i){
+  const g = document.getElementById("gal"); if(!g) return;
+  const n = Number(g.dataset.n); i = Math.max(0, Math.min(n - 1, i));
+  const top = S.stack[S.stack.length - 1]; if(top && top.v === "gallery") top.p.i = i;
+  const c = document.getElementById("galCount"); if(c) c.textContent = (i + 1) + " / " + n;
+  g.classList.toggle("first", i === 0); g.classList.toggle("last", i === n - 1);
+  g.querySelectorAll(".gal-s").forEach(s => {
+    const k = Number(s.dataset.i), v = s.querySelector("video"), im = s.querySelector("img");
+    if(im && Math.abs(k - i) <= 2) im.removeAttribute("loading");           /* load the neighbours early */
+    if(v){ if(k !== i){ try{ v.pause(); }catch(e){} } else if(v.preload === "none") v.preload = "metadata"; }
+  });
+}
+function galleryStep(d){
+  const tr = document.getElementById("galTrack"); if(!tr) return;
+  const i = galleryIndex() + d, n = Number(document.getElementById("gal").dataset.n);
+  if(i < 0 || i >= n) return;
+  try{ tr.scrollTo({ left: i * tr.clientWidth, behavior: "smooth" }); }catch(e){ tr.scrollLeft = i * tr.clientWidth; }
+  galleryMark(i);
+}
+document.addEventListener("keydown", e => {
+  if(!document.getElementById("gal")) return;
+  if(e.key === "ArrowRight"){ e.preventDefault(); galleryStep(1); }
+  else if(e.key === "ArrowLeft"){ e.preventDefault(); galleryStep(-1); }
+  else if(e.key === "Escape"){ e.preventDefault(); pop(); }
+});
+window.addEventListener("resize", () => { const tr = document.getElementById("galTrack"), top = S.stack[S.stack.length - 1];
+  if(tr && top && top.v === "gallery") tr.scrollLeft = (top.p.i || 0) * tr.clientWidth; });
+
+/* the portfolio grid on a photographer's profile */
+function portfolioGrid(pg){
+  const list = pg.portfolio || [], nv = list.filter(isVideoUrl).length, np = list.length - nv;
+  if(!list.length) return `<div class="sec-title mt24">Portfolio</div><div class="card soft sm muted">${esc(firstName(pg.display_name))} hasn't added portfolio photos yet.</div>`;
+  return `<div class="sec-title mt24">Portfolio <span class="muted2 xs">· ${np} photo${np === 1 ? "" : "s"}${nv ? " · " + nv + " video" + (nv === 1 ? "" : "s") : ""}</span></div>
+    <div class="pgrid ig">${list.map((u, i) => `<button class="pgrid-i" aria-label="Open ${isVideoUrl(u) ? "video" : "photo"} ${i + 1} of ${list.length}" onclick="openGallery('${esc(pg.id)}',${i})">${mediaThumb(u)}</button>`).join("")}</div>
+    <div class="xs muted2 mt8 center">Tap a photo to view it full screen, then swipe for more.</div>`;
+}
+
+/* ===================== MOBILE NUMBER (required for everyone) =====================
+   New accounts give it during sign-up; existing accounts without one see a short
+   "Add your mobile number" screen before anything else. It can be changed in Profile.
+   Stored as 10 digits (e.g. 9876543210); the database checks the format too.
+   It is never shown on a public profile. */
+const needsPhone = () => !!(S.me && S.me.role && !normPhone(S.me.phone || ""));
+const fmtPhone = p => { const d = normPhone(p || ""); return d ? "+91 " + d.slice(0, 5) + " " + d.slice(5) : ""; };
+function phoneFieldHtml(id, value, oninput, help){
+  return `<div class="field"><label for="${id}">Mobile number</label>
+    <div class="phone-in"><span class="cc">+91</span><input id="${id}" class="input" type="tel" inputmode="numeric" autocomplete="tel-national" maxlength="14"
+      placeholder="10-digit mobile number" value="${esc(value || "")}" oninput="${oninput}"></div>
+    ${help ? `<div class="xs muted2 mt6">${help}</div>` : ""}</div>`;
+}
+function vAddPhone(){
+  return `<div class="pad review">
+    <div class="between"><div class="wordmark">SnapPro</div><button class="linkish" onclick="logout()">Log out</button></div>
+    <h1 class="display mt24" style="font-size:32px">Add your mobile number</h1>
+    <p class="lead">SnapPro now needs a mobile number on every account, so ${isPg() ? "customers you're booked with and our team" : "your photographer and our team"} can reach you about a booking. It's never shown on a profile.</p>
+    ${phoneFieldHtml("gatePhone", S.gatePhone || "", "S.gatePhone=this.value;setHtml('formErr','')", "")}
+    <button class="btn primary block mt8" ${S.loading.phone ? "disabled" : ""} onclick="savePhone('gatePhone')">${S.loading.phone ? "Saving…" : "Save and continue"}</button>
+    <div id="formErr">${errHtml(S.formErr)}</div>
+  </div>`;
+}
+function vEditPhone(){
+  return `${topbar("Mobile number")}
+  <div class="pad">
+    ${phoneFieldHtml("phoneEdit", (S.me && S.me.phone) || "", "setHtml('formErr','')", "Used for booking updates and so the person you're booked with can reach you on the day. It's never shown on a profile.")}
+    <button class="btn primary block" ${S.loading.phone ? "disabled" : ""} onclick="savePhone('phoneEdit')">Save</button><div id="formErr"></div></div>`;
+}
+async function savePhone(inputId){
+  const raw = (el(inputId) || {}).value || "", phone = normPhone(raw);
+  if(!phone){ S.formErr = "Enter a valid 10-digit Indian mobile number."; setHtml("formErr", errHtml(S.formErr)); return; }
+  S.loading.phone = true; S.formErr = null;
+  try{
+    await api.saveProfile({ phone });
+    S.loading.phone = false; S.gatePhone = "";
+    toast("Mobile number saved", fmtPhone(phone), "check");
+    if(S.stack.length && S.stack[S.stack.length - 1].v === "editPhone") pop(); else render();
+  }catch(e){ S.loading.phone = false; S.formErr = e.message; setHtml("formErr", errHtml(S.formErr)); }
+}
+
 /* ============================================================
    NAVIGATION
    ============================================================ */
@@ -5457,7 +5609,7 @@ const STACK_VIEWS = { pg: vPgProfile, photo: vPhoto, newRequest: vNewRequest, re
                       quote: vQuote, job: vJob, portfolio: vPortfolio, editPg: vEditPg,
                       payResult: vPayResult, editPayout: vEditPayout,
                       pgEarnings: vPgEarnings, pgDone: vPgDone, pgReviews: vPgReviews, how: vHow, storage: vStorage, rewards: vRewards, invite: vInvite, kyc: vKyc, deleteAccount: vDeleteAccount, receipt: vReceipt, busyNew: vBusyNew,
-                      report: vReport, blockedPeople: vBlockedPeople, payouts: vMyPayouts, payoutSlip: vPayoutSlip, agreement: vAgreement };
+                      report: vReport, blockedPeople: vBlockedPeople, payouts: vMyPayouts, payoutSlip: vPayoutSlip, agreement: vAgreement, gallery: vGallery, editPhone: vEditPhone };
 const CUST_TABS = [ ["home","Home","home",vCustHome], ["explore","Explore","search",vExplore], ["activity","My shoots","calendar",vActivity], ["messages","Messages","chat",vMessages], ["profile","Profile","user",vProfile] ];
 const PG_TABS   = [ ["home","Home","home",vPgHome], ["requests","Requests","bolt",vPgRequests], ["calendar","Calendar","calendar",vCalendar], ["jobs","My shoots","list",vJobs], ["messages","Messages","chat",vMessages], ["profile","Profile","user",vProfile] ];
 const tabsFor = () => isPg() ? PG_TABS : CUST_TABS;
@@ -5514,6 +5666,8 @@ function render(){
     html = (AUTH_VIEWS[S.auth.step] || vWelcome)();
   } else if(S.blocked){
     html = vBlocked();
+  } else if(needsPhone()){
+    S.stack = []; html = vAddPhone();
   } else if(pgWaiting() && !(S.stack.length && WAITING_OK.includes(S.stack[S.stack.length - 1].v))){
     S.stack = []; html = vPgReview();
   } else if(S.stack.length){
@@ -5528,6 +5682,7 @@ function render(){
   screen.className = (showTabs ? "" : "no-tabs ") + mode;
   if(tabs) tabs.innerHTML = showTabs ? tabbarHtml() : "";
   syncChatTimer();
+  if(typeof galleryAfterRender === "function") galleryAfterRender();
 }
 
 /* chat refreshes every 3 seconds while it's open */
