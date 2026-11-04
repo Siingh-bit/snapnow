@@ -674,6 +674,13 @@ body.gal-open{overflow:hidden}
 .req-banner .xs{color:rgba(255,255,255,.88)}
 .req-bell{position:relative;width:40px;height:40px;border-radius:12px;background:rgba(0,0,0,.18);display:grid;place-items:center;flex:0 0 auto}
 .req-bell span{position:absolute;top:-6px;right:-6px;min-width:20px;height:20px;padding:0 5px;border-radius:10px;background:#fff;color:var(--accent);font-size:12px;font-weight:700;display:grid;place-items:center}
+/* gear + photo/video */
+.gear-line{color:var(--text);display:flex;flex-wrap:wrap;align-items:center;gap:4px;text-align:left}
+.gear-line svg{flex:none}
+.chip.svc{font-weight:600}
+.gear-row{display:flex;gap:12px;padding:8px 0;border-top:1px solid var(--border-soft)}
+.gear-row>.xs{flex:0 0 38%}
+.gear-edit{padding:12px}
 
 </style>
 </head>
@@ -1166,8 +1173,8 @@ async function q(promise){
   return res ? res.data : null;
 }
 
-const PG_COLS = "id,display_name,city,state,pincode,bio,categories,years_exp,price_multiplier,rating,review_count,jobs_done,is_online,is_verified,portfolio,created_at,approval_status,review_note,featured_until,travel";
-const REQ_COLS = "id,customer_id,customer_name,category,urgency,duration_hrs,city,state,pincode,budget,deliverables,notes,status,start_at,expires_at,created_at";
+const PG_COLS = "id,display_name,city,state,pincode,bio,categories,years_exp,price_multiplier,rating,review_count,jobs_done,is_online,is_verified,portfolio,created_at,approval_status,review_note,featured_until,travel,services,gear";
+const REQ_COLS = "id,customer_id,customer_name,category,urgency,duration_hrs,city,state,pincode,budget,deliverables,notes,status,start_at,expires_at,created_at,service";
 const BK_COLS = "id,request_id,offer_id,customer_id,photographer_id,customer_name,photographer_name,category,start_at,duration_hrs,city,pincode,address,price,status,created_at,updated_at,commission_pct,commission_amount,photographer_amount,payment_status,paid_at,payout_status,payout_at,cancelled_from,cancelled_by,advance_amount,balance_amount,balance_status,balance_paid_at,discount_amount,call_token";
 
 const api = {
@@ -1434,7 +1441,7 @@ function matchesMe(r){
   if(!S.pg) return false;
   const cityOk = !r.city || pgCovers(myCover(), r.city, r.state);
   const cats = S.pg.categories || [];
-  return cityOk && (!cats.length || cats.includes(r.category));
+  return cityOk && (!cats.length || cats.includes(r.category)) && svcOk(S.pg.services, r.service);
 }
 
 /* Re-render unless the person is typing — rebuilding a focused field
@@ -1977,7 +1984,7 @@ async function afterAuth(withFlash){
       const type = S.auth.type || picked || (S.me.role === "photographer" ? "photographer" : null);
       const nm = S.me.name && S.me.name !== (S.email||"").split("@")[0] ? S.me.name : "";
       S.auth = { step: type ? (type === "photographer" ? "setupPg" : "setupCust") : "setupRole", type, email: S.email,
-                 draft: { name: nm, phone: S.me.phone || "", bio:"", years: 2, cats: [], priceMult: 1, step: 1 } };
+                 draft: { name: nm, phone: S.me.phone || "", bio:"", years: 2, cats: [], services: "photo", priceMult: 1, step: 1 } };
       locInit("setup", S.me);
       render(); scrollTop(); return;
     }
@@ -2056,14 +2063,16 @@ function vSetupPg(){
         <input id="setupName" class="input" autocapitalize="words" autocomplete="name" placeholder="e.g. John Doe" value="${esc(d.name)}" oninput="nameInput(this.value)"></div>
       ${phoneFieldHtml("setupPhone", d.phone, "S.auth.draft.phone=this.value;setHtml('authErr','')", "So SnapPro and the customers you're booked with can reach you. It isn't shown on your public profile.")}
       <div class="field"><label for="setupBio">Short bio</label>
-        <textarea id="setupBio" class="input" rows="3" maxlength="600" placeholder="What you shoot, your style, your gear." oninput="S.auth.draft.bio=this.value">${esc(d.bio)}</textarea></div>
+        <textarea id="setupBio" class="input" rows="3" maxlength="600" placeholder="What you shoot and your style." oninput="S.auth.draft.bio=this.value">${esc(d.bio)}</textarea></div>
       <div class="field"><label>Years of experience — <span id="yrsVal">${d.years}</span></label>
         <input type="range" min="0" max="30" value="${d.years}" oninput="S.auth.draft.years=+this.value;setHtml('yrsVal',this.value)"></div>
       <button class="btn primary block" onclick="pgSetupNext(1)">Continue</button>
     ` : st === 2 ? `
       <div class="h2">What do you shoot?</div>
       <div class="sm muted mt4">Pick every type you shoot. You'll be alerted about requests for these.</div>
-      <div class="grid3 mt16">
+      <div class="mt16">${svcPicker(d.services, "S.auth.draft.services")}</div>
+      <div class="field"><label>Types of shoot</label></div>
+      <div class="grid3">
         ${CATEGORIES.map(c => `<button class="u-card ${d.cats.includes(c.id)?'on':''}" onclick="pgCatToggle('${c.id}')">
           <div class="u-t">${esc(c.name)}</div></button>`).join("")}
       </div>
@@ -2093,6 +2102,7 @@ function pgSetupNext(st){
   const d = S.auth.draft;
   if(st === 1 && (d.name||"").trim().length < 2){ S.auth.err = "Enter your name."; render(); return; }
   if(st === 1 && !normPhone(d.phone)){ S.auth.err = "Enter your 10-digit mobile number."; render(); return; }
+  if(st === 2 && !d.services){ S.auth.err = "Choose photos, video or both."; render(); return; }
   if(st === 2 && !d.cats.length){ S.auth.err = "Pick at least one type of shoot."; render(); return; }
   d.step = st + 1; S.auth.err = null; render(); scrollTop();
 }
@@ -2103,7 +2113,7 @@ async function saveSetupPg(){
   S.auth.busy = true; S.auth.err = null; render();
   try{
     await api.saveProfile(Object.assign({ name, phone: normPhone(d.phone), role: "photographer" }, loc));
-    await api.savePg({ display_name: name, bio: (d.bio||"").trim(), categories: d.cats, years_exp: d.years,
+    await api.savePg({ display_name: name, bio: (d.bio||"").trim(), categories: d.cats, services: d.services || "photo", years_exp: d.years,
                        price_multiplier: d.priceMult, city: loc.city, state: loc.state, pincode: loc.pincode, travel: d.travel || "city", is_online: true }, !S.pg);
     S.auth.busy = false;
     toast("Profile sent for review", "Add photos of your work while you wait", "cam");
@@ -2153,11 +2163,12 @@ function pgCardHtml(pg, extra){
         <div class="row gap6"><span class="bold truncate">${esc(pg.display_name)}</span>${pg.is_verified ? `<span class="verified" title="Verified by SnapPro">${icon("shield",13,"var(--blue)")}</span>` : ""}${isFeatured(pg) ? `<span class="feat">★ Featured</span>` : ""}</div>
         <div class="xs muted mt2">${ratingHtml(pg)}</div>
         <div class="xs muted2 mt2">${pgMeta(pg)}</div>
+        ${gearLine(pg)}
         ${isCustomer() && travelsTo(pg, meCity(), S.me.state) ? `<div class="xs accent bold mt2">${icon("pin",11)} Travels to ${esc(meCity())}</div>` : ""}
       </div>
       <div class="stack right"><div class="bold sm">${inr(fromPrice(pg))}</div><div class="xs muted2">from, 2 hrs</div></div>
     </div>
-    ${(pg.categories||[]).length ? `<div class="chips mt8">${pg.categories.map(c => `<span class="chip">${esc(catById(c).name)}</span>`).join("")}</div>` : ""}
+    <div class="chips mt8">${svcChip(pg.services)}${(pg.categories||[]).map(c => `<span class="chip">${esc(catById(c).name)}</span>`).join("")}</div>
     <div class="mt8">${portfolioStrip(pg, 4)}</div>${extra||""}
   </button>`;
 }
@@ -2243,6 +2254,7 @@ function exFilter(){
   if(f.scope === "city" && city) list = list.filter(p => pgCovers(p, meCity(), S.me.state));
   if(f.scope === "saved") list = list.filter(p => isSaved(p.id));
   if(f.cat !== "all") list = list.filter(p => (p.categories||[]).includes(f.cat));
+  list = list.filter(p => exGearOk(p, f));
   const qv = (f.q||"").trim().toLowerCase();
   if(qv) list = list.filter(p => (p.display_name||"").toLowerCase().includes(qv) || (p.bio||"").toLowerCase().includes(qv) || (p.city||"").toLowerCase().includes(qv));
   const cmp = (f.sort === "jobs" ? (a,b) => (b.jobs_done||0) - (a.jobs_done||0)
@@ -2276,6 +2288,7 @@ function vExplore(){
       ${[["rated","Top rated"],["jobs","Most shoots"],["new","Newest"]].map(([k,l]) => `<button class="chip ${f.sort===k?'accent':''}" onclick="exSet('sort','${k}')">${l}</button>`).join("")}
     </div>
     <div class="hscroll mt8"><button class="chip ${f.cat==='all'?'accent':''}" onclick="exSet('cat','all')">All types</button>${CATEGORIES.map(c => `<button class="chip ${f.cat===c.id?'accent':''}" onclick="exSet('cat','${c.id}')">${esc(c.name)}</button>`).join("")}</div>
+    ${exGearChips(f)}
   </div>
   <div class="pad" id="exResults">${exResultsHtml()}</div>`;
 }
@@ -2301,13 +2314,15 @@ function vPgProfile(p){
     ${(pg.travel || "city") !== "city" ? `<div class="xs mt4">${icon("pin",11,"var(--accent)")} Travels for shoots: <b>${pg.travel === "anywhere" ? "anywhere in India" : esc(nearbyText(pg.city, pg.state))}</b></div>` : ""}
     ${blocked ? `<div class="card soft mt12 sm">You've blocked ${esc(firstName(pg.display_name))}. <button class="linkish accent" onclick="push('blockedPeople')"><b>Manage blocked people</b></button></div>` : ""}
     ${pg.bio ? `<p class="sm muted mt12 prose">${esc(pg.bio)}</p>` : ""}
-    <div class="chips mt12">${(pg.categories||[]).map(c => `<span class="chip accent">${esc(catById(c).name)}</span>`).join("")}</div>
+    <div class="chips mt12">${svcChip(pg.services)}${(pg.categories||[]).map(c => `<span class="chip accent">${esc(catById(c).name)}</span>`).join("")}</div>
+    ${gearLine(pg)}
     <div class="grid3 mt16">
       <div class="stat"><div class="s-v">${pg.jobs_done||0}</div><div class="s-l">Shoots on SnapPro</div></div>
       <div class="stat"><div class="s-v">${pg.years_exp||0}</div><div class="s-l">Years experience</div></div>
       <div class="stat"><div class="s-v">${inr(fromPrice(pg))}</div><div class="s-l">From, 2 hrs</div></div>
     </div>
     ${portfolioGrid(pg)}
+    ${gearSectionHtml(pg)}
     <div class="sec-title mt24">Reviews</div>
     ${reviews === undefined ? `<div class="skeleton sm"></div>`
       : reviews.length ? `<div class="stack gap10">${reviews.map(r => `<div class="card"><div class="between"><b class="sm">${esc(r.customer_name||"Customer")}</b><span class="rating">${"★".repeat(r.stars)}<span class="muted2">${"★".repeat(5-r.stars)}</span></span></div>${r.body ? `<div class="sm muted mt6 prose">${esc(r.body)}</div>` : ""}<div class="between mt6"><span class="xs muted2">${timeAgo(r.created_at)}</span>${safetyLink(r.customer_id, r.customer_name, "review", r.id)}</div></div>`).join("")}</div>`
@@ -2328,7 +2343,7 @@ function vPhoto(p){
    ============================================================ */
 function localInputValue(d){ const p = n => String(n).padStart(2,"0"); return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate())+"T"+p(d.getHours())+":"+p(d.getMinutes()); }
 function startRequest(urgency, category){
-  S.draft = { urgency: urgency || "1h", category: category || null, hours: 2, deliverables: ["Edited photos"], custom: "", budget: 0, notes: "", step: 1 };
+  S.draft = { urgency: urgency || "1h", category: category || null, service: "photo", hours: 2, deliverables: ["Edited photos"], custom: "", budget: 0, notes: "", step: 1 };
   locInit("req", S.me);
   push("newRequest");
 }
@@ -2342,7 +2357,7 @@ function draftStart(){
 function vNewRequest(){
   const d = S.draft; if(!d){ setTimeout(pop,0); return ""; }
   const st = d.step, start = draftStart();
-  const est = d.category ? suggestedPrice(d.category, d.hours, d.urgency, 1) : 0;
+  const est = d.category ? suggestedPrice(d.category, d.hours, d.urgency, SVC_MULT[d.service || "photo"] || 1) : 0;
   if(st === 3 && !d.budget) d.budget = est || 3000;
   return `${topbar("Post a shoot", "Step " + st + " of 3")}
   <div class="pad">
@@ -2361,9 +2376,10 @@ function vNewRequest(){
     ` : st === 2 ? `
       <div class="h2">What are you shooting?</div>
       <div class="sm muted mt4">Photographers who shoot this get notified.</div>
+      ${reqSvcHtml(d)}
       <div class="grid3 mt16">${CATEGORIES.map(c => `<button class="u-card ${d.category===c.id?'on':''}" onclick="draftSet('category','${c.id}')"><div class="u-t">${esc(c.name)}</div></button>`).join("")}</div>
       <div class="field mt16"><label>What do you need delivered?</label>
-        <div class="chips">${DELIVERABLES.map(x => `<button class="chip ${d.deliverables.includes(x)?'accent':''}" onclick="toggleDeliverable('${x}')">${d.deliverables.includes(x)?'✓ ':''}${x}</button>`).join("")}</div></div>
+        <div class="chips">${DELIV_BY[d.service || "photo"].map(x => `<button class="chip ${d.deliverables.includes(x)?'accent':''}" onclick="toggleDeliverable('${x}')">${d.deliverables.includes(x)?'✓ ':''}${x}</button>`).join("")}</div></div>
       <button class="btn primary block mt16" onclick="reqNext(2)">Continue</button>
     ` : `
       <div class="h2">Where, and your budget</div>
@@ -2375,7 +2391,7 @@ function vNewRequest(){
       <div class="field"><label for="reqNotes">Anything photographers should know? <span class="muted2">(optional)</span></label>
         <textarea id="reqNotes" class="input" rows="3" maxlength="800" placeholder="Indoor or outdoor, number of people, must-have shots…" oninput="S.draft.notes=this.value">${esc(d.notes)}</textarea></div>
       <div class="card soft">
-        <div class="kv"><span>${esc(catById(d.category).name)}</span><span>${d.hours} hr${d.hours>1?'s':''}</span></div>
+        <div class="kv"><span>${esc(catById(d.category).name)} · ${esc(svcName(d.service))}</span><span>${d.hours} hr${d.hours>1?'s':''}</span></div>
         <div class="kv"><span>When</span><span>${whenStr(start)}</span></div>
       </div>
       <button class="btn primary block mt16" ${S.loading.post?"disabled":""} onclick="submitRequest()">${S.loading.post ? "Posting…" : icon("send",17,"var(--on-text)") + " Post and get quotes"}</button>
@@ -2403,7 +2419,7 @@ async function submitRequest(){
   const expires = new Date(Math.min(Date.now() + u.window*60000, start.getTime() + 3600e3));
   S.loading.post = true; S.formErr = null; render();
   try{
-    const row = await api.createRequest({ customer_id: S.me.id, category: d.category, urgency: d.urgency, duration_hrs: d.hours,
+    const row = await api.createRequest({ customer_id: S.me.id, category: d.category, service: d.service || "photo", urgency: d.urgency, duration_hrs: d.hours,
       city: loc.city, state: loc.state, pincode: loc.pincode, budget: d.budget, deliverables: d.deliverables, notes: (d.notes||"").trim(),
       start_at: start.toISOString(), expires_at: expires.toISOString() });
     S.d.requests.unshift(row); S.d.offers[row.id] = [];
@@ -2455,6 +2471,7 @@ function vRequest(p){
     <div class="card mt16">
       <div class="sec-title">Your request</div>
       <div class="kv"><span>Shoot</span><span>${esc(cat.name)}</span></div>
+      <div class="kv"><span>Wants</span><span>${esc(svcName(r.service))}</span></div>
       <div class="kv"><span>When</span><span>${whenStr(r.start_at)}</span></div>
       <div class="kv"><span>Duration</span><span>${r.duration_hrs} hr${r.duration_hrs>1?'s':''}</span></div>
       <div class="kv"><span>Where</span><span>${esc(r.city||"")} ${esc(r.pincode||"")}</span></div>
@@ -2476,6 +2493,7 @@ function offerCard(r, o, soon, best){
         <div class="row gap6"><span class="bold">${esc(pg.display_name || o.photographer_name)}</span>${pg.is_verified ? icon("shield",13,"var(--blue)") : ""}</div>
         <div class="xs mt2">${ratingHtml(pg)}</div>
         <div class="xs muted2 mt2">${pgMeta(pg)}</div>
+        ${gearLine(pg)}
       </div>
       <div class="stack right"><div class="h3 ${over?'':'green'}">${inr(o.price)}</div><div class="xs muted2">${over ? inr(o.price - r.budget) + " over budget" : "within budget"}</div></div>
     </button>
@@ -2496,7 +2514,7 @@ async function cancelRequest(id){
 }
 function repostRequest(id){
   const r = S.d.requests.find(x => x.id === id); if(!r) return;
-  S.draft = { urgency: "3h", category: r.category, hours: r.duration_hrs, deliverables: r.deliverables || [], custom: "", budget: r.budget, notes: r.notes || "", step: 1 };
+  S.draft = { urgency: "3h", category: r.category, service: r.service || "photo", hours: r.duration_hrs, deliverables: r.deliverables || [], custom: "", budget: r.budget, notes: r.notes || "", step: 1 };
   locInit("req", { city: r.city, state: r.state, pincode: r.pincode });
   replaceStack("newRequest");
 }
@@ -2826,7 +2844,7 @@ function earnings(){
 function reqCardPg(r, compact){
   const cat = catById(r.category), mine = myOfferFor(r.id);
   return `<div class="card req-card mt12">
-    <div class="between"><div class="row gap8">      <div><div class="bold sm">${esc(cat.name)} · ${r.duration_hrs} hr${r.duration_hrs>1?'s':''}</div>
+    <div class="between"><div class="row gap8">      <div><div class="bold sm">${esc(cat.name)} · ${esc(svcName(r.service))} · ${r.duration_hrs} hr${r.duration_hrs>1?'s':''}</div>
         <div class="xs muted2">${esc(r.customer_name||"Customer")} · ${esc(r.city||"")} ${esc(r.pincode||"")}</div></div></div>
       <div class="stack right"><div class="bold sm">${inr(r.budget)}</div><div class="xs muted2">budget</div></div></div>
     <div class="row gap8 mt8 xs muted">${icon("calendar",13)} ${whenStr(r.start_at)} <span class="muted2">·</span> <span data-until="${esc(r.expires_at)}">${leftStr(r.expires_at)}</span> to quote</div>
@@ -2835,6 +2853,7 @@ function reqCardPg(r, compact){
     ${!compact && r.notes ? `<div class="quote mt8">“${esc(r.notes)}”</div>` : ""}
     ${!compact ? `<div class="right mt6">${safetyLink(r.customer_id, r.customer_name, "request", r.id)}</div>` : ""}
     ${mine ? `<div class="row gap8 mt12"><span class="chip green">You quoted ${inr(mine.price)}</span><div class="grow"></div><button class="btn sm" onclick="withdrawOffer('${mine.id}')">Withdraw</button></div>`
+      : !svcOk(S.pg && S.pg.services, r.service) ? `<div class="card soft mt12 xs">They want <b>${esc(svcName(r.service).toLowerCase())}</b> — you offer ${esc(svcName(S.pg && S.pg.services).toLowerCase())} only. <button class="linkish accent" onclick="push('editPg')"><b>Change what you offer</b></button></div>`
       : `<div class="row gap8 mt12"><button class="btn sm grow" onclick="passRequest('${r.id}')">Not for me</button>
          <button class="btn sm primary grow" onclick="push('quote',{id:'${r.id}'})">Send a quote</button></div>`}
   </div>`;
@@ -3002,6 +3021,7 @@ function vQuote(p){
     <div class="card">
       <div class="kv"><span>Customer</span><span>${esc(r.customer_name||"Customer")}</span></div>
       <div class="kv"><span>Shoot</span><span>${esc(cat.name)}, ${r.duration_hrs} hr${r.duration_hrs>1?'s':''}</span></div>
+      <div class="kv"><span>They want</span><span class="bold">${esc(svcName(r.service))}</span></div>
       <div class="kv"><span>When</span><span>${whenStr(r.start_at)}</span></div>
       <div class="kv"><span>Area</span><span>${esc(r.city||"")} ${esc(r.pincode||"")}</span></div>
       <div class="kv"><span>Their budget</span><span class="bold">${inr(r.budget)}</span></div>
@@ -3128,7 +3148,8 @@ function pgProfileExtras(){
     <button class="li" onclick="push('agreement')">${icon("doc",18,typeof agreementOk === "function" && !agreementOk() && S.agr ? "var(--red)" : "var(--muted)")}<div class="grow"><div class="sm bold">Partner Agreement</div><div class="xs muted2">${typeof agreementLabel === "function" ? agreementLabel() : ""}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
     <button class="li" onclick="push('payouts')">${icon("wallet",18,"var(--muted)")}<div class="grow"><div class="sm bold">Payouts</div><div class="xs muted2">${S.myPay && !S.myPay.err ? inr(Number(S.myPay.ready || 0) + Number(S.myPay.held || 0)) + " waiting · " + (S.myPay.payouts || []).length + " received" : "Money waiting and payouts received"}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
     <button class="li" onclick="push('editPayout')">${icon("edit",18,"var(--muted)")}<div class="grow"><div class="sm bold">Payout details</div><div class="xs muted2">${S.payout && S.payout.upi_id ? esc(S.payout.upi_id) : "Add the UPI ID we pay you on"}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
-    <button class="li" onclick="push('editPg')">${icon("edit",18,"var(--muted)")}<div class="grow"><div class="sm bold">Bio, shoot types and rates</div><div class="xs muted2">${(pg.categories||[]).map(c => esc(catById(c).name)).join(", ") || "Not set"}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
+    <button class="li" onclick="push('editPg')">${icon("edit",18,"var(--muted)")}<div class="grow"><div class="sm bold">Bio, shoot types and rates</div><div class="xs muted2">${esc(svcName(pg.services))} · ${(pg.categories||[]).map(c => esc(catById(c).name)).join(", ") || "Not set"}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
+    <button class="li" onclick="openGear()">${icon("cam",18,(pg.gear||[]).length ? "var(--muted)" : "var(--red)")}<div class="grow"><div class="sm bold">Your gear</div><div class="xs muted2">${(pg.gear||[]).length ? (pg.gear||[]).length + " item" + ((pg.gear||[]).length === 1 ? "" : "s") + " · " + (gearKind(pg) === "pro" ? "Professional camera" : gearKind(pg) === "phone" ? "Phone" : "Other gear") : "Not listed — customers check this before booking"}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
   </div>`;
 }
 function vPortfolio(){
@@ -3149,7 +3170,7 @@ function vPortfolio(){
 }
 function vEditPg(){
   const pg = S.pg || {};
-  if(!S.editPg) S.editPg = { bio: pg.bio || "", cats: (pg.categories||[]).slice(), years: pg.years_exp || 0, pm: Number(pg.price_multiplier) || 1, travel: pg.travel || "city" };
+  if(!S.editPg) S.editPg = { services: pg.services || "photo", bio: pg.bio || "", cats: (pg.categories||[]).slice(), years: pg.years_exp || 0, pm: Number(pg.price_multiplier) || 1, travel: pg.travel || "city" };
   const d = S.editPg;
   return `${topbar("Your details")}
   <div class="pad">
@@ -3157,6 +3178,8 @@ function vEditPg(){
       <textarea id="epBio" class="input" rows="4" maxlength="600" oninput="S.editPg.bio=this.value">${esc(d.bio)}</textarea></div>
     <div class="field"><label>Years of experience — <span id="epYrs">${d.years}</span></label>
       <input type="range" min="0" max="30" value="${d.years}" oninput="S.editPg.years=+this.value;setHtml('epYrs',this.value)"></div>
+    ${svcPicker(d.services, "S.editPg.services")}
+    <button class="li card mb12" onclick="openGear()">${icon("cam",18,"var(--accent)")}<div class="grow"><div class="sm bold">Your gear</div><div class="xs muted2">${(pg.gear||[]).length ? (pg.gear||[]).length + " item" + ((pg.gear||[]).length === 1 ? "" : "s") + " listed" : "Camera, lenses, phone model, drone…"}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
     <div class="field"><label>Types of shoot <span class="muted2">(pick as many as you like)</span></label>
       <div class="grid3">${CATEGORIES.map(c => `<button class="u-card ${d.cats.includes(c.id)?'on':''}" onclick="epCat('${c.id}')"><div class="u-t">${esc(c.name)}</div></button>`).join("")}</div></div>
     <div class="field"><label>Your rates vs typical — <span id="epPm">${Math.round(d.pm*100)}</span>%</label>
@@ -3184,12 +3207,12 @@ async function setTravel(v){
 async function saveEditPg(){
   const d = S.editPg;
   if(!d.cats.length){ setHtml("formErr", errHtml("Pick at least one type of shoot.")); return; }
-  try{ await api.savePg({ bio: d.bio.trim(), categories: d.cats, years_exp: d.years, price_multiplier: d.pm, travel: d.travel || "city" }); S.editPg = null; toast("Profile updated", "", "check"); pop(); }
+  try{ await api.savePg({ services: d.services || "photo", bio: d.bio.trim(), categories: d.cats, years_exp: d.years, price_multiplier: d.pm, travel: d.travel || "city" }); S.editPg = null; toast("Profile updated", "", "check"); pop(); }
   catch(e){ setHtml("formErr", errHtml(e.message)); }
 }
 
 /* ---------- waiting for approval ---------- */
-const WAITING_OK = ["portfolio","editPg","editLoc","editName","pg","photo","editPayout","storage","kyc","agreement"];
+const WAITING_OK = ["gear","portfolio","editPg","editLoc","editName","pg","photo","editPayout","storage","kyc","agreement"];
 function vPgReview(){
   if(typeof loadAgreement === "function") loadAgreement();
   const pg = S.pg || {}, photos = (pg.portfolio || []).length, rejected = pg.approval_status === "rejected";
@@ -3199,6 +3222,7 @@ function vPgReview(){
     [!!(pg.city && pg.pincode), "Location added" + (pg.city ? " — " + esc(pg.city) : "")],
     [!!cats, "Shoot types chosen" + (cats ? " — " + cats : "")],
     [!!(pg.bio && pg.bio.trim().length >= 20), "Short bio written"],
+    [!!(pg.gear || []).length, (pg.gear || []).length ? "Gear listed — " + (pg.gear || []).length + " item" + ((pg.gear || []).length === 1 ? "" : "s") : `<a class="linkish accent bold" onclick="openGear()">List your gear (camera / phone model)</a>`],
     [photos >= 6, photos >= 6 ? photos + " portfolio photos" : "Portfolio photos (" + photos + " of at least 6)"],
     [typeof agreementOk === "function" && agreementOk(), typeof agreementOk === "function" && agreementOk() ? "Partner Agreement accepted" : `<a class="linkish accent bold" onclick="push('agreement')">Accept the Partner Agreement</a>`],
     [kycDone(), S.kyc && S.kyc.status === "verified" ? "ID & face verified" : S.kyc && S.kyc.status === "submitted" ? "ID & face photo submitted — being checked" : S.kyc && S.kyc.status === "rejected" ? "ID check — please re-do" : "Verify your ID & face (required)"]
@@ -4451,6 +4475,8 @@ function photographerActions(){
     out.push({ key: "ph", ic: "image", tone: "",
       title: ph ? `Add ${6 - ph} more portfolio photo${6 - ph === 1 ? "" : "s"}` : "Add portfolio photos",
       sub: "Customers compare portfolios before they book", btn: "Add", go: `push('portfolio')` });
+  if(pg.id && !(pg.gear || []).length)
+    out.push({ key: "gear", ic: "cam", tone: "", title: "List your camera / phone and gear", sub: "Customers check what you shoot with before they book", btn: "Add", go: `openGear()` });
   return out;
 }
 
@@ -5717,6 +5743,134 @@ function addrRemember(key){
   S.prefs.lastAddr = { type: a.type, f: Object.assign({}, a.f) }; savePrefs();
 }
 
+/* ===================== PHOTO / VIDEO / BOTH + GEAR =====================
+   Photographers say whether they shoot photos, video or both, and list their gear
+   (camera, lenses, phone model, drone…). Customers see it on every card, quote and
+   profile ("Sony A7 IV + 2 lenses · Drone" or "Shoots on phone · iPhone 15 Pro"),
+   can filter by it, and say what they want when posting a shoot. */
+
+const SERVICES = [["photo", "Photos", "cam"], ["video", "Video", "play"], ["both", "Photos + video", "star"]];
+const SVC_MULT = { photo: 1, video: 1.3, both: 1.8 };   /* typical price guide only */
+const svcName = s => (SERVICES.find(x => x[0] === s) || SERVICES[0])[1];
+const svcOk = (pg, req) => (pg || "photo") === "both" || (pg || "photo") === (req || "photo");
+const DELIV_BY = {
+  photo: ["Edited photos", "RAW files", "Same-day preview", "Drone shots", "Prints"],
+  video: ["Edited video", "Video reel", "Raw footage", "Drone shots"],
+  both:  ["Edited photos", "Edited video", "Video reel", "RAW files", "Raw footage", "Same-day preview", "Drone shots", "Prints"]
+};
+const GEAR_TYPES = [
+  ["camera", "Camera body", "e.g. Sony A7 IV, Canon R6, Nikon Z6 II"],
+  ["lens", "Lens", "e.g. 24-70mm f/2.8, 85mm f/1.8"],
+  ["phone", "Mobile phone", "e.g. iPhone 15 Pro Max, Samsung S24 Ultra"],
+  ["drone", "Drone", "e.g. DJI Mini 4 Pro"],
+  ["gimbal", "Gimbal / stabiliser", "e.g. DJI RS 3"],
+  ["light", "Lights / flash", "e.g. Godox V1 flash, LED panel"],
+  ["mic", "Microphone", "e.g. Rode Wireless GO II"],
+  ["other", "Other", "e.g. tripod, backdrop, spare batteries"]
+];
+const gearType = t => GEAR_TYPES.find(g => g[0] === t) || GEAR_TYPES[7];
+const gearOf = (pg, t) => ((pg && pg.gear) || []).filter(g => !t || g.t === t);
+/* "pro" = has a camera body, "phone" = phone only, "" = nothing listed */
+function gearKind(pg){ return gearOf(pg, "camera").length ? "pro" : gearOf(pg, "phone").length ? "phone" : ""; }
+
+/* one short line for cards and quotes */
+function gearLine(pg){
+  const cams = gearOf(pg, "camera"), phones = gearOf(pg, "phone"), lenses = gearOf(pg, "lens").length;
+  const extras = ["drone", "gimbal", "light", "mic"].filter(t => gearOf(pg, t).length).map(t => ({ drone: "Drone", gimbal: "Gimbal", light: "Lights", mic: "Mic" })[t]);
+  let main;
+  if(cams.length) main = `${icon("cam", 12, "var(--accent)")} <b>${esc(cams[0].m)}</b>${cams.length > 1 ? " +" + (cams.length - 1) + " camera" + (cams.length > 2 ? "s" : "") : ""}${lenses ? " · " + lenses + " lens" + (lenses > 1 ? "es" : "") : ""}`;
+  else if(phones.length) main = `${icon("phone", 12, "var(--muted)")} Shoots on phone · <b>${esc(phones[0].m)}</b>`;
+  else main = `<span class="muted2">Gear not listed yet</span>`;
+  return `<div class="gear-line xs mt4">${main}${extras.length ? ` <span class="muted2">·</span> ${extras.join(" · ")}` : ""}</div>`;
+}
+function svcChip(s){ const x = SERVICES.find(v => v[0] === (s || "photo")) || SERVICES[0]; return `<span class="chip svc">${icon(x[2], 11)} ${esc(x[1])}</span>`; }
+
+/* the full gear list on a profile */
+function gearSectionHtml(pg){
+  const list = gearOf(pg), kind = gearKind(pg);
+  const head = `<div class="sec-title mt24">What ${esc(firstName(pg.display_name))} offers & their gear</div>
+    <div class="card"><div class="kv"><span>Shoots</span><span class="bold">${esc(svcName(pg.services))}</span></div>
+    <div class="kv"><span>Shoots on</span><span class="bold">${kind === "pro" ? "Professional camera" : kind === "phone" ? "Mobile phone" : "Not listed"}</span></div>`;
+  if(!list.length) return head + `<div class="xs muted2 mt8">They haven't listed their gear yet. After they quote, you can ask in chat before you book.</div></div>`;
+  return head + GEAR_TYPES.filter(([t]) => gearOf(pg, t).length).map(([t, l]) =>
+    `<div class="gear-row"><div class="xs muted2">${esc(l)}</div><div class="sm">${gearOf(pg, t).map(g => esc(g.m)).join("<br>")}</div></div>`).join("")
+    + `<div class="xs muted2 mt8">Listed by the photographer.</div></div>`;
+}
+
+/* ---------- photographer: what you offer (sign-up + edit) ---------- */
+function svcPicker(cur, target){
+  return `<div class="field"><label>Do you shoot photos, video or both?</label>
+    <div class="grid3">${SERVICES.map(([k, l, ic]) => `<button type="button" class="u-card ${cur === k ? "on" : ""}" aria-pressed="${cur === k}" onclick="${target}='${k}';render()">
+      ${icon(ic, 18)}<div class="u-t">${l}</div></button>`).join("")}</div>
+    <div class="xs muted2 mt6">You'll only get requests for what you pick.</div></div>`;
+}
+
+/* ---------- photographer: gear editor ---------- */
+function vGear(){
+  const pg = S.pg || {};
+  if(!S.gearEdit) S.gearEdit = (pg.gear || []).map(g => ({ t: g.t, m: g.m }));
+  const L = S.gearEdit;
+  return `${topbar("Your gear", "Customers see this before booking")}
+  <div class="pad">
+    ${hint("gear", "List what you shoot with — camera body and model, lenses, drone, lights. If you shoot on a phone, add the phone model. Customers compare this with your price.")}
+    ${L.length ? `<div class="stack gap8 mt12">${L.map((g, i) => `<div class="card gear-edit">
+        <div class="between"><span class="xs bold">${esc(gearType(g.t)[1])}</span>
+          <button class="iconbtn sm" aria-label="Remove" onclick="gearDel(${i})">${icon("trash", 15, "var(--muted)")}</button></div>
+        <input id="gear_${i}" class="input mt6" maxlength="60" placeholder="${esc(gearType(g.t)[2])}" value="${esc(g.m)}" oninput="S.gearEdit[${i}].m=this.value;setHtml('formErr','')">
+      </div>`).join("")}</div>`
+      : `<div class="card soft mt12 sm muted">Nothing listed yet. Tap what you have below.</div>`}
+    <div class="field mt16"><label>Add</label>
+      <div class="chips">${GEAR_TYPES.map(([t, l]) => `<button class="chip" onclick="gearAdd('${t}')">${icon("plus", 11)} ${esc(l)}</button>`).join("")}</div></div>
+    <button class="btn primary block mt16" ${S.loading.gear ? "disabled" : ""} onclick="saveGear()">${S.loading.gear ? "Saving…" : "Save gear"}</button>
+    <div id="formErr"></div>
+  </div>`;
+}
+function gearAdd(t){
+  if(S.gearEdit.length >= 30){ setHtml("formErr", errHtml("You can list up to 30 items.")); return; }
+  S.gearEdit.push({ t, m: "" }); render();
+  setTimeout(() => { const x = el("gear_" + (S.gearEdit.length - 1)); if(x) x.focus(); }, 30);
+}
+function gearDel(i){ S.gearEdit.splice(i, 1); render(); }
+async function saveGear(){
+  const L = S.gearEdit.map(g => ({ t: g.t, m: (g.m || "").trim().replace(/\s+/g, " ") })).filter(g => g.m || g.t);
+  const bad = L.findIndex(g => g.m.length < 2);
+  if(bad >= 0){ setHtml("formErr", errHtml("Write the make and model for “" + gearType(L[bad].t)[1] + "” — or remove it.")); return; }
+  S.loading.gear = true; render();
+  try{ await api.savePg({ gear: L }); S.loading.gear = false; S.gearEdit = null; toast("Gear saved", "Customers can now see it on your profile", "check"); pop(); }
+  catch(e){ S.loading.gear = false; render(); setHtml("formErr", errHtml(e.message)); }
+}
+
+/* ---------- customer: what do you want? (post a shoot) ---------- */
+function reqSvc(s){
+  const d = S.draft; d.service = s;
+  const ok = DELIV_BY[s];
+  d.deliverables = d.deliverables.filter(x => ok.includes(x));
+  if(s === "both") ["Edited photos", "Edited video"].forEach(x => { if(!d.deliverables.includes(x)) d.deliverables.push(x); });
+  if(!d.deliverables.length) d.deliverables = s === "video" ? ["Edited video"] : s === "both" ? ["Edited photos", "Edited video"] : ["Edited photos"];
+  render();
+}
+function reqSvcHtml(d){
+  return `<div class="field mt16"><label>Do you want photos, video or both?</label>
+    <div class="grid3">${SERVICES.map(([k, l, ic]) => `<button class="u-card ${(d.service || "photo") === k ? "on" : ""}" aria-pressed="${(d.service || "photo") === k}" onclick="reqSvc('${k}')">${icon(ic, 18)}<div class="u-t">${l}</div></button>`).join("")}</div>
+    ${d.service === "both" ? `<div class="xs muted2 mt6">One person who does both will cover your shoot.</div>` : ""}</div>`;
+}
+
+/* ---------- customer: explore filters ---------- */
+function exGearOk(p, f){
+  if(f.svc && f.svc !== "all" && !svcOk(p.services, f.svc)) return false;
+  const k = gearKind(p);
+  if(f.gear === "pro" && k !== "pro") return false;
+  if(f.gear === "phone" && k !== "phone") return false;
+  if(f.gear === "drone" && !gearOf(p, "drone").length) return false;
+  return true;
+}
+function exGearChips(f){
+  const c = (k, v, l) => `<button class="chip ${(f[k] || "all") === v ? "accent" : ""}" onclick="exSet('${k}','${v}')">${l}</button>`;
+  return `<div class="hscroll mt8">${c("svc", "all", "Photo or video")}${c("svc", "photo", icon("cam", 11) + " Photos")}${c("svc", "video", icon("play", 11) + " Video")}${c("svc", "both", "Photos + video")}
+    <span class="chip-sep"></span>${c("gear", "all", "Any gear")}${c("gear", "pro", "Pro camera")}${c("gear", "drone", "Has drone")}${c("gear", "phone", "Shoots on phone")}</div>`;
+}
+function openGear(){ S.gearEdit = null; push("gear"); }
+
 /* ============================================================
    NAVIGATION
    ============================================================ */
@@ -5726,7 +5880,7 @@ const STACK_VIEWS = { pg: vPgProfile, photo: vPhoto, newRequest: vNewRequest, re
                       booking: vBooking, rate: vRate, chat: vChat, editName: vEditName, editLoc: vEditLoc,
                       quote: vQuote, job: vJob, portfolio: vPortfolio, editPg: vEditPg,
                       payResult: vPayResult, editPayout: vEditPayout,
-                      pgEarnings: vPgEarnings, pgDone: vPgDone, pgReviews: vPgReviews, how: vHow, storage: vStorage, rewards: vRewards, invite: vInvite, kyc: vKyc, deleteAccount: vDeleteAccount, receipt: vReceipt, busyNew: vBusyNew,
+                      pgEarnings: vPgEarnings, pgDone: vPgDone, pgReviews: vPgReviews, how: vHow, storage: vStorage, rewards: vRewards, invite: vInvite, kyc: vKyc, deleteAccount: vDeleteAccount, receipt: vReceipt, busyNew: vBusyNew, gear: vGear,
                       report: vReport, blockedPeople: vBlockedPeople, payouts: vMyPayouts, payoutSlip: vPayoutSlip, agreement: vAgreement, gallery: vGallery, editPhone: vEditPhone };
 const CUST_TABS = [ ["home","Home","home",vCustHome], ["explore","Explore","search",vExplore], ["activity","My shoots","calendar",vActivity], ["messages","Messages","chat",vMessages], ["profile","Profile","user",vProfile] ];
 const PG_TABS   = [ ["home","Home","home",vPgHome], ["requests","Requests","bolt",vPgRequests], ["calendar","Calendar","calendar",vCalendar], ["jobs","My shoots","list",vJobs], ["messages","Messages","chat",vMessages], ["profile","Profile","user",vProfile] ];

@@ -5277,10 +5277,11 @@ begin
               where g.approval_status = 'approved' and g.is_online and g.id <> r.customer_id
                 and not public.is_blocked(g.id) and not public._blocked_pair(g.id, r.customer_id)
                 and (cardinality(coalesce(g.categories, '{}')) = 0 or r.category = any(g.categories))
+                and public._svc_ok(g.services, r.service)
                 and public._pg_covers(g.travel, coalesce(g.city, p.city), coalesce(g.state, p.state), r.city, r.state)
                 and exists (select 1 from public.push_subscriptions s where s.user_id = g.id)
               limit 300 loop
-      perform public._push(b.id, 'request', 'New ' || public._cat_name(r.category) || ' shoot in ' || coalesce(r.city, 'your area'),
+      perform public._push(b.id, 'request', 'New ' || public._cat_name(r.category) || case r.service when 'video' then ' video' when 'both' then ' photo + video' else '' end || ' shoot in ' || coalesce(r.city, 'your area'),
         'Budget ₹' || to_char(r.budget, 'FM99,99,99,999') || ' · ' || public._when(r.start_at) || '. Send your price before it closes.',
         '/app.html?open=quote&id=' || r.id, 'req-' || r.id);
     end loop;
@@ -6571,6 +6572,87 @@ grant execute on function public.push_register_fcm(text, text) to authenticated;
 grant execute on function public.push_unregister_fcm(text)     to authenticated;
 -- <<< 8o app notifications
 
+-- >>> 8p gear
+-- =====================================================================
+-- 8p. PHOTO / VIDEO / BOTH + GEAR
+--     Photographers say whether they shoot photos, video or both, and list
+--     their gear (camera bodies, lenses, phone model, drone, gimbal, lights,
+--     mic…). Customers say whether they want photos, video or both; only
+--     photographers who offer that are alerted and can quote.
+-- =====================================================================
+alter table public.photographers
+  add column if not exists services text  not null default 'photo',
+  add column if not exists gear     jsonb not null default '[]'::jsonb;
+alter table public.requests
+  add column if not exists service  text  not null default 'photo';
+alter table public.photographers drop constraint if exists photographers_services_check;
+alter table public.photographers add constraint photographers_services_check check (services in ('photo','video','both'));
+alter table public.requests drop constraint if exists requests_service_check;
+alter table public.requests add constraint requests_service_check check (service in ('photo','video','both'));
+
+-- does a photographer who offers PG cover a request that wants REQ?
+create or replace function public._svc_ok(pg text, req text)
+returns boolean language sql immutable
+as $$ select coalesce(pg, 'photo') = 'both' or coalesce(pg, 'photo') = coalesce(req, 'photo') $$;
+
+create or replace function public._svc_name(s text)
+returns text language sql immutable
+as $$ select case s when 'video' then 'Video' when 'both' then 'Photo + video' else 'Photo' end $$;
+
+-- gear is a list of {"t": type, "m": "model / description"}; tidy and check it
+create or replace function public._clean_gear(g jsonb)
+returns jsonb language plpgsql immutable
+as $$
+declare x jsonb; t text; m text; out jsonb := '[]'::jsonb;
+begin
+  if g is null or g = 'null'::jsonb then return '[]'::jsonb; end if;
+  if jsonb_typeof(g) <> 'array' then raise exception 'Gear list is in the wrong format'; end if;
+  if jsonb_array_length(g) > 30 then raise exception 'You can list up to 30 items of gear'; end if;
+  for x in select * from jsonb_array_elements(g) loop
+    if jsonb_typeof(x) <> 'object' then raise exception 'Gear list is in the wrong format'; end if;
+    t := x->>'t';
+    m := regexp_replace(trim(coalesce(x->>'m', '')), '[[:cntrl:]]', '', 'g');
+    m := regexp_replace(m, '\s+', ' ', 'g');
+    if t is null or t not in ('camera','phone','lens','drone','gimbal','light','mic','other') then raise exception 'Unknown type of gear'; end if;
+    if length(m) < 2 then raise exception 'Write the make and model of each item of gear'; end if;
+    if length(m) > 60 then raise exception 'Keep each gear item under 60 letters'; end if;
+    out := out || jsonb_build_array(jsonb_build_object('t', t, 'm', m));
+  end loop;
+  return out;
+end $$;
+
+create or replace function public.photographer_gear_guard()
+returns trigger language plpgsql
+as $$
+begin
+  new.gear := public._clean_gear(new.gear);
+  new.services := coalesce(new.services, 'photo');
+  return new;
+end $$;
+drop trigger if exists photographer_gear_guard on public.photographers;
+create trigger photographer_gear_guard before insert or update of gear, services on public.photographers
+  for each row execute function public.photographer_gear_guard();
+
+-- a photographer can only quote on what they offer (e.g. no video quotes from photo-only)
+create or replace function public.offer_service_guard()
+returns trigger language plpgsql security definer set search_path = public
+as $$
+declare want text; have text;
+begin
+  if public.snappro_system() then return new; end if;
+  select service into want from public.requests where id = new.request_id;
+  select services into have from public.photographers where id = new.photographer_id;
+  if not public._svc_ok(have, want) then
+    raise exception 'This customer wants %. Add it to what you offer first (Profile → Your details).',
+      case want when 'video' then 'video' when 'both' then 'photos and video' else 'photos' end;
+  end if;
+  return new;
+end $$;
+drop trigger if exists offer_service_guard on public.offers;
+create trigger offer_service_guard before insert on public.offers
+  for each row execute function public.offer_service_guard();
+-- <<< 8p gear
+
 -- =====================================================================
 -- 9. ONE-OFF CLEAN-UP
 -- =====================================================================
@@ -6658,4 +6740,5 @@ select
   (select count(*) = 4 from information_schema.tables where table_schema = 'public' and table_name in ('payouts','payout_lines','payout_holds','doc_counters'))   as payouts_ready,
   exists (select 1 from pg_proc where proname = 'accept_partner_agreement')   as agreement_ready,
   exists (select 1 from pg_trigger where tgname = 'profiles_phone_check')   as phone_ready,
-  exists (select 1 from pg_proc where proname = 'push_register_fcm')   as app_push_ready;
+  exists (select 1 from pg_proc where proname = 'push_register_fcm')   as app_push_ready,
+  (select count(*) = 3 from information_schema.columns where table_schema='public' and ((table_name='photographers' and column_name in ('services','gear')) or (table_name='requests' and column_name='service')))   as gear_ready;
