@@ -1173,7 +1173,7 @@ async function q(promise){
   return res ? res.data : null;
 }
 
-const PG_COLS = "id,display_name,city,state,pincode,bio,categories,years_exp,price_multiplier,rating,review_count,jobs_done,is_online,is_verified,portfolio,created_at,approval_status,review_note,featured_until,travel,services,gear";
+const PG_COLS = "id,display_name,city,state,pincode,bio,categories,years_exp,price_multiplier,rating,review_count,jobs_done,is_online,is_verified,portfolio,created_at,approval_status,review_note,featured_until,travel,travel_km,services,gear";
 const REQ_COLS = "id,customer_id,customer_name,category,urgency,duration_hrs,city,state,pincode,budget,deliverables,notes,status,start_at,expires_at,created_at,service";
 const BK_COLS = "id,request_id,offer_id,customer_id,photographer_id,customer_name,photographer_name,category,start_at,duration_hrs,city,pincode,address,price,status,created_at,updated_at,commission_pct,commission_amount,photographer_amount,payment_status,paid_at,payout_status,payout_at,cancelled_from,cancelled_by,advance_amount,balance_amount,balance_status,balance_paid_at,discount_amount,call_token";
 
@@ -1248,7 +1248,7 @@ const api = {
   /* ---- photographer ---- */
   async openRequests(){
     return q(sb.from("requests").select(REQ_COLS).eq("status","broadcasting").gt("expires_at", new Date().toISOString())
-      .neq("customer_id", S.me.id).order("created_at", {ascending:false}).limit(60));
+      .neq("customer_id", S.me.id).order("created_at", {ascending:false}).limit(200));
   },
   async myOffers(){
     /* with what happened to each quote (open / chosen / booked / closed) */
@@ -1417,7 +1417,7 @@ const REGIONS = {
   mumbai: ["mumbai","thane","navi mumbai","kalyan","vasai-virar","panvel"],
   tricity: ["chandigarh","mohali","panchkula"], hyderabad: ["hyderabad","secunderabad"], kolkata: ["kolkata","howrah"]
 };
-const TRAVEL = [["city","Only my city"],["nearby","Nearby cities"],["anywhere","Anywhere in India"]];
+const TRAVEL = [["city","Only my city"],["km","Within a distance"],["state","Anywhere in my state"],["anywhere","Anywhere in India"]];
 const lc = v => String(v || "").trim().toLowerCase();
 function regionOf(city, state){ const c = lc(city); for(const k in REGIONS) if(REGIONS[k].includes(c)) return k; return "state:" + lc(state); }
 const REGION_NAMES = { ncr: "Delhi NCR", mumbai: "Mumbai area", tricity: "Chandigarh tricity", hyderabad: "Hyderabad", kolkata: "Kolkata area" };
@@ -1432,7 +1432,10 @@ function pgCovers(pg, city, state){
   if(!pg) return false;
   const t = pg.travel || "city";
   if(t === "anywhere" || !city || !pg.city || lc(pg.city) === lc(city)) return true;
-  return t === "nearby" && regionOf(pg.city, pg.state) === regionOf(city, state);
+  if(t === "nearby") return regionOf(pg.city, pg.state) === regionOf(city, state);
+  if(t === "state") return lc(pg.state) === lc(state) || regionOf(pg.city, pg.state) === regionOf(city, state);
+  if(t === "km"){ const d = cityKm(pg.city, city); return d == null ? regionOf(pg.city, pg.state) === regionOf(city, state) : d <= (pg.travel_km || 50); }
+  return false;
 }
 /* a photographer from another city who'll come to this one */
 const travelsTo = (pg, city, state) => !!(pg && city && pg.city && lc(pg.city) !== lc(city) && pgCovers(pg, city, state));
@@ -2082,7 +2085,7 @@ function vSetupPg(){
       <div class="h2">Where you work</div>
       <div class="sm muted mt4">You'll see requests from customers in your city — and further, if you travel.</div>
       <div class="mt16">${locFieldsHtml("setup")}</div>
-      ${travelField(d.travel || "city", "S.auth.draft.travel", (locValue("setup") || {}).city, (locValue("setup") || {}).state)}
+      ${travelField(d.travel || "city", "S.auth.draft.travel", (locValue("setup") || {}).city, (locValue("setup") || {}).state, d.travel_km)}
       <div class="field"><label>Your rates vs typical — <span id="pmVal">${Math.round(d.priceMult*100)}</span>%</label>
         <input type="range" min="0.6" max="2" step="0.05" value="${d.priceMult}" oninput="S.auth.draft.priceMult=+this.value;setHtml('pmVal',Math.round(this.value*100));setHtml('pmPrices',pgPricePreview())">
         <div class="between xs muted2"><span>Budget</span><span>Typical</span><span>Premium</span></div></div>
@@ -2114,7 +2117,7 @@ async function saveSetupPg(){
   try{
     await api.saveProfile(Object.assign({ name, phone: normPhone(d.phone), role: "photographer" }, loc));
     await api.savePg({ display_name: name, bio: (d.bio||"").trim(), categories: d.cats, services: d.services || "photo", years_exp: d.years,
-                       price_multiplier: d.priceMult, city: loc.city, state: loc.state, pincode: loc.pincode, travel: d.travel || "city", is_online: true }, !S.pg);
+                       price_multiplier: d.priceMult, city: loc.city, state: loc.state, pincode: loc.pincode, travel: d.travel || "city", travel_km: d.travel_km || 50, is_online: true }, !S.pg);
     S.auth.busy = false;
     toast("Profile sent for review", "Add photos of your work while you wait", "cam");
     enterApp();
@@ -2311,7 +2314,7 @@ function vPgProfile(p){
     <div class="row gap6 mt12"><span class="h2">${esc(pg.display_name)}</span>${pg.is_verified ? icon("shield",16,"var(--blue)") : ""}${isFeatured(pg) ? `<span class="feat">★ Featured</span>` : ""}</div>
     <div class="sm mt4">${ratingHtml(pg)} ${pg.is_online ? `<span class="chip green">Available</span>` : `<span class="chip">Away</span>`}</div>
     <div class="xs muted2 mt4">${pgMeta(pg)}</div>
-    ${(pg.travel || "city") !== "city" ? `<div class="xs mt4">${icon("pin",11,"var(--accent)")} Travels for shoots: <b>${pg.travel === "anywhere" ? "anywhere in India" : esc(nearbyText(pg.city, pg.state))}</b></div>` : ""}
+    ${(pg.travel || "city") !== "city" ? `<div class="xs mt4">${icon("pin",11,"var(--accent)")} Travels for shoots: <b>${esc(travelText(pg))}</b></div>` : ""}
     ${blocked ? `<div class="card soft mt12 sm">You've blocked ${esc(firstName(pg.display_name))}. <button class="linkish accent" onclick="push('blockedPeople')"><b>Manage blocked people</b></button></div>` : ""}
     ${pg.bio ? `<p class="sm muted mt12 prose">${esc(pg.bio)}</p>` : ""}
     <div class="chips mt12">${svcChip(pg.services)}${(pg.categories||[]).map(c => `<span class="chip accent">${esc(catById(c).name)}</span>`).join("")}</div>
@@ -2356,6 +2359,7 @@ function draftStart(){
 }
 function vNewRequest(){
   const d = S.draft; if(!d){ setTimeout(pop,0); return ""; }
+  if(hasUpi(false) !== true) return `${topbar("Post a shoot")}${upiGateHtml("request")}`;
   const st = d.step, start = draftStart();
   const est = d.category ? suggestedPrice(d.category, d.hours, d.urgency, SVC_MULT[d.service || "photo"] || 1) : 0;
   if(st === 3 && !d.budget) d.budget = est || 3000;
@@ -2779,6 +2783,7 @@ function vProfile(){
     <div class="sec-title mt20">Your account</div>
     <div class="card list">
       <button class="li" onclick="push('editPhone')">${icon("phone",18,"var(--muted)")}<div class="grow"><div class="sm bold">Mobile number</div><div class="xs muted2">${esc(fmtPhone(me.phone) || "Add your mobile number")}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
+      ${isCustomer() ? `<button class="li" onclick="push('editUpi')">${icon("wallet",18,(loadMyUpi(), S.upi && S.upi.upi_id) ? "var(--muted)" : "var(--red)")}<div class="grow"><div class="sm bold">UPI ID</div><div class="xs muted2">${S.upi && S.upi.upi_id ? esc(S.upi.upi_id) : "Add your UPI ID — needed to post a shoot"}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>` : ""}
       <button class="li" onclick="push('editName')">${icon("user",18,"var(--muted)")}<div class="grow"><div class="sm bold">Name</div><div class="xs muted2">${esc(me.name)}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
       <button class="li" onclick="push('editLoc')">${icon("pin",18,"var(--muted)")}<div class="grow"><div class="sm bold">Location</div><div class="xs muted2">${esc([me.city, me.state, me.pincode].filter(Boolean).join(", ") || "Not set")}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
       <button class="li" onclick="push('blockedPeople')">${icon("shield",18,"var(--muted)")}<div class="grow"><div class="sm bold">Blocked people</div><div class="xs muted2">${(S.ublocks || []).length ? S.ublocks.length + " blocked" : "No one blocked"}</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
@@ -2882,8 +2887,8 @@ function vPgHome(){
 
     ${(pg.travel || "city") === "city" && !S.prefs.travelAsked ? `<div class="card mt16">
       <div class="bold sm">${icon("pin",14,"var(--accent)")} Do you travel for shoots?</div>
-      <div class="xs muted mt4">Also get requests from customers in ${esc(nearbyText(pg.city || meCity(), pg.state || S.me.state))}, or from anywhere in India. You can change this any time.</div>
-      <div class="row gap8 mt12" style="flex-wrap:wrap"><button class="btn sm primary" onclick="setTravel('nearby')">Nearby cities</button><button class="btn sm" onclick="setTravel('anywhere')">Anywhere in India</button>
+      <div class="xs muted mt4">Also get requests from customers within a distance you choose, from all of ${esc(pg.state || S.me.state || "your state")}, or from anywhere in India. You can change this any time.</div>
+      <div class="row gap8 mt12" style="flex-wrap:wrap"><button class="btn sm primary" onclick="setRange('km',50)">Within 50 km</button><button class="btn sm" onclick="setTravel('state')">${esc(pg.state || "My state")}</button><button class="btn sm" onclick="setTravel('anywhere')">Anywhere in India</button>
         <button class="btn sm" onclick="S.prefs.travelAsked=1;savePrefs();render()">Only ${esc(meCity() || "my city")}</button></div></div>` : ""}
     ${howCard()}
     ${active.length ? `<div class="between mt20"><div class="sec-title" style="margin:0">Upcoming shoots</div><button class="xs accent bold" onclick="go('jobs')">See all</button></div>${active.map(bookingCard).join("")}` : ""}
@@ -2914,9 +2919,10 @@ function vPgRequests(){
   return `<div class="pad">
     ${pageHead("Requests", "Shoots customers have posted near you. Send your price before the timer runs out.")}
     ${hint("pgreq", "Tap <b>Send a quote</b> to offer your price. The customer compares quotes and books one — you'll get an alert when they do. Tap <b>Not for me</b> to hide a request.")}
+    ${rangeBarHtml()}
     <div class="chips mt12">
       <button class="chip ${mode==='match'?'accent':''}" onclick="S.prefs.reqMode='match';savePrefs();render()">For you${nFor ? " (" + nFor + ")" : ""}</button>
-      <button class="chip ${mode==='city'?'accent':''}" onclick="S.prefs.reqMode='city';savePrefs();render()">Everything ${(S.pg && S.pg.travel || "city") === "city" ? "in " + esc(meCity()||"your city") : "you cover"}${nAll ? " (" + nAll + ")" : ""}</button>
+      <button class="chip ${mode==='city'?'accent':''}" onclick="S.prefs.reqMode='city';savePrefs();render()">All shoot types${nAll ? " (" + nAll + ")" : ""}</button>
       <button class="chip ${mode==='quoted'?'accent':''}" onclick="S.prefs.reqMode='quoted';savePrefs();render()">Your quotes${S.d.myOffers.length ? " (" + S.d.myOffers.length + ")" : ""}</button>
     </div>
     ${mode === "quoted"
@@ -2927,7 +2933,7 @@ function vPgRequests(){
             <div class="xs muted mt4">But ${nAll} other request${nAll === 1 ? " is" : "s are"} open near you.</div>
             <button class="btn primary sm mt12" onclick="S.prefs.reqMode='city';savePrefs();render()">Show ${nAll === 1 ? "it" : "them"}</button></div>`
         : emptyState("📭", "Nothing open right now", (mode === "match" ? "Try “Everything” to see other types of shoot. " : "New requests appear here automatically. ")
-            + ((S.pg && S.pg.travel || "city") === "city" ? `Travel for shoots? <button class="linkish accent" onclick="push('editPg')"><b>Get requests from nearby cities</b></button>` : "")))}
+            + ((S.pg && S.pg.travel || "city") !== "anywhere" ? `<div class="chips mt12" style="justify-content:center">${(S.pg && S.pg.travel || "city") === "city" ? `<button class="chip" onclick="setRange('km',50)">Within 50 km</button>` : ""}${(S.pg && S.pg.travel) !== "state" ? `<button class="chip" onclick="setRange('state')">All of ${esc((S.pg && S.pg.state) || "my state")}</button>` : ""}<button class="chip" onclick="setRange('anywhere')">All India</button></div><div class="xs muted2 mt6">Widen how far you'll travel to see more shoots.</div>` : "")))}
     ${mode === "match" && S.prefs.passed.length ? `<div class="center mt16"><button class="linkish xs" onclick="S.prefs.passed=[];savePrefs();render()">Show requests you passed on</button></div>` : ""}
   </div>`;
 }
@@ -3012,6 +3018,7 @@ function vPgReviews(){
 function vQuote(p){
   const r = S.d.openRequests.find(x => x.id === p.id);
   if(!r) return `${topbar("Send a quote")}${emptyState("⏳", "This request has closed", "The customer booked someone or it expired.")}`;
+  if(hasUpi(true) !== true) return `${topbar("Send a quote")}${upiGateHtml("quote")}`;
   const cat = catById(r.category);
   const suggest = suggestedPrice(r.category, r.duration_hrs, r.urgency, (S.pg && S.pg.price_multiplier) || 1);
   if(!S.quote || S.quote.id !== r.id) S.quote = { id: r.id, price: suggest, eta: 30, note: "" };
@@ -3170,7 +3177,7 @@ function vPortfolio(){
 }
 function vEditPg(){
   const pg = S.pg || {};
-  if(!S.editPg) S.editPg = { services: pg.services || "photo", bio: pg.bio || "", cats: (pg.categories||[]).slice(), years: pg.years_exp || 0, pm: Number(pg.price_multiplier) || 1, travel: pg.travel || "city" };
+  if(!S.editPg) S.editPg = { services: pg.services || "photo", bio: pg.bio || "", cats: (pg.categories||[]).slice(), years: pg.years_exp || 0, pm: Number(pg.price_multiplier) || 1, travel: pg.travel === "nearby" ? "state" : (pg.travel || "city"), travel_km: pg.travel_km || 50 };
   const d = S.editPg;
   return `${topbar("Your details")}
   <div class="pad">
@@ -3184,7 +3191,7 @@ function vEditPg(){
       <div class="grid3">${CATEGORIES.map(c => `<button class="u-card ${d.cats.includes(c.id)?'on':''}" onclick="epCat('${c.id}')"><div class="u-t">${esc(c.name)}</div></button>`).join("")}</div></div>
     <div class="field"><label>Your rates vs typical — <span id="epPm">${Math.round(d.pm*100)}</span>%</label>
       <input type="range" min="0.6" max="2" step="0.05" value="${d.pm}" oninput="S.editPg.pm=+this.value;setHtml('epPm',Math.round(this.value*100))"></div>
-    ${travelField(d.travel, "S.editPg.travel", pg.city || meCity(), pg.state || S.me.state)}
+    ${travelField(d.travel, "S.editPg.travel", pg.city || meCity(), pg.state || S.me.state, d.travel_km)}
     <button class="btn primary block" onclick="saveEditPg()">Save</button>
     <div id="formErr"></div>
   </div>`;
@@ -3194,12 +3201,6 @@ function epCat(c){
   if(i >= 0) a.splice(i,1); else a.push(c);
   render();
 }
-/* "How far will you travel?" — used in sign-up and when editing the profile */
-function travelField(cur, target, city, state){
-  return `<div class="field"><label>How far will you travel for a shoot?</label>
-    <div class="stack gap8">${TRAVEL.map(([k, l]) => `<button type="button" class="u-card row gap8 ${cur === k ? "on" : ""}" style="text-align:left" onclick="${target}='${k}';render()">
-      <div class="grow"><div class="u-t">${l}</div><div class="xs muted2">${k === "city" ? "Requests from " + esc(city || "your city") + " only" : k === "nearby" ? "Also " + esc(nearbyText(city, state)) : "Requests from every city"}</div></div></button>`).join("")}</div></div>`;
-}
 async function setTravel(v){
   try{ await api.savePg({ travel: v }); S.prefs.travelAsked = 1; savePrefs(); toast("Travel range saved", v === "anywhere" ? "You'll see requests from all over India" : "You'll see requests from nearby cities too", "pin"); refresh(false); render(); }
   catch(e){ toast("Couldn't save", e.message, "x"); }
@@ -3207,7 +3208,7 @@ async function setTravel(v){
 async function saveEditPg(){
   const d = S.editPg;
   if(!d.cats.length){ setHtml("formErr", errHtml("Pick at least one type of shoot.")); return; }
-  try{ await api.savePg({ services: d.services || "photo", bio: d.bio.trim(), categories: d.cats, years_exp: d.years, price_multiplier: d.pm, travel: d.travel || "city" }); S.editPg = null; toast("Profile updated", "", "check"); pop(); }
+  try{ await api.savePg({ services: d.services || "photo", bio: d.bio.trim(), categories: d.cats, years_exp: d.years, price_multiplier: d.pm, travel: d.travel || "city", travel_km: d.travel_km || 50 }); S.editPg = null; toast("Profile updated", "", "check"); pop(); }
   catch(e){ setHtml("formErr", errHtml(e.message)); }
 }
 
@@ -3953,7 +3954,7 @@ function vInvite(){
    ============================================================ */
 const ID_TYPES = [
   ["aadhaar", "Aadhaar card", "Use a masked Aadhaar if you have one", true],
-  ["pan", "PAN card", "Front only", false],
+  ["pan", "PAN card", "Front and back", true],
   ["driving_licence", "Driving licence", "Front and back", true],
   ["passport", "Passport", "Photo page and address page", true]
 ];
@@ -4391,6 +4392,7 @@ const soonMs = b => toMs(b.start_at) - Date.now();
 
 /* ---------- things the customer should do now ---------- */
 function customerActions(){
+  loadMyUpi();
   const out = [];
   pushTodo(out);
   S.d.bookings.forEach(b => {
@@ -4427,6 +4429,7 @@ function customerActions(){
 /* ---------- things the photographer should do now ---------- */
 function photographerActions(){
   const out = [], pg = S.pg || {};
+  loadMyUpi();
   pushTodo(out);
   S.d.bookings.filter(activeBk).sort((a,b) => toMs(a.start_at) - toMs(b.start_at)).forEach(b => {
     const nx = NEXT_STEP[b.status], cn = esc(firstName(b.customer_name || "the customer"));
@@ -5871,6 +5874,131 @@ function exGearChips(f){
 }
 function openGear(){ S.gearEdit = null; push("gear"); }
 
+/* approximate city centres, for 'within N km' travel ranges (same list as public.city_geo) */
+const CITY_GEO = {"visakhapatnam":[17.69,83.22],"vijayawada":[16.51,80.65],"guntur":[16.31,80.44],"nellore":[14.44,79.99],"kurnool":[15.83,78.04],"tirupati":[13.63,79.42],"kakinada":[16.99,82.25],"rajahmundry":[17.00,81.80],"anantapur":[14.68,77.60],"kadapa":[14.47,78.82],"eluru":[16.71,81.10],"ongole":[15.51,80.05],"amaravati":[16.51,80.52],"itanagar":[27.08,93.61],"guwahati":[26.14,91.74],"dibrugarh":[27.47,94.91],"silchar":[24.83,92.78],"jorhat":[26.75,94.20],"tezpur":[26.63,92.80],"nagaon":[26.35,92.68],"patna":[25.59,85.14],"gaya":[24.79,85.00],"bhagalpur":[25.24,86.98],"muzaffarpur":[26.12,85.39],"darbhanga":[26.16,85.90],"purnia":[25.78,87.47],"bodh gaya":[24.70,84.99],"raipur":[21.25,81.63],"bhilai":[21.21,81.38],"bilaspur":[22.08,82.14],"korba":[22.36,82.75],"durg":[21.19,81.28],"goa":[15.40,74.00],"panaji":[15.49,73.83],"margao":[15.27,73.96],"vasco da gama":[15.40,73.81],"mapusa":[15.59,73.81],"ahmedabad":[23.02,72.57],"surat":[21.17,72.83],"vadodara":[22.31,73.18],"rajkot":[22.30,70.80],"gandhinagar":[23.22,72.65],"bhavnagar":[21.76,72.15],"jamnagar":[22.47,70.06],"junagadh":[21.52,70.46],"anand":[22.56,72.95],"bhuj":[23.24,69.67],"navsari":[20.95,72.95],"vapi":[20.37,72.90],"morbi":[22.82,70.84],"gurugram":[28.46,77.03],"faridabad":[28.41,77.32],"panipat":[29.39,76.97],"ambala":[30.38,76.78],"karnal":[29.69,76.99],"rohtak":[28.90,76.61],"hisar":[29.15,75.72],"sonipat":[28.99,77.02],"panchkula":[30.69,76.86],"shimla":[31.10,77.17],"manali":[32.24,77.19],"dharamshala":[32.22,76.32],"solan":[30.90,77.10],"mandi":[31.71,76.93],"kullu":[31.96,77.11],"ranchi":[23.34,85.31],"jamshedpur":[22.80,86.20],"dhanbad":[23.80,86.43],"bokaro":[23.67,86.15],"bengaluru":[12.97,77.59],"mysuru":[12.30,76.64],"mangaluru":[12.91,74.86],"hubballi":[15.36,75.12],"belagavi":[15.85,74.50],"kalaburagi":[17.33,76.83],"davanagere":[14.46,75.92],"ballari":[15.14,76.92],"udupi":[13.34,74.75],"shivamogga":[13.93,75.57],"tumakuru":[13.34,77.10],"madikeri":[12.42,75.74],"thiruvananthapuram":[8.52,76.94],"kochi":[9.93,76.27],"kozhikode":[11.26,75.78],"thrissur":[10.53,76.21],"kollam":[8.89,76.61],"kannur":[11.87,75.37],"alappuzha":[9.50,76.34],"kottayam":[9.59,76.52],"palakkad":[10.79,76.65],"munnar":[10.09,77.06],"bhopal":[23.26,77.41],"indore":[22.72,75.86],"gwalior":[26.22,78.18],"jabalpur":[23.18,79.99],"ujjain":[23.18,75.78],"sagar":[23.84,78.74],"rewa":[24.53,81.30],"satna":[24.60,80.83],"mumbai":[19.08,72.88],"pune":[18.52,73.86],"nagpur":[21.15,79.09],"nashik":[20.00,73.79],"thane":[19.22,72.98],"navi mumbai":[19.03,73.03],"aurangabad":[19.88,75.34],"solapur":[17.66,75.91],"kolhapur":[16.70,74.24],"amravati":[20.93,77.75],"nanded":[19.14,77.32],"sangli":[16.85,74.58],"jalgaon":[21.01,75.56],"akola":[20.70,77.00],"latur":[18.41,76.56],"ahmednagar":[19.09,74.74],"lonavala":[18.75,73.41],"mahabaleshwar":[17.92,73.66],"kalyan":[19.24,73.13],"vasai-virar":[19.39,72.84],"panvel":[18.99,73.12],"imphal":[24.82,93.94],"shillong":[25.58,91.89],"aizawl":[23.73,92.72],"kohima":[25.67,94.11],"dimapur":[25.91,93.73],"bhubaneswar":[20.30,85.82],"cuttack":[20.46,85.88],"rourkela":[22.26,84.85],"puri":[19.81,85.83],"sambalpur":[21.47,83.97],"berhampur":[19.31,84.79],"ludhiana":[30.90,75.86],"amritsar":[31.63,74.87],"jalandhar":[31.33,75.58],"patiala":[30.34,76.39],"bathinda":[30.21,74.95],"mohali":[30.70,76.72],"jaipur":[26.91,75.79],"jodhpur":[26.24,73.02],"udaipur":[24.59,73.71],"kota":[25.21,75.86],"ajmer":[26.45,74.64],"bikaner":[28.02,73.31],"alwar":[27.55,76.63],"bhilwara":[25.35,74.63],"jaisalmer":[26.92,70.91],"pushkar":[26.49,74.55],"mount abu":[24.59,72.71],"gangtok":[27.33,88.61],"chennai":[13.08,80.27],"coimbatore":[11.02,76.96],"madurai":[9.93,78.12],"tiruchirappalli":[10.79,78.70],"salem":[11.66,78.15],"tirunelveli":[8.71,77.76],"vellore":[12.92,79.13],"erode":[11.34,77.72],"tiruppur":[11.11,77.34],"thoothukudi":[8.76,78.13],"thanjavur":[10.79,79.14],"ooty":[11.41,76.70],"kanyakumari":[8.08,77.54],"kodaikanal":[10.24,77.49],"hosur":[12.74,77.83],"hyderabad":[17.39,78.49],"secunderabad":[17.44,78.50],"warangal":[17.97,79.59],"nizamabad":[18.67,78.09],"karimnagar":[18.44,79.13],"khammam":[17.25,80.15],"agartala":[23.83,91.28],"lucknow":[26.85,80.95],"kanpur":[26.45,80.33],"ghaziabad":[28.67,77.45],"noida":[28.54,77.39],"greater noida":[28.47,77.50],"agra":[27.18,78.01],"varanasi":[25.32,82.97],"meerut":[28.98,77.71],"prayagraj":[25.44,81.85],"bareilly":[28.37,79.43],"aligarh":[27.88,78.08],"moradabad":[28.84,78.77],"gorakhpur":[26.76,83.37],"jhansi":[25.45,78.57],"mathura":[27.49,77.67],"ayodhya":[26.80,82.20],"vrindavan":[27.58,77.70],"dehradun":[30.32,78.03],"haridwar":[29.95,78.16],"rishikesh":[30.09,78.27],"nainital":[29.38,79.46],"mussoorie":[30.46,78.07],"haldwani":[29.22,79.51],"roorkee":[29.85,77.89],"kolkata":[22.57,88.36],"howrah":[22.59,88.31],"durgapur":[23.52,87.31],"asansol":[23.68,86.98],"siliguri":[26.73,88.40],"darjeeling":[27.04,88.26],"kharagpur":[22.35,87.23],"port blair":[11.62,92.73],"chandigarh":[30.73,76.78],"daman":[20.40,72.83],"silvassa":[20.27,73.01],"delhi":[28.61,77.21],"new delhi":[28.61,77.21],"srinagar":[34.08,74.80],"jammu":[32.73,74.86],"leh":[34.15,77.58],"kavaratti":[10.57,72.64],"puducherry":[11.94,79.81]};
+
+/* ===================== UPI ID FOR EVERYONE + TRAVEL RANGE =====================
+   • Customers add a UPI ID before posting a shoot; photographers add their payout
+     UPI ID before sending a quote. The screen asks for it in place, then carries on.
+   • Photographers pick how far they'll go: their city (default), within N km,
+     their state, or anywhere in India — from the Requests tab or Your details. */
+
+function cityKm(a, b){
+  const x = CITY_GEO[lc(a)], y = CITY_GEO[lc(b)];
+  if(!x || !y) return null;
+  const t = Math.PI / 180, h = Math.sin((y[0] - x[0]) * t / 2) ** 2 + Math.cos(x[0] * t) * Math.cos(y[0] * t) * Math.sin((y[1] - x[1]) * t / 2) ** 2;
+  return Math.round(6371 * 2 * Math.asin(Math.sqrt(h)));
+}
+const KM_STEPS = [10, 25, 50, 75, 100, 150, 200, 300, 500];
+function travelText(pg){
+  const t = pg.travel || "city";
+  return t === "anywhere" ? "anywhere in India" : t === "km" ? "up to " + (pg.travel_km || 50) + " km from " + (pg.city || "their city")
+    : t === "state" || t === "nearby" ? "anywhere in " + (pg.state || "their state") : "";
+}
+
+/* ---------- UPI ---------- */
+function loadMyUpi(){
+  if(S.upi !== undefined || S.loading.upi || !S.me || !S.me.id) return;
+  S.loading.upi = true;
+  q(sb.from("customer_upi").select("upi_id").eq("id", S.me.id).maybeSingle())
+    .then(r => { S.upi = r || {}; S.loading.upi = false; softRender(); })
+    .catch(() => { S.upi = {}; S.loading.upi = false; softRender(); });
+  if(isPg() && S.payout === undefined && !S.loading.payout){
+    S.loading.payout = true;
+    api.payoutDetails().then(r => { S.payout = r || {}; S.loading.payout = false; softRender(); }).catch(() => { S.payout = {}; S.loading.payout = false; softRender(); });
+  }
+}
+/* undefined = still checking */
+function hasUpi(forPayout){
+  if(forPayout){ if(S.payout === undefined) return undefined; if(S.payout && S.payout.upi_id) return true; }
+  if(S.upi === undefined) return forPayout ? false : undefined;
+  return !!(S.upi && S.upi.upi_id) || !!(S.payout && S.payout.upi_id);
+}
+const UPI_RE = /^[A-Za-z0-9._-]{2,128}@[A-Za-z][A-Za-z0-9.-]{1,64}$/;
+
+/* shown in place of "Post a shoot" (customer) or "Send a quote" (photographer) until a UPI ID is saved */
+function upiGateHtml(kind){
+  loadMyUpi();
+  const pay = kind === "quote";
+  const h = hasUpi(pay);
+  if(h === undefined) return `<div class="pad"><div class="skeleton"></div></div>`;
+  return `<div class="pad">
+    <div class="card soft"><div class="bold">${icon("wallet",16,"var(--accent)")} ${pay ? "Add the UPI ID we pay you on" : "Add your UPI ID to continue"}</div>
+      <div class="xs muted mt4">${pay ? "Before you send quotes, add where SnapPro sends your share after each shoot. Only you and the SnapPro team can see it."
+        : "Every SnapPro account needs a mobile number and a UPI ID. We only use it if we ever need to send you money. Refunds still go back to however you paid. Only you and the SnapPro team can see it."}</div></div>
+    <div class="field mt16"><label for="gateUpi">UPI ID</label>
+      <input id="gateUpi" class="input" autocapitalize="off" spellcheck="false" placeholder="e.g. yourname@okhdfcbank" value="${esc((S.payout && S.payout.upi_id) || "")}"></div>
+    ${pay ? `<div class="field"><label for="gateUpiName">Name on the account</label>
+      <input id="gateUpiName" class="input" autocapitalize="words" placeholder="As it appears at your bank" value="${esc((S.payout && S.payout.account_name) || (S.pg && S.pg.display_name) || "")}"></div>` : ""}
+    <button class="btn primary block" onclick="saveGateUpi(${pay})">Save and continue</button>
+    <div id="formErr"></div>
+    <p class="xs muted2 mt12">Never share your UPI PIN with anyone, including SnapPro.</p>
+  </div>`;
+}
+async function saveGateUpi(pay){
+  const upi = (el("gateUpi").value || "").trim(), name = pay ? (el("gateUpiName").value || "").trim() : "";
+  if(!UPI_RE.test(upi)){ setHtml("formErr", errHtml("That doesn't look like a UPI ID (it should be like name@bank).")); return; }
+  if(pay && name.length < 2){ setHtml("formErr", errHtml("Add the name on the account.")); return; }
+  try{
+    if(pay) S.payout = await api.savePayoutDetails(upi, name);
+    else { await q(sb.rpc("set_my_upi", { p_upi: upi })); S.upi = { upi_id: upi }; }
+    toast("UPI ID saved", "", "check"); render();
+  }catch(e){ setHtml("formErr", errHtml(e.message)); }
+}
+function vEditUpi(){
+  loadMyUpi();
+  if(S.upi === undefined) return `${topbar("UPI ID")}<div class="pad"><div class="skeleton"></div></div>`;
+  return `${topbar("UPI ID")}
+  <div class="pad">
+    <p class="sm muted">We only use it if SnapPro ever needs to send you money. Refunds still go back to however you paid.</p>
+    <div class="field mt16"><label for="upiEdit">UPI ID</label>
+      <input id="upiEdit" class="input" autocapitalize="off" spellcheck="false" placeholder="e.g. yourname@okhdfcbank" value="${esc((S.upi && S.upi.upi_id) || "")}"></div>
+    <button class="btn primary block" onclick="saveEditUpi()">Save</button>
+    <div id="formErr"></div>
+  </div>`;
+}
+async function saveEditUpi(){
+  const upi = (el("upiEdit").value || "").trim();
+  if(!UPI_RE.test(upi)){ setHtml("formErr", errHtml("That doesn't look like a UPI ID (it should be like name@bank).")); return; }
+  try{ await q(sb.rpc("set_my_upi", { p_upi: upi })); S.upi = { upi_id: upi }; toast("UPI ID saved", "", "check"); pop(); }
+  catch(e){ setHtml("formErr", errHtml(e.message)); }
+}
+
+/* ---------- travel range ---------- */
+function kmIndex(km){ let i = KM_STEPS.findIndex(k => k >= (km || 50)); return i < 0 ? KM_STEPS.length - 1 : i; }
+/* the "How far will you travel?" picker — sign-up, Your details */
+function travelField(cur, target, city, state, km){
+  cur = cur === "nearby" ? "state" : (cur || "city");
+  const kmT = target.replace(/\.travel$/, ".travel_km"), kmv = km || 50;
+  return `<div class="field"><label>How far will you travel for a shoot?</label>
+    <div class="stack gap8">${TRAVEL.map(([k, l]) => `<button type="button" class="u-card row gap8 ${cur === k ? "on" : ""}" style="text-align:left" onclick="${target}='${k}';render()">
+      <div class="grow"><div class="u-t">${l}</div><div class="xs muted2">${k === "city" ? "Requests from " + esc(city || "your city") + " only"
+        : k === "km" ? "Up to a distance you choose from " + esc(city || "your city") : k === "state" ? "Requests from all of " + esc(state || "your state") : "Requests from every city"}</div></div></button>`).join("")}</div>
+    ${cur === "km" ? `<div class="mt12"><div class="between xs"><span>How far?</span><b id="tfKm">${kmv} km</b></div>
+      <input type="range" min="0" max="${KM_STEPS.length - 1}" step="1" value="${kmIndex(kmv)}" aria-label="Distance in km" oninput="${kmT}=KM_STEPS[+this.value];setHtml('tfKm',KM_STEPS[+this.value]+' km')">
+      <div class="between xs muted2"><span>10 km</span><span>500 km</span></div></div>` : ""}</div>`;
+}
+/* the range bar at the top of Requests (photographers) — saved to the profile, so alerts follow it too */
+function rangeBarHtml(){
+  const pg = S.pg || {}, t = pg.travel === "nearby" ? "state" : (pg.travel || "city"), km = pg.travel_km || 50;
+  const c = (k, l) => `<button class="chip ${t === k ? "accent" : ""}" onclick="setRange('${k}')">${l}</button>`;
+  return `<div class="card soft mt12 range-bar">
+    <div class="xs muted2">Show shoots from</div>
+    <div class="chips mt6">${c("city", icon("pin", 11) + " " + esc(pg.city || meCity() || "My city"))}${c("km", "Within " + km + " km")}${c("state", esc(pg.state || "My state"))}${c("anywhere", "All India")}</div>
+    ${t === "km" ? `<div class="mt8"><input type="range" min="0" max="${KM_STEPS.length - 1}" step="1" value="${kmIndex(km)}" aria-label="Distance in km"
+        oninput="setHtml('rbKm',KM_STEPS[+this.value]+' km')" onchange="setRange('km',KM_STEPS[+this.value])">
+      <div class="between xs muted2"><span>10 km</span><b id="rbKm" class="accent">${km} km</b><span>500 km</span></div></div>` : ""}
+    <div class="xs muted2 mt6">You also get alerts for this range.</div>
+  </div>`;
+}
+async function setRange(t, km){
+  const patch = { travel: t }; if(km) patch.travel_km = km;
+  const old = { travel: S.pg.travel, travel_km: S.pg.travel_km };
+  Object.assign(S.pg, patch); render();
+  try{ await api.savePg(patch); S.prefs.travelAsked = 1; savePrefs(); }
+  catch(e){ Object.assign(S.pg, old); render(); toast("Couldn't save", e.message, "x"); }
+}
+
 /* ============================================================
    NAVIGATION
    ============================================================ */
@@ -5881,7 +6009,7 @@ const STACK_VIEWS = { pg: vPgProfile, photo: vPhoto, newRequest: vNewRequest, re
                       quote: vQuote, job: vJob, portfolio: vPortfolio, editPg: vEditPg,
                       payResult: vPayResult, editPayout: vEditPayout,
                       pgEarnings: vPgEarnings, pgDone: vPgDone, pgReviews: vPgReviews, how: vHow, storage: vStorage, rewards: vRewards, invite: vInvite, kyc: vKyc, deleteAccount: vDeleteAccount, receipt: vReceipt, busyNew: vBusyNew, gear: vGear,
-                      report: vReport, blockedPeople: vBlockedPeople, payouts: vMyPayouts, payoutSlip: vPayoutSlip, agreement: vAgreement, gallery: vGallery, editPhone: vEditPhone };
+                      report: vReport, blockedPeople: vBlockedPeople, payouts: vMyPayouts, payoutSlip: vPayoutSlip, agreement: vAgreement, gallery: vGallery, editPhone: vEditPhone, editUpi: vEditUpi };
 const CUST_TABS = [ ["home","Home","home",vCustHome], ["explore","Explore","search",vExplore], ["activity","My shoots","calendar",vActivity], ["messages","Messages","chat",vMessages], ["profile","Profile","user",vProfile] ];
 const PG_TABS   = [ ["home","Home","home",vPgHome], ["requests","Requests","bolt",vPgRequests], ["calendar","Calendar","calendar",vCalendar], ["jobs","My shoots","list",vJobs], ["messages","Messages","chat",vMessages], ["profile","Profile","user",vProfile] ];
 const tabsFor = () => isPg() ? PG_TABS : CUST_TABS;

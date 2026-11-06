@@ -4794,6 +4794,7 @@ begin
    where photographer_id = p_user and status in ('ready','pending','hidden');          -- removed from S3 on the next clean-up
   delete from public.photographer_payout where id = p_user;
   delete from public.photographer_kyc where id = p_user;
+  delete from public.customer_upi where id = p_user;
   update public.user_benefits set status = 'revoked' where user_id = p_user and status = 'active';
   update public.requests set status = 'cancelled' where customer_id = p_user and status in ('broadcasting','awaiting');
   update public.requests set customer_name = 'Deleted user', notes = null where customer_id = p_user;
@@ -5278,7 +5279,7 @@ begin
                 and not public.is_blocked(g.id) and not public._blocked_pair(g.id, r.customer_id)
                 and (cardinality(coalesce(g.categories, '{}')) = 0 or r.category = any(g.categories))
                 and public._svc_ok(g.services, r.service)
-                and public._pg_covers(g.travel, coalesce(g.city, p.city), coalesce(g.state, p.state), r.city, r.state)
+                and public._pg_covers_km(g.travel, g.travel_km, coalesce(g.city, p.city), coalesce(g.state, p.state), r.city, r.state)
                 and exists (select 1 from public.push_subscriptions s where s.user_id = g.id)
               limit 300 loop
       perform public._push(b.id, 'request', 'New ' || public._cat_name(r.category) || case r.service when 'video' then ' video' when 'both' then ' photo + video' else '' end || ' shoot in ' || coalesce(r.city, 'your area'),
@@ -6653,6 +6654,431 @@ create trigger offer_service_guard before insert on public.offers
   for each row execute function public.offer_service_guard();
 -- <<< 8p gear
 
+-- >>> 8q upi travel
+-- =====================================================================
+-- 8q. UPI ID FOR EVERYONE, BOTH SIDES OF EVERY ID, TRAVEL DISTANCE
+--     • Customers add a UPI ID before posting a shoot; photographers add
+--       their payout UPI ID before sending a quote.
+--     • Every government ID needs a front and a back photo (PAN too).
+--     • Photographers choose how far they'll go: their city (default),
+--       within N km, their whole state, or anywhere in India. Distance is
+--       city-to-city (approximate) from the city_geo list below.
+-- =====================================================================
+create table if not exists public.customer_upi (
+  id         uuid primary key references public.profiles(id) on delete cascade,
+  upi_id     text not null check (upi_id ~ '^[A-Za-z0-9._-]{2,128}@[A-Za-z][A-Za-z0-9.-]{1,64}$'),
+  updated_at timestamptz not null default now()
+);
+alter table public.customer_upi enable row level security;
+drop policy if exists customer_upi_read on public.customer_upi;
+create policy customer_upi_read on public.customer_upi for select to authenticated
+  using (id = auth.uid() or coalesce(public.staff_role() in ('super_admin','admin'), false));
+revoke insert, update, delete on public.customer_upi from anon, authenticated;
+
+create or replace function public.set_my_upi(p_upi text)
+returns text language plpgsql security definer set search_path = public
+as $$
+declare me uuid := auth.uid(); u text := trim(coalesce(p_upi, ''));
+begin
+  if me is null then raise exception 'Please log in again'; end if;
+  if u !~ '^[A-Za-z0-9._-]{2,128}@[A-Za-z][A-Za-z0-9.-]{1,64}$' then raise exception 'That doesn''t look like a UPI ID (it should be like name@bank).'; end if;
+  insert into public.customer_upi (id, upi_id, updated_at) values (me, u, now())
+  on conflict (id) do update set upi_id = excluded.upi_id, updated_at = now();
+  return u;
+end $$;
+revoke all on function public.set_my_upi(text) from public, anon;
+grant execute on function public.set_my_upi(text) to authenticated;
+
+create or replace function public._has_upi(p uuid)
+returns boolean language sql stable security definer set search_path = public
+as $$ select exists (select 1 from public.customer_upi where id = p)
+          or exists (select 1 from public.photographer_payout where id = p and upi_id is not null) $$;
+
+create or replace function public.require_upi()
+returns trigger language plpgsql security definer set search_path = public
+as $$
+begin
+  if auth.uid() is not null and public.snappro_system() is not true and not public._has_upi(auth.uid()) then
+    if tg_table_name = 'offers' then
+      raise exception 'Add your UPI ID first (Profile → Payout details) — it''s where we send your earnings.';
+    end if;
+    raise exception 'Add your UPI ID first (Profile → UPI ID).';
+  end if;
+  return new;
+end $$;
+drop trigger if exists requests_require_upi on public.requests;
+create trigger requests_require_upi before insert on public.requests for each row execute function public.require_upi();
+drop trigger if exists offers_require_upi on public.offers;
+create trigger offers_require_upi before insert on public.offers for each row execute function public.require_upi();
+
+-- both sides of every ID (PAN included)
+create or replace function public.kyc_needs_back()
+returns trigger language plpgsql
+as $$
+begin
+  if new.status = 'submitted' and new.back_path is null then raise exception 'Add the back of your ID too'; end if;
+  return new;
+end $$;
+drop trigger if exists kyc_needs_back on public.photographer_kyc;
+create trigger kyc_needs_back before insert or update of back_path, status on public.photographer_kyc
+  for each row execute function public.kyc_needs_back();
+
+-- travel range
+alter table public.photographers add column if not exists travel_km integer not null default 50;
+alter table public.photographers drop constraint if exists photographers_travel_check;
+alter table public.photographers add constraint photographers_travel_check check (travel in ('city','km','state','anywhere','nearby'));
+alter table public.photographers drop constraint if exists photographers_travel_km_check;
+alter table public.photographers add constraint photographers_travel_km_check check (travel_km between 5 and 2000);
+-- old "nearby cities": metro areas become 60 km, everywhere else their state
+update public.photographers set travel = case when public._region(city, state) like 'state:%' then 'state' else 'km' end,
+       travel_km = 60 where travel = 'nearby';
+
+create table if not exists public.city_geo (name text primary key, lat numeric not null, lng numeric not null);
+alter table public.city_geo enable row level security;
+drop policy if exists city_geo_read on public.city_geo;
+create policy city_geo_read on public.city_geo for select using (true);
+revoke insert, update, delete on public.city_geo from anon, authenticated;
+insert into public.city_geo (name, lat, lng) values
+  ('visakhapatnam',17.69,83.22),
+  ('vijayawada',16.51,80.65),
+  ('guntur',16.31,80.44),
+  ('nellore',14.44,79.99),
+  ('kurnool',15.83,78.04),
+  ('tirupati',13.63,79.42),
+  ('kakinada',16.99,82.25),
+  ('rajahmundry',17.00,81.80),
+  ('anantapur',14.68,77.60),
+  ('kadapa',14.47,78.82),
+  ('eluru',16.71,81.10),
+  ('ongole',15.51,80.05),
+  ('amaravati',16.51,80.52),
+  ('itanagar',27.08,93.61),
+  ('guwahati',26.14,91.74),
+  ('dibrugarh',27.47,94.91),
+  ('silchar',24.83,92.78),
+  ('jorhat',26.75,94.20),
+  ('tezpur',26.63,92.80),
+  ('nagaon',26.35,92.68),
+  ('patna',25.59,85.14),
+  ('gaya',24.79,85.00),
+  ('bhagalpur',25.24,86.98),
+  ('muzaffarpur',26.12,85.39),
+  ('darbhanga',26.16,85.90),
+  ('purnia',25.78,87.47),
+  ('bodh gaya',24.70,84.99),
+  ('raipur',21.25,81.63),
+  ('bhilai',21.21,81.38),
+  ('bilaspur',22.08,82.14),
+  ('korba',22.36,82.75),
+  ('durg',21.19,81.28),
+  ('goa',15.40,74.00),
+  ('panaji',15.49,73.83),
+  ('margao',15.27,73.96),
+  ('vasco da gama',15.40,73.81),
+  ('mapusa',15.59,73.81),
+  ('ahmedabad',23.02,72.57),
+  ('surat',21.17,72.83),
+  ('vadodara',22.31,73.18),
+  ('rajkot',22.30,70.80),
+  ('gandhinagar',23.22,72.65),
+  ('bhavnagar',21.76,72.15),
+  ('jamnagar',22.47,70.06),
+  ('junagadh',21.52,70.46),
+  ('anand',22.56,72.95),
+  ('bhuj',23.24,69.67),
+  ('navsari',20.95,72.95),
+  ('vapi',20.37,72.90),
+  ('morbi',22.82,70.84),
+  ('gurugram',28.46,77.03),
+  ('faridabad',28.41,77.32),
+  ('panipat',29.39,76.97),
+  ('ambala',30.38,76.78),
+  ('karnal',29.69,76.99),
+  ('rohtak',28.90,76.61),
+  ('hisar',29.15,75.72),
+  ('sonipat',28.99,77.02),
+  ('panchkula',30.69,76.86),
+  ('shimla',31.10,77.17),
+  ('manali',32.24,77.19),
+  ('dharamshala',32.22,76.32),
+  ('solan',30.90,77.10),
+  ('mandi',31.71,76.93),
+  ('kullu',31.96,77.11),
+  ('ranchi',23.34,85.31),
+  ('jamshedpur',22.80,86.20),
+  ('dhanbad',23.80,86.43),
+  ('bokaro',23.67,86.15),
+  ('bengaluru',12.97,77.59),
+  ('mysuru',12.30,76.64),
+  ('mangaluru',12.91,74.86),
+  ('hubballi',15.36,75.12),
+  ('belagavi',15.85,74.50),
+  ('kalaburagi',17.33,76.83),
+  ('davanagere',14.46,75.92),
+  ('ballari',15.14,76.92),
+  ('udupi',13.34,74.75),
+  ('shivamogga',13.93,75.57),
+  ('tumakuru',13.34,77.10),
+  ('madikeri',12.42,75.74),
+  ('thiruvananthapuram',8.52,76.94),
+  ('kochi',9.93,76.27),
+  ('kozhikode',11.26,75.78),
+  ('thrissur',10.53,76.21),
+  ('kollam',8.89,76.61),
+  ('kannur',11.87,75.37),
+  ('alappuzha',9.50,76.34),
+  ('kottayam',9.59,76.52),
+  ('palakkad',10.79,76.65),
+  ('munnar',10.09,77.06),
+  ('bhopal',23.26,77.41),
+  ('indore',22.72,75.86),
+  ('gwalior',26.22,78.18),
+  ('jabalpur',23.18,79.99),
+  ('ujjain',23.18,75.78),
+  ('sagar',23.84,78.74),
+  ('rewa',24.53,81.30),
+  ('satna',24.60,80.83),
+  ('mumbai',19.08,72.88),
+  ('pune',18.52,73.86),
+  ('nagpur',21.15,79.09),
+  ('nashik',20.00,73.79),
+  ('thane',19.22,72.98),
+  ('navi mumbai',19.03,73.03),
+  ('aurangabad',19.88,75.34),
+  ('solapur',17.66,75.91),
+  ('kolhapur',16.70,74.24),
+  ('amravati',20.93,77.75),
+  ('nanded',19.14,77.32),
+  ('sangli',16.85,74.58),
+  ('jalgaon',21.01,75.56),
+  ('akola',20.70,77.00),
+  ('latur',18.41,76.56),
+  ('ahmednagar',19.09,74.74),
+  ('lonavala',18.75,73.41),
+  ('mahabaleshwar',17.92,73.66),
+  ('kalyan',19.24,73.13),
+  ('vasai-virar',19.39,72.84),
+  ('panvel',18.99,73.12),
+  ('imphal',24.82,93.94),
+  ('shillong',25.58,91.89),
+  ('aizawl',23.73,92.72),
+  ('kohima',25.67,94.11),
+  ('dimapur',25.91,93.73),
+  ('bhubaneswar',20.30,85.82),
+  ('cuttack',20.46,85.88),
+  ('rourkela',22.26,84.85),
+  ('puri',19.81,85.83),
+  ('sambalpur',21.47,83.97),
+  ('berhampur',19.31,84.79),
+  ('ludhiana',30.90,75.86),
+  ('amritsar',31.63,74.87),
+  ('jalandhar',31.33,75.58),
+  ('patiala',30.34,76.39),
+  ('bathinda',30.21,74.95),
+  ('mohali',30.70,76.72),
+  ('jaipur',26.91,75.79),
+  ('jodhpur',26.24,73.02),
+  ('udaipur',24.59,73.71),
+  ('kota',25.21,75.86),
+  ('ajmer',26.45,74.64),
+  ('bikaner',28.02,73.31),
+  ('alwar',27.55,76.63),
+  ('bhilwara',25.35,74.63),
+  ('jaisalmer',26.92,70.91),
+  ('pushkar',26.49,74.55),
+  ('mount abu',24.59,72.71),
+  ('gangtok',27.33,88.61),
+  ('chennai',13.08,80.27),
+  ('coimbatore',11.02,76.96),
+  ('madurai',9.93,78.12),
+  ('tiruchirappalli',10.79,78.70),
+  ('salem',11.66,78.15),
+  ('tirunelveli',8.71,77.76),
+  ('vellore',12.92,79.13),
+  ('erode',11.34,77.72),
+  ('tiruppur',11.11,77.34),
+  ('thoothukudi',8.76,78.13),
+  ('thanjavur',10.79,79.14),
+  ('ooty',11.41,76.70),
+  ('kanyakumari',8.08,77.54),
+  ('kodaikanal',10.24,77.49),
+  ('hosur',12.74,77.83),
+  ('hyderabad',17.39,78.49),
+  ('secunderabad',17.44,78.50),
+  ('warangal',17.97,79.59),
+  ('nizamabad',18.67,78.09),
+  ('karimnagar',18.44,79.13),
+  ('khammam',17.25,80.15),
+  ('agartala',23.83,91.28),
+  ('lucknow',26.85,80.95),
+  ('kanpur',26.45,80.33),
+  ('ghaziabad',28.67,77.45),
+  ('noida',28.54,77.39),
+  ('greater noida',28.47,77.50),
+  ('agra',27.18,78.01),
+  ('varanasi',25.32,82.97),
+  ('meerut',28.98,77.71),
+  ('prayagraj',25.44,81.85),
+  ('bareilly',28.37,79.43),
+  ('aligarh',27.88,78.08),
+  ('moradabad',28.84,78.77),
+  ('gorakhpur',26.76,83.37),
+  ('jhansi',25.45,78.57),
+  ('mathura',27.49,77.67),
+  ('ayodhya',26.80,82.20),
+  ('vrindavan',27.58,77.70),
+  ('dehradun',30.32,78.03),
+  ('haridwar',29.95,78.16),
+  ('rishikesh',30.09,78.27),
+  ('nainital',29.38,79.46),
+  ('mussoorie',30.46,78.07),
+  ('haldwani',29.22,79.51),
+  ('roorkee',29.85,77.89),
+  ('kolkata',22.57,88.36),
+  ('howrah',22.59,88.31),
+  ('durgapur',23.52,87.31),
+  ('asansol',23.68,86.98),
+  ('siliguri',26.73,88.40),
+  ('darjeeling',27.04,88.26),
+  ('kharagpur',22.35,87.23),
+  ('port blair',11.62,92.73),
+  ('chandigarh',30.73,76.78),
+  ('daman',20.40,72.83),
+  ('silvassa',20.27,73.01),
+  ('delhi',28.61,77.21),
+  ('new delhi',28.61,77.21),
+  ('srinagar',34.08,74.80),
+  ('jammu',32.73,74.86),
+  ('leh',34.15,77.58),
+  ('kavaratti',10.57,72.64),
+  ('puducherry',11.94,79.81)
+on conflict (name) do update set lat = excluded.lat, lng = excluded.lng;
+
+-- km between two cities (null if either is unknown)
+create or replace function public._city_km(a text, b text)
+returns numeric language sql stable
+as $$ select round((6371 * 2 * asin(sqrt(power(sin(radians(y.lat - x.lat) / 2), 2)
+          + cos(radians(x.lat)) * cos(radians(y.lat)) * power(sin(radians(y.lng - x.lng) / 2), 2))))::numeric, 1)
+      from public.city_geo x, public.city_geo y
+      where x.name = lower(trim(coalesce(a, ''))) and y.name = lower(trim(coalesce(b, ''))) $$;
+
+-- will a photographer (travel, km, city, state) take a shoot in this city?
+create or replace function public._pg_covers_km(p_travel text, p_km integer, p_city text, p_state text, r_city text, r_state text)
+returns boolean language sql stable
+as $$ select case
+    when r_city is null or p_city is null or lower(trim(p_city)) = lower(trim(r_city)) then true
+    when coalesce(p_travel, 'city') = 'anywhere' then true
+    when p_travel = 'nearby' then public._region(p_city, p_state) = public._region(r_city, r_state)
+    when p_travel = 'state' then lower(trim(coalesce(p_state, ''))) = lower(trim(coalesce(r_state, '')))
+                              or public._region(p_city, p_state) = public._region(r_city, r_state)
+    when p_travel = 'km' then coalesce(public._city_km(p_city, r_city) <= coalesce(p_km, 50),
+                                       public._region(p_city, p_state) = public._region(r_city, r_state))
+    else false end $$;
+-- keep the old 5-argument version working (50 km)
+create or replace function public._pg_covers(p_travel text, p_city text, p_state text, r_city text, r_state text)
+returns boolean language sql stable
+as $$ select public._pg_covers_km(p_travel, 50, p_city, p_state, r_city, r_state) $$;
+-- <<< 8q upi travel
+
+-- >>> 8r admin record
+-- =====================================================================
+-- 8r. ADMIN: FULL RECORD OF ANYONE + EDIT THEIR DETAILS
+--     admin_person_record — every stored detail about one person (raw
+--       profile and photographer rows, sign-in info, UPI IDs, ID check,
+--       agreement ticks, phones with notifications, saved photographers,
+--       calendar blocks, chats per booking). Opening it is logged.
+--     admin_edit_person — fix one field on someone's behalf; every change
+--       is logged with the old and new value. Admins / super admins only.
+-- =====================================================================
+create or replace function public.admin_person_record(p_user uuid)
+returns jsonb language plpgsql security definer set search_path = public
+as $$
+declare res jsonb; nm text;
+begin
+  if coalesce(public.staff_role() in ('super_admin','admin'), false) is not true then raise exception 'Only admins can open full records'; end if;
+  select name into nm from public.profiles where id = p_user;
+  if not found then raise exception 'No such person'; end if;
+  perform public._audit('view_full_record', 'user', p_user::text, nm, null);
+  select jsonb_build_object(
+    'profile', (select to_jsonb(p) from public.profiles p where p.id = p_user),
+    'login', (select jsonb_build_object('email', j->>'email', 'phone', j->>'phone', 'created_at', j->>'created_at', 'last_sign_in_at', j->>'last_sign_in_at',
+                 'email_confirmed_at', j->>'email_confirmed_at', 'provider', j->'raw_app_meta_data'->>'provider', 'providers', j->'raw_app_meta_data'->'providers')
+              from (select to_jsonb(u) j from auth.users u where u.id = p_user) x),
+    'photographer', (select to_jsonb(g) from public.photographers g where g.id = p_user),
+    'customer_upi', (select to_jsonb(c) from public.customer_upi c where c.id = p_user),
+    'payout', (select to_jsonb(x) from public.photographer_payout x where x.id = p_user),
+    'kyc', (select to_jsonb(k) from public.photographer_kyc k where k.id = p_user),
+    'agreements', (select coalesce(jsonb_agg(to_jsonb(a) order by a.id desc), '[]') from public.partner_agreements a where a.user_id = p_user),
+    'devices', (select coalesce(jsonb_agg(jsonb_build_object('device', s.device, 'created_at', s.created_at, 'permission', s.permission, 'fails', s.fails,
+                   'kind', case when s.endpoint like 'fcm:%' then 'Android app' else split_part(split_part(s.endpoint, '//', 2), '/', 1) end) order by s.created_at desc), '[]')
+                from public.push_subscriptions s where s.user_id = p_user),
+    'saved', (select coalesce(jsonb_agg(jsonb_build_object('photographer_id', v.photographer_id, 'name', g.display_name, 'at', v.created_at) order by v.created_at desc), '[]')
+              from public.saved_photographers v left join public.photographers g on g.id = v.photographer_id where v.user_id = p_user),
+    'busy', (select coalesce(jsonb_agg(to_jsonb(b) order by b.starts_at desc), '[]') from (select * from public.busy_blocks where photographer_id = p_user order by starts_at desc limit 200) b),
+    'chats', (select coalesce(jsonb_agg(z order by z.last_at desc nulls last), '[]') from (
+                select k.id booking_id, k.status, k.start_at, k.customer_name, k.photographer_name, count(m.id) messages, max(m.created_at) last_at
+                from public.bookings k left join public.messages m on m.booking_id = k.id
+                where k.customer_id = p_user or k.photographer_id = p_user group by k.id) z)
+  ) into res;
+  return res;
+end $$;
+revoke all on function public.admin_person_record(uuid) from public, anon;
+grant execute on function public.admin_person_record(uuid) to authenticated;
+
+create or replace function public.admin_edit_person(p_user uuid, p_field text, p_value text)
+returns text language plpgsql security definer set search_path = public
+as $$
+declare nm text; old text; v text := nullif(trim(coalesce(p_value, '')), ''); ph text;
+begin
+  if coalesce(public.staff_role() in ('super_admin','admin'), false) is not true then raise exception 'Only admins can change someone''s details'; end if;
+  select name into nm from public.profiles where id = p_user;
+  if not found then raise exception 'No such person'; end if;
+  perform set_config('snappro.system', 'on', true);
+  if p_field in ('name','city','state','pincode') then
+    if p_field = 'name' and (v is null or length(v) < 2) then raise exception 'Enter a name'; end if;
+    if p_field = 'pincode' and v is not null and v !~ '^[1-9][0-9]{5}$' then raise exception 'A pincode is 6 digits'; end if;
+    execute format('select %I::text from public.profiles where id = $1', p_field) into old using p_user;
+    execute format('update public.profiles set %I = $1 where id = $2', p_field) using left(v, 100), p_user;
+    if p_field in ('city','state','pincode') and exists (select 1 from public.photographers where id = p_user) then
+      execute format('update public.photographers set %I = $1 where id = $2', p_field) using left(v, 100), p_user;
+    end if;
+  elsif p_field = 'phone' then
+    ph := public._norm_phone(v);
+    if ph is null or ph !~ '^[6-9][0-9]{9}$' then raise exception 'Enter a valid 10-digit mobile number'; end if;
+    select phone into old from public.profiles where id = p_user;
+    update public.profiles set phone = ph where id = p_user; v := ph;
+  elsif p_field = 'upi' then
+    if v !~ '^[A-Za-z0-9._-]{2,128}@[A-Za-z][A-Za-z0-9.-]{1,64}$' then raise exception 'That doesn''t look like a UPI ID'; end if;
+    select upi_id into old from public.customer_upi where id = p_user;
+    insert into public.customer_upi (id, upi_id) values (p_user, v) on conflict (id) do update set upi_id = excluded.upi_id, updated_at = now();
+  elsif p_field in ('payout_upi','payout_name') then
+    if not exists (select 1 from public.photographers where id = p_user) then raise exception 'Not a photographer'; end if;
+    if p_field = 'payout_upi' and v !~ '^[A-Za-z0-9._-]{2,128}@[A-Za-z][A-Za-z0-9.-]{1,64}$' then raise exception 'That doesn''t look like a UPI ID'; end if;
+    select case when p_field = 'payout_upi' then upi_id else account_name end into old from public.photographer_payout where id = p_user;
+    insert into public.photographer_payout (id, upi_id, account_name) values (p_user, case when p_field = 'payout_upi' then v end, case when p_field = 'payout_name' then left(v, 100) end)
+    on conflict (id) do update set upi_id = case when p_field = 'payout_upi' then excluded.upi_id else photographer_payout.upi_id end,
+       account_name = case when p_field = 'payout_name' then excluded.account_name else photographer_payout.account_name end, updated_at = now();
+  elsif p_field in ('display_name','bio','services','travel','travel_km','years_exp','gear') then
+    if not exists (select 1 from public.photographers where id = p_user) then raise exception 'Not a photographer'; end if;
+    execute format('select %I::text from public.photographers where id = $1', p_field) into old using p_user;
+    if p_field = 'gear' then update public.photographers set gear = coalesce(v, '[]')::jsonb where id = p_user;
+    elsif p_field in ('travel_km','years_exp') then
+      if v !~ '^[0-9]{1,4}$' then raise exception 'Enter a number'; end if;
+      execute format('update public.photographers set %I = $1::int where id = $2', p_field) using v, p_user;
+    else
+      if p_field = 'display_name' and (v is null or length(v) < 2) then raise exception 'Enter a name'; end if;
+      execute format('update public.photographers set %I = $1 where id = $2', p_field) using case when p_field = 'bio' then left(coalesce(v, ''), 600) else v end, p_user;
+    end if;
+  else
+    raise exception 'That detail can''t be changed here';
+  end if;
+  perform public._audit('edit_person', 'user', p_user::text, nm, jsonb_build_object('field', p_field, 'old', old, 'new', v));
+  return 'saved';
+end $$;
+revoke all on function public.admin_edit_person(uuid, text, text) from public, anon;
+grant execute on function public.admin_edit_person(uuid, text, text) to authenticated;
+-- <<< 8r admin record
+
 -- =====================================================================
 -- 9. ONE-OFF CLEAN-UP
 -- =====================================================================
@@ -6741,4 +7167,6 @@ select
   exists (select 1 from pg_proc where proname = 'accept_partner_agreement')   as agreement_ready,
   exists (select 1 from pg_trigger where tgname = 'profiles_phone_check')   as phone_ready,
   exists (select 1 from pg_proc where proname = 'push_register_fcm')   as app_push_ready,
-  (select count(*) = 3 from information_schema.columns where table_schema='public' and ((table_name='photographers' and column_name in ('services','gear')) or (table_name='requests' and column_name='service')))   as gear_ready;
+  (select count(*) = 3 from information_schema.columns where table_schema='public' and ((table_name='photographers' and column_name in ('services','gear')) or (table_name='requests' and column_name='service')))   as gear_ready,
+  (select count(*) = 213 from public.city_geo) and exists (select 1 from pg_proc where proname = 'set_my_upi')   as upi_travel_ready,
+  exists (select 1 from pg_proc where proname = 'admin_edit_person')   as admin_record_ready;

@@ -311,7 +311,7 @@ html[data-theme=light] .modal-bg{background:rgba(20,20,30,.38)}
   body.print-sheet .sheet{box-shadow:none;border:0;max-width:none}
   body.print-sheet .trail,body.print-sheet button{display:none!important}
 }
-</style>
+.pfgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}.pfi{position:relative;display:block;aspect-ratio:1;border-radius:10px;overflow:hidden;background:var(--surface-2)}.pfi img,.pfi video{width:100%;height:100%;object-fit:cover;display:block}.pfi i{position:absolute;left:6px;bottom:6px;font-style:normal;font-size:11px;background:rgba(0,0,0,.6);color:#fff;padding:2px 6px;border-radius:6px}</style>
 </head>
 <body>
 <div id="app"><div class="center-card"><div class="spin" style="margin-top:20vh"></div></div></div>
@@ -579,7 +579,7 @@ async function loadData(){
   const [bk, rq, pg, st, inv, ready, est] = await Promise.all([
     sb.from('bookings').select('id,request_id,customer_name,photographer_name,category,start_at,city,pincode,price,status,payment_status,balance_status,created_at').order('created_at',{ascending:false}).limit(1000),
     sb.from('requests').select('id,customer_name,category,city,pincode,budget,status,start_at,created_at').order('created_at',{ascending:false}).limit(1000),
-    sb.from('photographers').select('id,display_name,city,state,pincode,bio,categories,years_exp,rating,review_count,jobs_done,is_online,is_verified,portfolio,created_at,approval_status,review_note,submitted_at,approved_at,commission_pct,featured_until').order('created_at',{ascending:false}).limit(500),
+    sb.from('photographers').select('id,display_name,city,state,pincode,bio,categories,years_exp,services,gear,travel,travel_km,rating,review_count,jobs_done,is_online,is_verified,portfolio,created_at,approval_status,review_note,submitted_at,approved_at,commission_pct,featured_until').order('created_at',{ascending:false}).limit(500),
     sb.from('staff').select('id,email,name,role,status,created_at').order('created_at'),
     isSuper ? sb.from('staff_invites').select('id,email,role,created_at,accepted_at,email_request,email_sent_at').order('created_at',{ascending:false}) : null,
     isSuper ? sb.rpc('invite_email_ready') : null,
@@ -1470,6 +1470,8 @@ function pendingCard(p, canDecide){
     ${p.bio ? `<p class="sm muted mt12" style="white-space:pre-wrap;margin-bottom:0">${esc(p.bio)}</p>` : ""}
     ${photos.length ? `<div class="thumbs mt12">${photos.slice(0, 12).map(u => `<a href="${esc(u)}" target="_blank" rel="noopener">${/\.(mp4|mov|webm)(\?|$)/i.test(u) ? `<video src="${esc(u)}#t=0.1" muted preload="metadata"></video>` : `<img src="${esc(u)}" alt="" loading="lazy">`}</a>`).join("")}</div>` : ""}
     ${flags.length ? `<div class="xs mt12" style="color:#ffd88a">Worth checking: ${flags.map(esc).join(" · ")}</div>` : ""}
+    <div class="xs muted2 mt12">Offers: <b>${esc(SVC_NAMES[p.services || "photo"])}</b> · Gear: ${esc(gearText(p) || "not listed")}</div>
+    <div class="mt12">${pgDocButtons(p)}</div>
     ${S.me.role !== "manager" ? kycBox(p, canDecide) : ""}
     ${canDecide ? (S.rejecting === p.id ? `
       <div class="mt12"><textarea id="rejWhy-${p.id}" class="input" rows="2" maxlength="500" placeholder="What should they fix? e.g. Please add at least 6 photos of your own work."></textarea>
@@ -1494,14 +1496,14 @@ function vPros(){
   ${!canDecide && pending.length ? `<div class="xs muted2 mt8">An admin or super admin needs to approve photographers.</div>` : ""}
   ${rejected.length ? `<details class="mt16"><summary class="sec" style="cursor:pointer">Not approved (${rejected.length})</summary><div class="stackc mt8">${rejected.map(p => pendingCard(p, canDecide)).join("")}</div></details>` : ""}
 
-  <div class="sec mt24">Approved (${live.length})</div>
+  <div class="between mt24"><div class="sec" style="margin:0">Approved (${live.length})</div><button class="btn sm" onclick="exportPhotographers()">Download CSV (all photographers)</button></div>
   ${!live.length ? `<div class="card"><div class="empty">No approved photographers yet.</div></div>` : `<div class="card tblwrap"><table>
-    <thead><tr><th>Name</th><th>City</th><th>Rating</th><th>Shoots</th><th>Photos</th><th>Status</th><th>Verified</th>${canDecide ? "<th>Commission</th>" : ""}</tr></thead>
+    <thead><tr><th>Name</th><th>City</th><th>Rating</th><th>Shoots</th><th>Photos</th><th>Records</th><th>Status</th><th>Verified</th>${canDecide ? "<th>Commission</th>" : ""}</tr></thead>
     <tbody>${live.map(p=>`<tr>
       <td style="font-weight:600">${esc(p.display_name||'—')}${p.featured_until && Date.parse(p.featured_until) > Date.now() ? ' <span class="chip amber">★ Featured</span>' : ""}<div class="xs" style="color:var(--accent)">${esc(idOf(p.id))}</div><div class="xs muted2">${emailOf(p.id) ? esc(emailOf(p.id)) + " · " : ""}approved ${fmt(p.approved_at || p.created_at)}</div></td>
       <td class="muted">${esc(p.city||'—')}${p.state?', '+esc(p.state):''}</td>
       <td>${p.review_count ? Number(p.rating).toFixed(1)+'★ <span class="muted2">('+p.review_count+')</span>' : '<span class="muted2">No reviews</span>'}</td>
-      <td>${p.jobs_done||0}</td><td>${(p.portfolio||[]).length}</td>
+      <td>${p.jobs_done||0}</td><td>${(p.portfolio||[]).length}</td><td>${pgDocButtons(p)}</td>
       <td><span class="chip ${p.is_online?'green':''}">${p.is_online?'Available':'Away'}</span></td>
       <td>${canDecide ? `<label class="sw"><input type="checkbox" ${p.is_verified?'checked':''} onchange="setVerified('${p.id}',this.checked)">${p.is_verified?'Verified':'No'}</label>`
                       : (p.is_verified?'<span class="chip admin">Verified</span>':'<span class="muted2">No</span>')}</td>
@@ -2975,6 +2977,7 @@ function vUser360(){
         ${m ? `<button class="stat tap" onclick="editPgRate('${p.id}', ${JSON.stringify(g.display_name || p.name || "").replace(/"/g, "&quot;")}, ${g.commission_pct == null ? "null" : Number(g.commission_pct)})" title="Change this photographer's commission"><div class="v">${g.commission_pct != null ? Number(g.commission_pct) + "%" : "Standard"}</div><div class="l">Commission · change <span class="go">›</span></div></button>` : ""}${m && g.storage_quota ? kpi((Number(g.storage_quota) / 1048576).toFixed(0) + " MB", "Storage") : ""}${g.featured_until ? kpi(fmt(g.featured_until), "Featured until") : ""}${kpi(esc({ city: "Own city only", nearby: "Nearby cities", anywhere: "Anywhere in India" }[g.travel] || "Own city only"), "Travels for shoots")}</div></div>` : ""}
     </div>
     <div class="mt16">
+      ${recordHtml(p)}
       ${sec("Timeline — everything they did (" + num((D.timeline || []).length) + ")", `<div class="tl">${(D.timeline || []).map(e => { const gg = evGroup(e.kind);
         return `<div class="tlrow"><div class="tlt">${dts(e.at)}</div><span class="tldot" style="background:${EV_COLOR[gg]}"></span><div class="grow">${evText({ ...e, user_id: null, other_id: null }, true)}${e.entity === "booking" && e.entity_id ? ` · ${bkLink(e.entity_id, "booking")}` : ""}</div></div>`; }).join("") || `<div class="xs muted2">Nothing yet.</div>`}</div>`, true)}
       ${sec("Bookings (" + num(bks.length) + ")", mini([["created_at","Booked","dt"],["start_at","Shoot","dt"],["status","Status","chip"],["category","Shoot", r => esc(CAT_NAMES[r.category] || r.category)],["customer_name","Customer"],["photographer_name","Photographer"]].concat(m ? [["total_amount","Value","inr"],["discount_amount","Discount","inr"]] : []).concat([["payment_status","Payment"],["balance_status","Balance"],["payout_status","Payout"],["messages","Messages","n"],["stars","Review", r => r.stars ? "★".repeat(r.stars) : "—"]]), bks, r => `openBooking('${r.id}')`))}
@@ -3863,6 +3866,109 @@ render = function(){
   if(grid && html) grid.insertAdjacentHTML("afterend", html);
 };
 
+/* ===================== ID DOCUMENTS, PORTFOLIO, FULL RECORD, EDIT =====================
+   Photographers tab: every photographer has "ID documents", "Portfolio" and "Full record".
+   A person's page (click any name) has "Everything we store" with an Edit button on each
+   detail; opening it and every change are written to the Activity log. */
+
+const GEAR_NAMES = { camera: "Camera body", lens: "Lens", phone: "Mobile phone", drone: "Drone", gimbal: "Gimbal / stabiliser", light: "Lights / flash", mic: "Microphone", other: "Other" };
+const SVC_NAMES = { photo: "Photos", video: "Video", both: "Photos + video" };
+const pgById = id => (S.photographers || []).find(p => p.id === id) || { id };
+
+/* ---------- ID documents + portfolio sheets ---------- */
+function openPgDoc(id, kind){
+  S.pgDoc = { id, kind, i: 0 };
+  if(kind === "id"){ S.kycAll = null; S.kycUrls = {}; loadKycAll(); }   // fresh private links every time (they last 1 hour)
+  render();
+}
+function vPgDoc(){
+  const d = S.pgDoc; if(!d) return "";
+  const p = pgById(d.id), list = p.portfolio || [];
+  const isVid = u => /\.(mp4|webm|mov|m4v)(\?|$)/i.test(u);
+  const body = d.kind === "id" ? kycBox(p, S.me.role !== "manager")
+    : !list.length ? `<div class="empty">No portfolio photos.</div>`
+    : `<div class="xs muted2 mt8">${list.length} item${list.length === 1 ? "" : "s"} · click one to open it full size</div>
+       <div class="pfgrid mt8">${list.map((u, i) => `<a class="pfi" href="${esc(u)}" target="_blank" rel="noopener" title="Item ${i + 1}">${isVid(u) ? `<video src="${esc(u)}" preload="metadata" muted></video><i>Video</i>` : `<img src="${esc(u)}" loading="lazy" alt="Portfolio ${i + 1}">`}</a>`).join("")}</div>`;
+  return `<div class="sheet-bg top" style="z-index:66" onclick="if(event.target===this){S.pgDoc=null;render()}"><div class="sheet wide" role="dialog" aria-label="${d.kind === "id" ? "ID documents" : "Portfolio"}">
+    <div class="between"><div><div class="h2">${d.kind === "id" ? "ID documents" : "Portfolio"} · ${esc(p.display_name || "Photographer")}</div>
+      <div class="xs muted2 mt8">${esc(idOf(p.id))}${emailOf(p.id) ? " · " + esc(emailOf(p.id)) : ""}${p.city ? " · " + esc(p.city) : ""}</div></div>
+      <div class="row"><button class="btn sm" onclick="openPgDoc('${p.id}','${d.kind === "id" ? "pf" : "id"}')">${d.kind === "id" ? "Portfolio" : "ID documents"}</button>
+        <button class="btn sm" onclick="S.pgDoc=null;openUser('${p.id}')">Full record</button><button class="btn sm" onclick="S.pgDoc=null;render()">Close</button></div></div>
+    ${body}
+    ${d.kind === "id" ? `<div class="xs muted2 mt12">ID photos stay stored for as long as the account exists, so you can open them again any time. Links to the photos expire after 1 hour — reopen this window for fresh ones.</div>` : ""}
+  </div></div>`;
+}
+function pgDocButtons(p){
+  return `<div class="row" style="gap:6px;flex-wrap:wrap"><button class="btn sm" onclick="event.stopPropagation();openPgDoc('${p.id}','id')">ID documents</button>
+    <button class="btn sm" onclick="event.stopPropagation();openPgDoc('${p.id}','pf')">Portfolio (${(p.portfolio || []).length})</button>
+    <button class="btn sm" onclick="event.stopPropagation();openUser('${p.id}')">Full record</button></div>`;
+}
+function gearText(p){ return (p.gear || []).map(g => (GEAR_NAMES[g.t] || g.t) + ": " + g.m).join("; "); }
+function exportPhotographers(){
+  const rows = (S.photographers || []).map(p => ({ id: idOf(p.id), name: p.display_name, email: emailOf(p.id), city: p.city, state: p.state, pincode: p.pincode,
+    approval: p.approval_status, approved_at: p.approved_at, offers: SVC_NAMES[p.services || "photo"], shoot_types: (p.categories || []).join(" "), gear: gearText(p),
+    travel: p.travel === "km" ? "within " + (p.travel_km || 50) + " km" : p.travel, years: p.years_exp, rating: p.rating, reviews: p.review_count, shoots: p.jobs_done,
+    portfolio_items: (p.portfolio || []).length, available: p.is_online, verified_badge: p.is_verified, commission_pct: p.commission_pct, joined: p.created_at, bio: p.bio }));
+  downloadCsv("photographers", rows);
+}
+function downloadCsv(name, rows){
+  if(!rows.length) return;
+  const keys = Object.keys(rows[0]), q = v => v == null ? "" : '"' + String(typeof v === "object" ? JSON.stringify(v) : v).replace(/"/g, '""') + '"';
+  const blob = new Blob([keys.join(",") + "\n" + rows.map(r => keys.map(k => q(r[k])).join(",")).join("\n")], { type: "text/csv" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "snappro-" + name + "-" + istToday() + ".csv";
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+}
+
+/* ---------- everything we store about one person ---------- */
+async function loadRecord(id){
+  if(!S.u360) return;
+  S.u360.rec = "loading"; render();
+  const { data, error } = await sb.rpc("admin_person_record", { p_user: id });
+  if(!S.u360) return;
+  S.u360.rec = error ? { err: /function/i.test(error.message) ? "This needs the latest database update — run supabase/snappro.sql in the Supabase SQL Editor." : error.message } : data;
+  render();
+}
+const EDITABLE = {
+  profile: { name: "Name", phone: "Mobile number", city: "City", state: "State", pincode: "Pincode" },
+  photographer: { display_name: "Public name", bio: "Bio", services: "Offers (photo / video / both)", travel: "Travel (city / km / state / anywhere)", travel_km: "Travel km", years_exp: "Years of experience", gear: "Gear (JSON list)" }
+};
+async function editPerson(id, field, label, cur){
+  const v = prompt("Change " + label + "\n(the change is saved to the Activity log)", cur == null ? "" : typeof cur === "object" ? JSON.stringify(cur) : String(cur));
+  if(v === null) return;
+  const { error } = await sb.rpc("admin_edit_person", { p_user: id, p_field: field, p_value: v });
+  if(error){ S.err = error.message; render(); return; }
+  S.note = label + " updated."; await openUser(id); await loadRecord(id); loadData();
+}
+function rawRows(obj, editMap, id, skip){
+  if(!obj) return `<div class="xs muted2">Nothing stored.</div>`;
+  const show = v => v == null || v === "" ? '<span class="muted2">—</span>' : Array.isArray(v) || typeof v === "object" ? `<span class="xs mono">${esc(JSON.stringify(v)).slice(0, 2000)}</span>` : /^\d{4}-\d\d-\d\dT/.test(String(v)) ? dt(v) : esc(String(v));
+  return Object.keys(obj).filter(k => !(skip || []).includes(k)).map(k => `<div class="kv"><span>${esc(k)}</span><span>${show(obj[k])}${editMap && editMap[k] ? ` <button class="linkbtn" onclick='editPerson("${id}","${k}","${esc(editMap[k])}",${JSON.stringify(obj[k] == null ? "" : obj[k]).replace(/'/g, "&#39;")})'>Edit</button>` : ""}</span></div>`).join("");
+}
+function recordHtml(p){
+  const R = S.u360 && S.u360.rec, mgr = S.me.role === "manager";
+  if(mgr) return "";
+  if(!R) return `<details class="u3"><summary onclick="if(!S.u360.rec)loadRecord('${p.id}')">Everything we store — every detail, editable (opening it is logged)</summary><div class="mt8 xs muted2">Loading…</div></details>`;
+  if(R === "loading") return `<details class="u3" open><summary>Everything we store</summary><div class="mt8 xs muted2">Loading…</div></details>`;
+  if(R.err) return `<div class="warn mt12">${esc(R.err)}</div>`;
+  const g = R.photographer, k = R.kyc, box = (t, inner) => `<div class="card"><div class="sec">${t}</div>${inner}</div>`;
+  return `<details class="u3" open><summary>Everything we store</summary><div class="grid2 mt8">
+    ${box("Profile", rawRows(R.profile, EDITABLE.profile, p.id, ["acq"]))}
+    ${box("Sign-in", rawRows(R.login))}
+    ${box("UPI IDs", `<div class="kv"><span>Customer UPI ID</span><span>${R.customer_upi ? esc(R.customer_upi.upi_id) : '<span class="muted2">—</span>'} <button class="linkbtn" onclick="editPerson('${p.id}','upi','UPI ID','${esc((R.customer_upi || {}).upi_id || "")}')">Edit</button></span></div>
+      ${g ? `<div class="kv"><span>Payout UPI ID</span><span>${R.payout && R.payout.upi_id ? esc(R.payout.upi_id) : '<span class="muted2">—</span>'} <button class="linkbtn" onclick="editPerson('${p.id}','payout_upi','Payout UPI ID','${esc((R.payout || {}).upi_id || "")}')">Edit</button></span></div>
+      <div class="kv"><span>Name on payout account</span><span>${R.payout && R.payout.account_name ? esc(R.payout.account_name) : '<span class="muted2">—</span>'} <button class="linkbtn" onclick="editPerson('${p.id}','payout_name','Name on payout account','${esc((R.payout || {}).account_name || "")}')">Edit</button></span></div>` : ""}`)}
+    ${g ? box("Photographer profile", `<div class="row" style="gap:6px;flex-wrap:wrap;margin-bottom:8px"><button class="btn sm" onclick="openPgDoc('${p.id}','id')">ID documents</button><button class="btn sm" onclick="openPgDoc('${p.id}','pf')">Portfolio (${(g.portfolio || []).length})</button></div>
+      <div class="kv"><span>Gear</span><span>${(g.gear || []).length ? (g.gear || []).map(x => esc((GEAR_NAMES[x.t] || x.t) + ": " + x.m)).join("<br>") : '<span class="muted2">Not listed</span>'}</span></div>
+      ${rawRows(g, EDITABLE.photographer, p.id, ["portfolio","id"])}`) : ""}
+    ${k ? box("ID check", rawRows(k, null, p.id, ["id"])) : ""}
+    ${(R.agreements || []).length ? box("Partner Agreement acceptances", R.agreements.map(a => `<div class="kv"><span>${esc(a.version)} · ${esc(a.method || "")}</span><span>${a.accepted_at ? dt(a.accepted_at) : ""}<div class="xs muted2">${esc((a.items || []).join(", "))}${a.ip ? " · IP " + esc(a.ip) : ""}</div></span></div>`).join("")) : ""}
+    ${box("Phones with notifications (" + (R.devices || []).length + ")", (R.devices || []).map(d => `<div class="kv"><span>${esc(d.device || d.kind)}</span><span>${esc(d.kind)} · since ${fmt(d.created_at)}${d.fails ? " · " + d.fails + " failures" : ""}</span></div>`).join("") || `<div class="xs muted2">None</div>`)}
+    ${box("Chats (" + (R.chats || []).length + " bookings)", (R.chats || []).map(c => `<div class="kv"><span>${payRef(c.booking_id)} · ${esc(c.customer_name || "")} ↔ ${esc(c.photographer_name || "")}</span><span>${num(c.messages)} messages${c.last_at ? " · last " + ago(c.last_at) : ""} <button class="linkbtn" onclick="openChat('${c.booking_id}')">Read</button></span></div>`).join("") || `<div class="xs muted2">No bookings yet.</div>`)}
+    ${(R.saved || []).length ? box("Saved photographers", R.saved.map(v => `<div class="kv"><span>${esc(v.name || "")}</span><span>${fmt(v.at)}</span></div>`).join("")) : ""}
+    ${(R.busy || []).length ? box("Calendar blocks (" + R.busy.length + ")", R.busy.slice(0, 50).map(b => `<div class="kv"><span>${dt(b.starts_at)} → ${dt(b.ends_at)}</span><span>${esc(b.note || "")}</span></div>`).join("")) : ""}
+  </div></details>`;
+}
+
 /* ============================ render ========================== */
 
 function render(){
@@ -3878,7 +3984,7 @@ function render(){
     S.view==="newpw"   ? vNewPw()   :
     S.view==="code"    ? vCode()    :
     S.view==="denied"  ? vDenied()  :
-    S.view==="console" ? vConsole() + vDrill() + vUser360() + vBooking() + vChatView() : vLogin();
+    S.view==="console" ? vConsole() + vDrill() + vUser360() + vPgDoc() + vBooking() + vChatView() : vLogin();
 
   try{ drawCharts(); }catch(e){ console.warn('charts', e); }
   try{ drawReportCharts(); }catch(e){ console.warn('report charts', e); }
