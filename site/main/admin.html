@@ -579,7 +579,7 @@ async function loadData(){
   const [bk, rq, pg, st, inv, ready, est] = await Promise.all([
     sb.from('bookings').select('id,request_id,customer_name,photographer_name,category,start_at,city,pincode,price,status,payment_status,balance_status,created_at').order('created_at',{ascending:false}).limit(1000),
     sb.from('requests').select('id,customer_name,category,city,pincode,budget,status,start_at,created_at').order('created_at',{ascending:false}).limit(1000),
-    sb.from('photographers').select('id,display_name,city,state,pincode,bio,categories,years_exp,services,gear,travel,travel_km,rating,review_count,jobs_done,is_online,is_verified,portfolio,created_at,approval_status,review_note,submitted_at,approved_at,commission_pct,featured_until').order('created_at',{ascending:false}).limit(500),
+    sb.from('photographers').select('id,display_name,city,state,pincode,bio,categories,years_exp,services,gear,travel,travel_km,services_confirmed_at,gear_photo,gear_verified_at,reminded_at,rating,review_count,jobs_done,is_online,is_verified,portfolio,created_at,approval_status,review_note,submitted_at,approved_at,commission_pct,featured_until').order('created_at',{ascending:false}).limit(500),
     sb.from('staff').select('id,email,name,role,status,created_at').order('created_at'),
     isSuper ? sb.from('staff_invites').select('id,email,role,created_at,accepted_at,email_request,email_sent_at').order('created_at',{ascending:false}) : null,
     isSuper ? sb.rpc('invite_email_ready') : null,
@@ -1488,8 +1488,9 @@ function vPros(){
   const all = S.photographers || [];
   const pending = all.filter(p => p.approval_status === "pending").sort((a,b) => Date.parse(a.submitted_at||a.created_at) - Date.parse(b.submitted_at||b.created_at));
   const rejected = all.filter(p => p.approval_status === "rejected");
-  const live = all.filter(p => p.approval_status === "approved");
+  const live = all.filter(p => p.approval_status === "approved" && proFilterOk(p));
   return `
+  ${incompleteHtml()}
   <div class="sec">Waiting for approval (${pending.length})</div>
   ${pending.length ? `<div class="stackc">${pending.map(p => pendingCard(p, canDecide)).join("")}</div>`
     : `<div class="card"><div class="xs muted2">Nobody is waiting. New photographers appear here as soon as they finish signing up, and they can't see requests or send quotes until someone approves them.</div></div>`}
@@ -1497,13 +1498,14 @@ function vPros(){
   ${rejected.length ? `<details class="mt16"><summary class="sec" style="cursor:pointer">Not approved (${rejected.length})</summary><div class="stackc mt8">${rejected.map(p => pendingCard(p, canDecide)).join("")}</div></details>` : ""}
 
   <div class="between mt24"><div class="sec" style="margin:0">Approved (${live.length})</div><button class="btn sm" onclick="exportPhotographers()">Download CSV (all photographers)</button></div>
+  ${proFilterChips()}
   ${!live.length ? `<div class="card"><div class="empty">No approved photographers yet.</div></div>` : `<div class="card tblwrap"><table>
-    <thead><tr><th>Name</th><th>City</th><th>Rating</th><th>Shoots</th><th>Photos</th><th>Records</th><th>Status</th><th>Verified</th>${canDecide ? "<th>Commission</th>" : ""}</tr></thead>
+    <thead><tr><th>Name</th><th>City</th><th>Rating</th><th>Shoots</th><th>Photos</th><th>Offers &amp; gear</th><th>Records</th><th>Status</th><th>Verified</th>${canDecide ? "<th>Commission</th>" : ""}</tr></thead>
     <tbody>${live.map(p=>`<tr>
       <td style="font-weight:600">${esc(p.display_name||'—')}${p.featured_until && Date.parse(p.featured_until) > Date.now() ? ' <span class="chip amber">★ Featured</span>' : ""}<div class="xs" style="color:var(--accent)">${esc(idOf(p.id))}</div><div class="xs muted2">${emailOf(p.id) ? esc(emailOf(p.id)) + " · " : ""}approved ${fmt(p.approved_at || p.created_at)}</div></td>
       <td class="muted">${esc(p.city||'—')}${p.state?', '+esc(p.state):''}</td>
       <td>${p.review_count ? Number(p.rating).toFixed(1)+'★ <span class="muted2">('+p.review_count+')</span>' : '<span class="muted2">No reviews</span>'}</td>
-      <td>${p.jobs_done||0}</td><td>${(p.portfolio||[]).length}</td><td>${pgDocButtons(p)}</td>
+      <td>${p.jobs_done||0}</td><td>${(p.portfolio||[]).length}</td><td>${gearCell(p)}</td><td>${pgDocButtons(p)}</td>
       <td><span class="chip ${p.is_online?'green':''}">${p.is_online?'Available':'Away'}</span></td>
       <td>${canDecide ? `<label class="sw"><input type="checkbox" ${p.is_verified?'checked':''} onchange="setVerified('${p.id}',this.checked)">${p.is_verified?'Verified':'No'}</label>`
                       : (p.is_verified?'<span class="chip admin">Verified</span>':'<span class="muted2">No</span>')}</td>
@@ -3885,12 +3887,12 @@ function vPgDoc(){
   const d = S.pgDoc; if(!d) return "";
   const p = pgById(d.id), list = p.portfolio || [];
   const isVid = u => /\.(mp4|webm|mov|m4v)(\?|$)/i.test(u);
-  const body = d.kind === "id" ? kycBox(p, S.me.role !== "manager")
+  const body = d.kind === "id" ? kycBox(p, S.me.role !== "manager") : d.kind === "gear" ? gearDocHtml(p)
     : !list.length ? `<div class="empty">No portfolio photos.</div>`
     : `<div class="xs muted2 mt8">${list.length} item${list.length === 1 ? "" : "s"} · click one to open it full size</div>
        <div class="pfgrid mt8">${list.map((u, i) => `<a class="pfi" href="${esc(u)}" target="_blank" rel="noopener" title="Item ${i + 1}">${isVid(u) ? `<video src="${esc(u)}" preload="metadata" muted></video><i>Video</i>` : `<img src="${esc(u)}" loading="lazy" alt="Portfolio ${i + 1}">`}</a>`).join("")}</div>`;
-  return `<div class="sheet-bg top" style="z-index:66" onclick="if(event.target===this){S.pgDoc=null;render()}"><div class="sheet wide" role="dialog" aria-label="${d.kind === "id" ? "ID documents" : "Portfolio"}">
-    <div class="between"><div><div class="h2">${d.kind === "id" ? "ID documents" : "Portfolio"} · ${esc(p.display_name || "Photographer")}</div>
+  return `<div class="sheet-bg top" style="z-index:66" onclick="if(event.target===this){S.pgDoc=null;render()}"><div class="sheet wide" role="dialog" aria-label="${d.kind === "id" ? "ID documents" : d.kind === "gear" ? "Gear" : "Portfolio"}">
+    <div class="between"><div><div class="h2">${d.kind === "id" ? "ID documents" : d.kind === "gear" ? "Gear" : "Portfolio"} · ${esc(p.display_name || "Photographer")}</div>
       <div class="xs muted2 mt8">${esc(idOf(p.id))}${emailOf(p.id) ? " · " + esc(emailOf(p.id)) : ""}${p.city ? " · " + esc(p.city) : ""}</div></div>
       <div class="row"><button class="btn sm" onclick="openPgDoc('${p.id}','${d.kind === "id" ? "pf" : "id"}')">${d.kind === "id" ? "Portfolio" : "ID documents"}</button>
         <button class="btn sm" onclick="S.pgDoc=null;openUser('${p.id}')">Full record</button><button class="btn sm" onclick="S.pgDoc=null;render()">Close</button></div></div>
@@ -3901,6 +3903,7 @@ function vPgDoc(){
 function pgDocButtons(p){
   return `<div class="row" style="gap:6px;flex-wrap:wrap"><button class="btn sm" onclick="event.stopPropagation();openPgDoc('${p.id}','id')">ID documents</button>
     <button class="btn sm" onclick="event.stopPropagation();openPgDoc('${p.id}','pf')">Portfolio (${(p.portfolio || []).length})</button>
+    <button class="btn sm" onclick="event.stopPropagation();openPgDoc('${p.id}','gear')">Gear${p.gear_photo && !p.gear_verified_at ? " •" : ""}</button>
     <button class="btn sm" onclick="event.stopPropagation();openUser('${p.id}')">Full record</button></div>`;
 }
 function gearText(p){ return (p.gear || []).map(g => (GEAR_NAMES[g.t] || g.t) + ": " + g.m).join("; "); }
@@ -3967,6 +3970,96 @@ function recordHtml(p){
     ${(R.saved || []).length ? box("Saved photographers", R.saved.map(v => `<div class="kv"><span>${esc(v.name || "")}</span><span>${fmt(v.at)}</span></div>`).join("")) : ""}
     ${(R.busy || []).length ? box("Calendar blocks (" + R.busy.length + ")", R.busy.slice(0, 50).map(b => `<div class="kv"><span>${dt(b.starts_at)} → ${dt(b.ends_at)}</span><span>${esc(b.note || "")}</span></div>`).join("")) : ""}
   </div></details>`;
+}
+
+/* ===================== GEAR + "CAN'T TAKE ORDERS YET" (admin) =====================
+   Photographers tab: "Offers & gear" column, filters (pro camera / phone only / no gear /
+   gear photo to check), a Gear window to check their kit photo, and a list of everyone
+   who can't send quotes yet with what's missing and an email-reminder button. */
+
+const gHas = (p, t) => (p.gear || []).some(g => g.t === t);
+function kitTextA(p){ const c = gHas(p, "camera"), ph = gHas(p, "phone"); return c && ph ? "Pro camera + phone" : c ? "Pro camera" : ph ? "Phone only" : "No gear listed"; }
+function gearCell(p){
+  return `${esc(SVC_NAMES[p.services || "photo"])}${p.services_confirmed_at ? "" : ' <span class="xs muted2">(not confirmed)</span>'}
+    <div class="xs ${gHas(p, "camera") || gHas(p, "phone") ? "muted2" : ""}" ${gHas(p, "camera") || gHas(p, "phone") ? "" : 'style="color:#ffb35c"'}>${esc(kitTextA(p))}</div>
+    ${p.gear_verified_at ? '<span class="chip green">Gear checked</span>' : p.gear_photo ? '<span class="chip amber">Photo to check</span>' : ""}`;
+}
+function proFilterOk(p){
+  const f = S.proF || "all";
+  return f === "all" || (f === "pro" && gHas(p, "camera")) || (f === "phone" && gHas(p, "phone") && !gHas(p, "camera"))
+    || (f === "none" && !gHas(p, "camera") && !gHas(p, "phone")) || (f === "check" && p.gear_photo && !p.gear_verified_at);
+}
+function proFilterChips(){
+  const all = (S.photographers || []).filter(p => p.approval_status === "approved");
+  const n = f => { const k = S.proF; S.proF = f; const c = all.filter(proFilterOk).length; S.proF = k; return c; };
+  return `<div class="row mt8" style="flex-wrap:wrap;gap:6px">${[["all","All"],["pro","Pro camera"],["phone","Phone only"],["none","No gear listed"],["check","Gear photo to check"]].map(([f, l]) =>
+    `<button class="btn sm ${(S.proF || "all") === f ? "primary" : ""}" onclick="S.proF='${f}';render()">${l} (${n(f)})</button>`).join("")}</div>`;
+}
+
+/* the Gear window (opened from the Photographers tab) */
+function gearDocHtml(p){
+  const canDecide = S.me.role !== "manager";
+  if(p.gear_photo && !(S.gearUrls || {})[p.gear_photo]) loadGearUrl(p.gear_photo);
+  const url = (S.gearUrls || {})[p.gear_photo];
+  return `<div class="grid2 mt12">
+    <div class="card"><div class="sec">What they listed</div>
+      <div class="kv"><span>Offers</span><span>${esc(SVC_NAMES[p.services || "photo"])}${p.services_confirmed_at ? "" : " (not confirmed yet)"}</span></div>
+      <div class="kv"><span>Shoots on</span><span>${esc(kitTextA(p))}</span></div>
+      ${(p.gear || []).map(g => `<div class="kv"><span>${esc(GEAR_NAMES[g.t] || g.t)}</span><span>${esc(g.m)}</span></div>`).join("") || '<div class="xs muted2 mt8">Nothing listed yet. They can\'t send quotes until they add a camera or phone.</div>'}</div>
+    <div class="card"><div class="sec">Photo of their kit</div>
+      ${p.gear_photo ? (url ? `<a class="kimg" href="${esc(url)}" target="_blank" rel="noopener"><img src="${esc(url)}" alt="Gear photo"><i>Gear photo</i></a>` : '<div class="xs muted2">Loading…</div>') : '<div class="xs muted2">No photo sent yet.</div>'}
+      <div class="mt12">${p.gear_verified_at ? `<span class="chip green">Gear checked ${fmt(p.gear_verified_at)}</span>` : '<span class="chip">Not checked</span>'}</div>
+      ${canDecide ? `<div class="row mt12" style="flex-wrap:wrap">${!p.gear_verified_at ? `<button class="btn sm primary" ${p.gear_photo ? "" : "disabled"} onclick="setGearCheck('${p.id}',true)">Gear matches the list ✓</button>` : `<button class="btn sm danger" onclick="setGearCheck('${p.id}',false)">Remove the check</button>`}</div>
+        <div class="xs muted2 mt8">Customers see a “Gear checked” badge. It's removed automatically if they change their camera, phone or the photo.</div>` : ""}</div>
+  </div>`;
+}
+async function loadGearUrl(path){
+  S.gearUrls = S.gearUrls || {}; if(S.gearUrls[path] === null) return; S.gearUrls[path] = null;
+  try{ const r = await sb.storage.from("kyc").createSignedUrls([path], 3600); const x = (r.data || [])[0]; if(x && x.signedUrl) S.gearUrls[path] = x.signedUrl; }catch(e){}
+  render();
+}
+async function setGearCheck(id, ok){
+  const { error } = await sb.rpc("admin_gear_check", { p_pg: id, p_ok: ok });
+  if(error){ S.err = error.message; render(); return; }
+  S.note = ok ? "Gear marked as checked." : "Gear check removed."; await loadData(); render();
+}
+
+/* who can't take orders yet */
+async function loadIncomplete(force){
+  if(S.loading_inc && !force) return; S.loading_inc = true;
+  const { data, error } = await sb.rpc("admin_incomplete_photographers");
+  S.loading_inc = false;
+  S.incomplete = error ? { err: /function/i.test(error.message) ? "This needs the latest database update — run supabase/snappro.sql in the Supabase SQL Editor." : error.message } : (data || []);
+  render();
+}
+function incompleteHtml(){
+  if(S.incomplete === undefined){ loadIncomplete(); return `<div class="card"><div class="xs muted2">Checking who can't take orders yet…</div></div><div style="height:16px"></div>`; }
+  const L = S.incomplete; if(L.err) return `<div class="warn">${esc(L.err)}</div><div style="height:16px"></div>`;
+  if(!L.length) return "";
+  const canSend = S.me.role !== "manager", stale = L.filter(x => !x.reminded_at || Date.now() - Date.parse(x.reminded_at) > 3 * 864e5).length;
+  return `<details class="card" open style="margin-bottom:16px"><summary class="sec" style="cursor:pointer;margin:0">Can't take orders yet (${L.length})</summary>
+    <div class="xs muted2 mt8">These photographers are missing something they need before they can send quotes. A reminder email lists exactly what's missing and links to the app.</div>
+    <div class="row mt12" style="flex-wrap:wrap;gap:8px">${canSend ? `<button class="btn sm primary" ${stale ? "" : "disabled"} onclick="remindPhotographers(null,${stale})">Email everyone not reminded in 3 days (${stale})</button>` : ""}
+      <button class="btn sm" onclick="copyIncompleteEmails()">Copy emails</button></div>
+    <div class="tblwrap mt12"><table><thead><tr><th>Photographer</th><th>Status</th><th>Missing</th><th>Reminded</th><th></th></tr></thead><tbody>
+    ${L.map(x => `<tr><td><a class="linkbtn" onclick="openUser('${x.id}')"><b>${esc(x.display_name || "—")}</b></a><div class="xs muted2">${esc(x.email || "")}${x.city ? " · " + esc(x.city) : ""}</div></td>
+      <td><span class="chip ${x.approval_status === "approved" ? "green" : "amber"}">${esc(x.approval_status)}</span></td>
+      <td>${(x.missing || []).map(m => `<span class="chip" style="margin:2px">${esc(m)}</span>`).join("")}</td>
+      <td class="xs muted2">${x.reminded_at ? ago(x.reminded_at) : "Never"}</td>
+      <td style="text-align:right">${canSend ? `<button class="btn sm" onclick="remindPhotographers('${x.id}',1)">Email reminder</button>` : ""}</td></tr>`).join("")}</tbody></table></div>
+  </details>`;
+}
+async function remindPhotographers(id, n){
+  if(!id && !confirm("Email a reminder to " + n + " photographer" + (n === 1 ? "" : "s") + "? Each email lists what they still need to do.")) return;
+  const { data, error } = await sb.rpc("admin_remind_photographers", { p_pg: id });
+  if(error){ S.err = error.message; render(); return; }
+  S.note = "Reminder email sent to " + (data || 0) + " photographer" + (data === 1 ? "" : "s") + ".";
+  await loadIncomplete(true);
+}
+function copyIncompleteEmails(){
+  const t = (S.incomplete || []).map(x => x.email).filter(Boolean).join(", ");
+  try{ navigator.clipboard.writeText(t); S.note = "Emails copied."; }catch(e){ prompt("Copy these emails:", t); }
+  render();
 }
 
 /* ============================ render ========================== */

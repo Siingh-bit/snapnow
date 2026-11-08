@@ -5279,6 +5279,7 @@ begin
                 and not public.is_blocked(g.id) and not public._blocked_pair(g.id, r.customer_id)
                 and (cardinality(coalesce(g.categories, '{}')) = 0 or r.category = any(g.categories))
                 and public._svc_ok(g.services, r.service)
+                and (not coalesce(r.needs_pro, false) or public._gear_pro(g.gear))
                 and public._pg_covers_km(g.travel, g.travel_km, coalesce(g.city, p.city), coalesce(g.state, p.state), r.city, r.state)
                 and exists (select 1 from public.push_subscriptions s where s.user_id = g.id)
               limit 300 loop
@@ -7079,6 +7080,172 @@ revoke all on function public.admin_edit_person(uuid, text, text) from public, a
 grant execute on function public.admin_edit_person(uuid, text, text) to authenticated;
 -- <<< 8r admin record
 
+-- >>> 8s gear required
+-- =====================================================================
+-- 8s. GEAR BEFORE QUOTING, "PROFESSIONAL CAMERA ONLY", GEAR CHECK, REMINDERS
+--     • Photographers can skip gear at sign-up, but to send a quote they
+--       must list a camera or phone and confirm photos / video / both.
+--       (Switch off with platform setting require_gear_to_quote = false.)
+--     • Customers can ask for a professional camera only; only photographers
+--       who list a camera body are alerted and can quote.
+--     • Photographers may add a photo of their kit (private); an admin can
+--       mark the gear as checked. Changing the camera / phone or the photo
+--       removes the check.
+--     • Admins see who can't take orders yet and what's missing, and can
+--       email them a reminder.
+-- =====================================================================
+alter table public.photographers
+  add column if not exists services_confirmed_at timestamptz,
+  add column if not exists gear_photo            text,
+  add column if not exists gear_verified_at      timestamptz,
+  add column if not exists gear_verified_by      uuid,
+  add column if not exists reminded_at           timestamptz;
+alter table public.requests add column if not exists needs_pro boolean not null default false;
+
+create or replace function public._setting_bool(p_key text, p_default boolean)
+returns boolean language sql stable security definer set search_path = public
+as $$ select coalesce((select case when lower(value #>> '{}') in ('true','1','yes','on') then true
+                                   when lower(value #>> '{}') in ('false','0','no','off') then false end
+                       from public.platform_settings where key = p_key), p_default) $$;
+
+create or replace function public._gear_pro(g jsonb)
+returns boolean language sql immutable
+as $$ select exists (select 1 from jsonb_array_elements(case when jsonb_typeof(g) = 'array' then g else '[]'::jsonb end) x where x->>'t' = 'camera') $$;
+create or replace function public._gear_ok(g jsonb)
+returns boolean language sql immutable
+as $$ select exists (select 1 from jsonb_array_elements(case when jsonb_typeof(g) = 'array' then g else '[]'::jsonb end) x where x->>'t' in ('camera','phone')) $$;
+create or replace function public._gear_main(g jsonb)
+returns jsonb language sql immutable
+as $$ select coalesce(jsonb_agg(x order by x->>'t', x->>'m'), '[]') from jsonb_array_elements(case when jsonb_typeof(g) = 'array' then g else '[]'::jsonb end) x where x->>'t' in ('camera','phone') $$;
+
+create or replace function public.photographer_gear_verify()
+returns trigger language plpgsql
+as $$
+declare staff boolean := coalesce(public.staff_role() in ('super_admin','admin'), false);
+begin
+  if public.snappro_system() then return new; end if;
+  if tg_op = 'INSERT' then
+    if not staff then new.gear_verified_at := null; new.gear_verified_by := null; new.reminded_at := null; end if;
+    if new.services_confirmed_at is not null then new.services_confirmed_at := now(); end if;
+  else
+    if not staff then
+      new.gear_verified_at := old.gear_verified_at; new.gear_verified_by := old.gear_verified_by; new.reminded_at := old.reminded_at;
+      if public._gear_main(new.gear) is distinct from public._gear_main(old.gear) or new.gear_photo is distinct from old.gear_photo then
+        new.gear_verified_at := null; new.gear_verified_by := null;
+      end if;
+    end if;
+    if old.services_confirmed_at is not null then new.services_confirmed_at := old.services_confirmed_at;
+    elsif new.services_confirmed_at is not null then new.services_confirmed_at := now(); end if;
+  end if;
+  if new.gear_photo is not null and left(new.gear_photo, length(new.id::text) + 1) <> new.id::text || '/' then
+    raise exception 'The gear photo must be uploaded from your own account';
+  end if;
+  return new;
+end $$;
+drop trigger if exists photographer_gear_verify on public.photographers;
+create trigger photographer_gear_verify before insert or update on public.photographers
+  for each row execute function public.photographer_gear_verify();
+
+-- quotes: gear + photos/video choice, and "professional camera only"
+create or replace function public.offer_gear_guard()
+returns trigger language plpgsql security definer set search_path = public
+as $$
+declare g record; np boolean;
+begin
+  if public.snappro_system() then return new; end if;
+  select gear, services_confirmed_at into g from public.photographers where id = new.photographer_id;
+  if public._setting_bool('require_gear_to_quote', true)
+     and (not public._gear_ok(g.gear) or g.services_confirmed_at is null) then
+    raise exception 'Add your gear and choose photos, video or both before sending quotes (Profile → Your gear).';
+  end if;
+  select needs_pro into np from public.requests where id = new.request_id;
+  if coalesce(np, false) and not public._gear_pro(g.gear) then
+    raise exception 'This customer wants a photographer with a professional camera. Add your camera in Profile → Your gear.';
+  end if;
+  return new;
+end $$;
+drop trigger if exists offer_gear_guard on public.offers;
+create trigger offer_gear_guard before insert on public.offers
+  for each row execute function public.offer_gear_guard();
+
+-- admin: mark gear as checked (after looking at the kit photo)
+create or replace function public.admin_gear_check(p_pg uuid, p_ok boolean)
+returns text language plpgsql security definer set search_path = public
+as $$
+declare nm text;
+begin
+  if coalesce(public.staff_role() in ('super_admin','admin'), false) is not true then raise exception 'Only admins can check gear'; end if;
+  update public.photographers set gear_verified_at = case when p_ok then now() end, gear_verified_by = case when p_ok then auth.uid() end
+   where id = p_pg returning display_name into nm;
+  if not found then raise exception 'No such photographer'; end if;
+  perform public._audit(case when p_ok then 'gear_checked' else 'gear_check_removed' end, 'photographer', p_pg::text, nm, null);
+  return case when p_ok then 'checked' else 'removed' end;
+end $$;
+revoke all on function public.admin_gear_check(uuid, boolean) from public, anon;
+grant execute on function public.admin_gear_check(uuid, boolean) to authenticated;
+
+-- what a photographer still has to do before they can take orders
+create or replace function public._pg_missing(p uuid)
+returns text[] language sql stable security definer set search_path = public
+as $$
+  select array_remove(array[
+    case when coalesce(pr.phone, '') = '' then 'Mobile number' end,
+    case when not exists (select 1 from public.photographer_payout x where x.id = p and x.upi_id is not null) then 'UPI ID for payouts' end,
+    case when not public._gear_ok(g.gear) then 'Your gear (camera or phone model)' end,
+    case when g.services_confirmed_at is null then 'Photos, video or both' end,
+    case when not exists (select 1 from public.partner_agreements a where a.user_id = p and a.version = public.partner_agreement_version()) then 'Partner Agreement' end,
+    case when not exists (select 1 from public.photographer_kyc k where k.id = p and k.status in ('submitted','verified')) then 'Identity check (ID + face photo)' end,
+    case when cardinality(coalesce(g.portfolio, '{}')) < 6 then 'At least 6 portfolio photos' end
+  ], null)
+  from public.photographers g join public.profiles pr on pr.id = g.id where g.id = p
+$$;
+revoke all on function public._pg_missing(uuid) from public, anon, authenticated;
+
+create or replace function public.admin_incomplete_photographers()
+returns jsonb language plpgsql security definer set search_path = public
+as $$
+begin
+  if coalesce(public.staff_role() in ('super_admin','admin','manager'), false) is not true then raise exception 'Staff only'; end if;
+  return (select coalesce(jsonb_agg(z order by z.approval_status, z.created_at desc), '[]') from (
+    select g.id, g.display_name, g.city, g.approval_status, g.created_at, g.reminded_at, u.email, public._pg_missing(g.id) missing
+    from public.photographers g join auth.users u on u.id = g.id
+    where g.approval_status in ('approved','pending') and g.display_name <> 'Deleted photographer'
+      and cardinality(public._pg_missing(g.id)) > 0) z);
+end $$;
+revoke all on function public.admin_incomplete_photographers() from public, anon;
+grant execute on function public.admin_incomplete_photographers() to authenticated;
+
+-- email one photographer (or everyone not reminded in the last 3 days) what's missing
+create or replace function public.admin_remind_photographers(p_pg uuid default null)
+returns integer language plpgsql security definer set search_path = public
+as $$
+declare r record; n int := 0; items text;
+begin
+  if coalesce(public.staff_role() in ('super_admin','admin'), false) is not true then raise exception 'Only admins can send reminders'; end if;
+  for r in select g.id, g.display_name, g.city, u.email, public._pg_missing(g.id) missing
+             from public.photographers g join auth.users u on u.id = g.id
+            where g.approval_status in ('approved','pending') and g.display_name <> 'Deleted photographer'
+              and (p_pg is null or g.id = p_pg)
+              and (p_pg is not null or g.reminded_at is null or g.reminded_at < now() - interval '3 days')
+              and cardinality(public._pg_missing(g.id)) > 0 loop
+    select string_agg('<li>' || replace(replace(m, '<', '&lt;'), '>', '&gt;') || '</li>', '') into items from unnest(r.missing) m;
+    perform public._send_email(r.email, 'Finish your SnapPro profile to start getting booked',
+      public._email_shell('Customers are posting shoots' || coalesce(' in ' || replace(replace(r.city, '<', ''), '>', ''), ''),
+        'Hi ' || replace(replace(split_part(coalesce(r.display_name, ''), ' ', 1), '<', ''), '>', '') || ',<br><br>Customers on SnapPro are posting shoots, but you can''t send quotes until these are done:'
+        || '<ul style="padding-left:18px;margin:12px 0">' || items || '</ul>Open the app and finish them from your Home screen — it takes a few minutes.',
+        'Open SnapPro', 'https://snappro.in/app.html'));
+    perform set_config('snappro.system', 'on', true);
+    update public.photographers set reminded_at = now() where id = r.id;
+    perform set_config('snappro.system', 'off', true);
+    perform public._audit('photographer_reminded', 'photographer', r.id::text, r.display_name, jsonb_build_object('missing', r.missing));
+    n := n + 1;
+  end loop;
+  return n;
+end $$;
+revoke all on function public.admin_remind_photographers(uuid) from public, anon;
+grant execute on function public.admin_remind_photographers(uuid) to authenticated;
+-- <<< 8s gear required
+
 -- =====================================================================
 -- 9. ONE-OFF CLEAN-UP
 -- =====================================================================
@@ -7169,4 +7336,5 @@ select
   exists (select 1 from pg_proc where proname = 'push_register_fcm')   as app_push_ready,
   (select count(*) = 3 from information_schema.columns where table_schema='public' and ((table_name='photographers' and column_name in ('services','gear')) or (table_name='requests' and column_name='service')))   as gear_ready,
   (select count(*) = 213 from public.city_geo) and exists (select 1 from pg_proc where proname = 'set_my_upi')   as upi_travel_ready,
-  exists (select 1 from pg_proc where proname = 'admin_edit_person')   as admin_record_ready;
+  exists (select 1 from pg_proc where proname = 'admin_edit_person')   as admin_record_ready,
+  exists (select 1 from pg_proc where proname = 'admin_remind_photographers')   as gear_required_ready;
