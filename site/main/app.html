@@ -3665,16 +3665,19 @@ async function sendSource(){
 (function(){ try{
   const q = new URLSearchParams(location.search), sh = q.get("shoot");
   if(sh && CATEGORIES.some(c => c.id === sh)){ S.prefs.pendingShoot = sh; savePrefs(); }
-  if(q.has("shoot") || q.has("src")){ q.delete("shoot"); q.delete("src");
+  const sv = q.get("svc");   /* "videographers" pages: Video or Photos + video already picked */
+  if(sv === "video" || sv === "both"){ S.prefs.pendingSvc = sv; if(!sh) S.prefs.pendingShoot = S.prefs.pendingShoot || "any"; savePrefs(); }
+  if(q.has("shoot") || q.has("src") || q.has("svc")){ q.delete("shoot"); q.delete("src"); q.delete("svc");
     const rest = q.toString(); history.replaceState(null, "", location.pathname + (rest ? "?" + rest : "") + location.hash); }
 }catch(e){} })();
 function tryPendingShoot(){
-  const cat = S.prefs.pendingShoot;
+  const cat = S.prefs.pendingShoot, svc = S.prefs.pendingSvc;
   if(!cat || !S.me) return;
-  if(!isCustomer()){ delete S.prefs.pendingShoot; savePrefs(); return; }   // photographers/admins: ignore
+  if(!isCustomer()){ delete S.prefs.pendingShoot; delete S.prefs.pendingSvc; savePrefs(); return; }   // photographers/admins: ignore
   if(!S.me.city || S.blocked || S.stack.length) return;          // wait until set up and on the home screen
-  delete S.prefs.pendingShoot; savePrefs();
-  startRequest(null, cat);
+  delete S.prefs.pendingShoot; delete S.prefs.pendingSvc; savePrefs();
+  startRequest(null, cat === "any" ? null : cat);
+  if((svc === "video" || svc === "both") && S.draft && typeof reqSvc === "function") reqSvc(svc);
 }
 
 async function loadRewards(){

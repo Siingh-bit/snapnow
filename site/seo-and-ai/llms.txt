@@ -1,12 +1,16 @@
 # SnapPro
 
-> SnapPro (snappro.in) is an Indian online marketplace for booking verified professional photographers. A customer posts a shoot (type, date, time, duration, city and budget); verified photographers in that city send their own quotes; the customer compares portfolios, ratings and prices and books online. Payment is through Razorpay: 25% advance to confirm, balance in the app once the shoot starts. There is no booking fee for customers.
+> SnapPro (snappro.in) is an Indian online marketplace for booking verified professional photographers and videographers. A customer posts a shoot (type, photos / video / both, date, time, duration, city and budget); verified photographers in that city send their own quotes; the customer compares portfolios, ratings and prices and books online. Payment is through Razorpay: 25% advance to confirm, balance in the app once the shoot starts. There is no booking fee for customers.
 
 Key facts:
 - Works across India, including Mumbai, Delhi, Bengaluru, Hyderabad, Chennai, Kolkata, Pune, Ahmedabad, Jaipur, Gurugram, Noida, Chandigarh, Lucknow, Kochi, Goa, Udaipur and more.
 - Shoot types: Wedding, Pre-wedding, Birthday, Corporate, Event, Maternity, Product, Food, Fashion, Real estate, Portrait, Pet, Candid.
 - Guide prices for a 2-hour shoot (photographers quote their own price): Wedding ₹12,000; Pre-wedding ₹12,000; Birthday ₹3,500; Corporate ₹7,000; Event ₹4,000; Maternity ₹6,000; Product ₹5,000; Food ₹4,500; Fashion ₹8,000; Real estate ₹5,500; Portrait ₹2,500; Pet ₹2,800; Candid ₹2,200. Same-day bookings cost more.
-- Photographers are approved by the SnapPro team after a portfolio review and verify their identity with a government ID and face photo. Ratings come only from completed bookings.
+- Photos, video or both: the customer chooses when posting; only photographers who offer that are alerted and can quote. Guide prices for video are about 1.3x the photo price, photos + video about 1.8x (e.g. a 2-hour wedding shoot: photos ₹12,000, video ₹15,600, both ₹21,600).
+- Every photographer lists their gear (camera body and model, lenses, drone, gimbal, lights, microphone, or the phone model if they shoot on a phone). It is shown on their profile and next to every quote; customers can filter by Pro camera, Has drone or Shoots on phone.
+- Each photographer chooses how far they travel: their own city, a distance in km, their whole state, or anywhere in India. A request reaches photographers whose range covers the customer's city.
+- Photographers are approved by the SnapPro team after a portfolio review and verify their identity with photos of the front and back of a government ID and a face photo. Ratings come only from completed bookings.
+- Short notice: customers can ask for a photographer right now, in 1 hour, in 3 hours, later today, tomorrow or on a date; short-notice shoots cost about 15–60% more.
 - Cancellation: full advance refunded if the customer cancels before the photographer sets off; 50% of the advance after.
 - Photographers join free, quote their own prices, and receive their share by UPI after the shoot.
 - Contact: snappro.support@gmail.com
@@ -73,11 +77,42 @@ Key facts:
 - [Photographers in Patna](https://snappro.in/photographers-in-patna/)
 - [Photographers in Ranchi](https://snappro.in/photographers-in-ranchi/)
 
+## Videographers
+- [Videographers in India](https://snappro.in/videographers/): book video, or photos + video, anywhere in India
+- [Wedding videographers](https://snappro.in/wedding-videographers/): wedding films, highlight videos and reels — from haldi and mehendi to the pheras, vidaai and reception
+- [Pre-wedding videographers](https://snappro.in/pre-wedding-videographers/): pre-wedding films and save-the-date videos — a short story of the couple at places that mean something to you
+- [Event videographers](https://snappro.in/event-videographers/): anniversaries, engagements, poojas, parties, college fests and launches — highlight videos and full recordings
+- [Corporate videographers](https://snappro.in/corporate-videographers/): conferences, product launches, office culture videos, interviews and testimonials
+- [Birthday videographers](https://snappro.in/birthday-videographers/): kids' parties, milestone birthdays and surprise celebrations — a short film of the day and fun reels
+- [Videographers in Mumbai](https://snappro.in/videographers-in-mumbai/) · [Wedding videographers in Mumbai](https://snappro.in/wedding-videographers-in-mumbai/)
+- [Videographers in Delhi](https://snappro.in/videographers-in-delhi/) · [Wedding videographers in Delhi](https://snappro.in/wedding-videographers-in-delhi/)
+- [Videographers in Bengaluru](https://snappro.in/videographers-in-bengaluru/) · [Wedding videographers in Bengaluru](https://snappro.in/wedding-videographers-in-bengaluru/)
+- [Videographers in Hyderabad](https://snappro.in/videographers-in-hyderabad/) · [Wedding videographers in Hyderabad](https://snappro.in/wedding-videographers-in-hyderabad/)
+- [Videographers in Chennai](https://snappro.in/videographers-in-chennai/) · [Wedding videographers in Chennai](https://snappro.in/wedding-videographers-in-chennai/)
+- [Videographers in Kolkata](https://snappro.in/videographers-in-kolkata/) · [Wedding videographers in Kolkata](https://snappro.in/wedding-videographers-in-kolkata/)
+- [Videographers in Pune](https://snappro.in/videographers-in-pune/) · [Wedding videographers in Pune](https://snappro.in/wedding-videographers-in-pune/)
+- [Videographers in Ahmedabad](https://snappro.in/videographers-in-ahmedabad/) · [Wedding videographers in Ahmedabad](https://snappro.in/wedding-videographers-in-ahmedabad/)
+- [Videographers in Jaipur](https://snappro.in/videographers-in-jaipur/) · [Wedding videographers in Jaipur](https://snappro.in/wedding-videographers-in-jaipur/)
+- [Videographers in Gurugram](https://snappro.in/videographers-in-gurugram/) · [Wedding videographers in Gurugram](https://snappro.in/wedding-videographers-in-gurugram/)
+- [Videographers in Noida](https://snappro.in/videographers-in-noida/) · [Wedding videographers in Noida](https://snappro.in/wedding-videographers-in-noida/)
+- [Videographers in Chandigarh](https://snappro.in/videographers-in-chandigarh/) · [Wedding videographers in Chandigarh](https://snappro.in/wedding-videographers-in-chandigarh/)
+- [Videographers in Lucknow](https://snappro.in/videographers-in-lucknow/) · [Wedding videographers in Lucknow](https://snappro.in/wedding-videographers-in-lucknow/)
+- [Videographers in Kochi](https://snappro.in/videographers-in-kochi/) · [Wedding videographers in Kochi](https://snappro.in/wedding-videographers-in-kochi/)
+- [Videographers in Goa](https://snappro.in/videographers-in-goa/) · [Wedding videographers in Goa](https://snappro.in/wedding-videographers-in-goa/)
+- [Videographers in Udaipur](https://snappro.in/videographers-in-udaipur/) · [Wedding videographers in Udaipur](https://snappro.in/wedding-videographers-in-udaipur/)
+
 ## Guides
 - [How to Choose a Wedding Photographer in India](https://snappro.in/guides/how-to-choose-a-wedding-photographer/)
 - [Pre-Wedding Shoot Ideas and Planning Tips for Indian Couples](https://snappro.in/guides/pre-wedding-shoot-ideas/)
 - [Questions to Ask a Photographer Before You Book](https://snappro.in/guides/questions-to-ask-a-photographer/)
 - [Corporate Event Photography](https://snappro.in/guides/corporate-event-photography-guide/)
+- [How Much Does a Wedding Photographer Cost in India? (2026)](https://snappro.in/guides/wedding-photographer-cost-in-india/)
+- [Photographer or Videographer for Your Wedding? How to Decide](https://snappro.in/guides/photographer-vs-videographer-for-wedding/)
+- [How Many Hours of Photography Do You Need?](https://snappro.in/guides/how-many-hours-of-photography-do-you-need/)
+- [Candid vs Traditional Wedding Photography](https://snappro.in/guides/candid-vs-traditional-wedding-photography/)
+- [How to Book a Photographer at Short Notice (Same Day)](https://snappro.in/guides/book-a-photographer-same-day/)
+- [Questions to Ask a Videographer Before You Book](https://snappro.in/guides/questions-to-ask-a-videographer/)
+- [How to Check a Photographer Is Genuine Before You Pay](https://snappro.in/guides/how-to-check-a-photographer-is-genuine/)
 
 ## For photographers
 - [Join SnapPro as a photographer](https://snappro.in/for-photographers/)
