@@ -2999,7 +2999,7 @@ function vPgEarnings(){
       <div class="stat"><div class="s-v">${inr(e.month)}</div><div class="s-l">This month · ${e.monthJobs} shoot${e.monthJobs===1?"":"s"}</div></div>
       <div class="stat"><div class="s-v">${inr(e.total)}</div><div class="s-l">All time · ${e.jobs} shoot${e.jobs===1?"":"s"}</div></div>
     </div>
-    <div class="xs muted2 mt8">Your share after SnapPro's commission, for each completed shoot.</div>
+    <div class="xs muted2 mt8">Your share after SnapPro's fee, for each completed shoot.</div>
     <button class="li card mt12 w100" onclick="push('payouts')">${icon("wallet",18,"var(--green)")}<div class="grow" style="text-align:left"><div class="sm bold">Payouts</div><div class="xs muted2">Money waiting for you, and every payout with its slip</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
     ${month.length ? `<div class="sec-title mt20">This month</div><div class="card list">${month.map(earningRow).join("")}</div>` : ""}
     ${earlier.length ? `<div class="sec-title mt20">Earlier</div><div class="card list">${earlier.map(earningRow).join("")}</div>` : ""}
@@ -3068,7 +3068,7 @@ function vQuote(p){
       <textarea id="qNote" class="input" rows="3" maxlength="500" placeholder="e.g. I shoot on a full-frame camera and deliver 50+ edited photos within 48 hours." oninput="S.quote.note=this.value">${esc(S.quote.note)}</textarea></div>
     ${clashWith(r.start_at, r.duration_hrs) ? `<div class="clash mt12">${icon("calendar",14,"var(--red)")} <span><b>You're busy then.</b> ${esc(clashWith(r.start_at, r.duration_hrs))}. Only quote if you can really make it.</span></div>` : ""}
     ${hint("quote", "Set one price for the whole shoot. The customer sees it next to other quotes. You can withdraw it until they book.")}
-    <div class="note">${icon("wallet",18,"var(--green)")}<div>The customer pays ${S.advance}% online when they book and the rest online after the shoot. SnapPro keeps ${myCommission()}% and transfers the rest to you once the shoot is done and fully paid.</div></div>
+    <div class="note">${icon("wallet",18,"var(--green)")}<div>The customer pays ${S.advance}% online when they book and the rest online after the shoot. SnapPro keeps its fee (as set out in your Partner Agreement) and transfers the rest to you once the shoot is done and fully paid.</div></div>
     <button class="btn primary block mt16" ${S.loading.quote?"disabled":""} onclick="sendQuote('${r.id}')">${S.loading.quote ? "Sending…" : icon("send",16,"var(--on-text)") + " Send quote"}</button>
     <div id="formErr">${errHtml(S.formErr)}</div>
     <div class="center mt16">${safetyLink(r.customer_id, r.customer_name, "request", r.id)}</div>
@@ -3079,7 +3079,8 @@ function quoteHint(budget){
   if(!p || p < 100) return `<div class="field-err">Enter a price of at least ₹100.</div>`;
   if(p > 1000000) return `<div class="field-err">That's above the ₹10,00,000 limit.</div>`;
   const cm = myCommission();
-  const yours = `<div class="xs mt4">You'll receive <b>${inr(p - Math.round(p * cm / 100))}</b> after SnapPro's ${cm}% commission${cm < S.commission ? ' <span class="green bold">(your reduced rate)</span>' : ""}.</div>`;
+  const fee = Math.round(p * cm / 100);
+  const yours = `<div class="sm mt4">You'll receive <b>${inr(p - fee)}</b></div><div class="xs muted2">SnapPro fee ${inr(fee)}${cm < S.commission ? ' <span class="green bold">(lower fee from your reward)</span>' : ""} · <a class="linkish" onclick="push('agreement')">see Partner Agreement</a></div>`;
   if(budget && p > budget) return `<div class="xs muted">${inr(p - budget)} above their budget — add a note explaining what's included.</div>` + yours;
   return `<div class="xs green">Within their budget.</div>` + yours;
 }
@@ -3131,7 +3132,7 @@ function vJob(p){
       ${b.photographer_amount != null && b.payment_status !== "not_required" ? `
       <div class="kv"><span>Booking amount</span><span>${inr(b.price)}</span></div>
       ${b.balance_status && b.balance_status !== "not_required" ? `<div class="kv"><span>Customer's payments</span><span class="right">Advance ${inr(advOf(b))} paid<br>Balance ${inr(balOf(b))} ${b.balance_status === "paid" ? "paid" : b.balance_status === "due" ? "due now" : "after the shoot"}</span></div>` : ""}
-      <div class="kv"><span>SnapPro commission (${Number(b.commission_pct)}%)</span><span>− ${inr(b.commission_amount)}</span></div>
+      <div class="kv"><span>SnapPro fee</span><span>− ${inr(b.commission_amount)}</span></div>
       <div class="kv"><span>You'll be paid</span><span class="bold">${inr(b.photographer_amount)}</span></div>
       <div class="kv"><span>Payout</span><span class="right">${b.payout_status === "paid" ? "Sent " + (b.payout_at ? dayStr(b.payout_at) : "") : b.payout_status === "due" ? "Being processed" : b.balance_status === "due" ? "After the customer pays the balance" : "After the shoot"}</span></div>`
       : `<div class="kv"><span>You'll be paid</span><span class="bold">${inr(b.price)}</span></div>`}
@@ -3305,7 +3306,7 @@ function vEditPayout(){
   const d = S.payout || {};
   return `${topbar("Payout details")}
   <div class="pad">
-    <p class="sm muted">After each completed shoot, SnapPro sends your share (the booking amount minus our ${S.commission}% commission) to this UPI ID. Only you and the SnapPro team can see it.</p>
+    <p class="sm muted">After each completed shoot, SnapPro sends your share (the booking amount minus SnapPro's fee) to this UPI ID. Only you and the SnapPro team can see it.</p>
     <div class="field mt16"><label for="poUpi">UPI ID</label>
       <input id="poUpi" class="input" autocapitalize="off" spellcheck="false" placeholder="e.g. yourname@okhdfcbank" value="${esc(d.upi_id || "")}"></div>
     <div class="field"><label for="poName">Name on the account</label>
@@ -4562,7 +4563,7 @@ const HOW = {
   ],
   photographer: [
     ["bolt", "See requests near you", "Customers in your city post shoots. The ones that match your shoot types show under Requests."],
-    ["send", "Send your price", "Quote what you'd charge. You'll see what you take home after SnapPro's commission."],
+    ["send", "Send your price", "Quote what you'd charge. You'll see exactly what you take home before you send it."],
     ["check", "Get booked", "When a customer books you and pays the advance, the shoot appears under Shoots."],
     ["cam", "Do the shoot", "Tap through On my way → Arrived → Start → Complete so the customer can follow along."],
     ["wallet", "Get paid", "Once the shoot is done and fully paid, we send your share to your UPI ID."]
@@ -5166,9 +5167,9 @@ function downloadStatement(){
   const q = v => { v = v == null ? "" : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
   const d = v => v ? new Date(toMs(v)).toLocaleString("en-IN") : "";
   const lines = ["SnapPro statement," + q(S.me.name) + "," + q(S.me.public_id || "") + ",from " + f + " to " + t, "",
-    "SHOOTS", ["Booking ref","Shoot date","Shoot type","City", isPg() ? "Customer" : "Photographer","Status","Price","Discount"].concat(isPg() ? ["Commission %","Commission","Your share","Payout","Paid out on","Payout ref"] : ["Payment"]).join(",")];
+    "SHOOTS", ["Booking ref","Shoot date","Shoot type","City", isPg() ? "Customer" : "Photographer","Status","Price","Discount"].concat(isPg() ? ["SnapPro fee","Your share","Payout","Paid out on","Payout ref"] : ["Payment"]).join(",")];
   rows.forEach(b => lines.push([bookingRef(b), d(b.start_at), catById(b.category).name, b.city, isPg() ? b.customer_name : b.photographer_name, BK_LABEL[b.status], b.price, b.discount_amount || 0]
-    .concat(isPg() ? [b.commission_pct, b.commission_amount, b.photographer_amount, b.payout_status, d(b.payout_at), b.payout_ref] : [b.payment_status]).map(q).join(",")));
+    .concat(isPg() ? [b.commission_amount, b.photographer_amount, b.payout_status, d(b.payout_at), b.payout_ref] : [b.payment_status]).map(q).join(",")));
   lines.push("", isPg() ? "PAYOUTS" : "PAYMENTS AND REFUNDS", ["Date","What","Amount","Shoot type",isPg() ? "Customer" : "Photographer","Reference","Method", isPg() ? "Payout no" : "Receipt no"].join(","));
   pay.forEach(p => lines.push([d(p.at), PAY_KIND[p.kind] || p.kind, p.amount, catById(p.category).name, p.who, p.ref, p.method, isPg() ? p.payout_no : p.receipt_no].map(q).join(",")));
   const blob = new Blob(["﻿" + lines.join("\n")], { type: "text/csv" });
@@ -5198,7 +5199,7 @@ function vReceipt(p){
       ${kv("Status", esc(BK_LABEL[b.status] || b.status))}</div>
     <div class="card mt12">
       ${kv("Price", inr(b.price))}${b.discount_amount ? kv("Reward discount", "− " + inr(b.discount_amount)) : ""}
-      ${pgSide ? kv("SnapPro commission" + (b.commission_pct != null ? " (" + Number(b.commission_pct) + "%)" : ""), "− " + inr(b.commission_amount)) + kv("<b>Your share</b>", "<b>" + inr(b.photographer_amount) + "</b>")
+      ${pgSide ? kv("SnapPro fee", "− " + inr(b.commission_amount)) + kv("<b>Your share</b>", "<b>" + inr(b.photographer_amount) + "</b>")
           + ((R.data.payouts || []).map(o => kv(`Paid to you · <a onclick="push('payoutSlip',{id:'${o.id}'})" class="link">${esc(o.payout_no)}</a>`, inr(o.amount) + `<div class="xs muted2">${dayStr(o.paid_at)}${o.utr ? " · ref " + esc(o.utr) : ""}</div>`)).join("")
              + (Number(R.data.owed) > 0 ? kv("Still to come", inr(R.data.owed) + `<div class="xs muted2">${b.payout_status === "on_hold" ? "On hold" : "On the way to you"}</div>`) : "")
              + (!(R.data.payouts || []).length && !(Number(R.data.owed) > 0) ? kv("Payout", "When the customer pays") : ""))
@@ -5438,7 +5439,7 @@ function vMyPayouts(){
     ${items.length ? `<div class="sec-title mt20">Waiting for you</div><div class="card list">${items.map(i => `<button class="li" onclick="openShoot('${i.booking_id}')">
         <div class="grow" style="text-align:left"><div class="sm bold">${esc(catById(i.category).name)} · ${esc(i.customer || "")} <span class="xs muted2">(${SHOOT_STATE[i.shoot] || i.shoot})</span></div>
           <div class="xs muted2">${i.stage === "balance" ? "Balance" : "Advance"} · ${dayStr(i.start_at)} · ${esc(i.ref)}</div>
-          <div class="xs muted2">Customer paid ${inr(i.customer_paid)} − SnapPro ${inr(i.commission)} = your ${inr(i.share)}</div>
+          <div class="xs muted2">Customer paid ${inr(i.customer_paid)} − SnapPro fee ${inr(i.commission)} = your ${inr(i.share)}</div>
           <div class="xs mt2 ${i.state === "ready" ? "green" : ""}">${PAY_STATE[i.state] || i.state}</div></div>
         <div class="bold sm ${Number(i.owed) < 0 ? "" : "green"}">${Number(i.owed) < 0 ? "− " + inr(-i.owed) : inr(i.owed)}</div></button>`).join("")}</div>` : ""}
 
@@ -5470,7 +5471,7 @@ function vPayoutSlip(p){
     <div class="card list">${lines.map(l => `<div class="li" style="cursor:default">
         <div class="grow"><div class="sm bold">${esc(catById(l.category).name)} · ${esc(l.customer || "")}</div>
           <div class="xs muted2">${esc(l.ref)} · ${dayStr(l.start_at)} · ${l.stage === "balance" ? "Balance" : "Advance"}</div>
-          <div class="xs muted2">Customer paid ${inr(l.customer_paid)} − SnapPro ${inr(l.commission)}</div></div>
+          <div class="xs muted2">Customer paid ${inr(l.customer_paid)} − SnapPro fee ${inr(l.commission)}</div></div>
         <div class="bold sm">${Number(l.amount) < 0 ? "− " + inr(-l.amount) : inr(l.amount)}</div></div>`).join("")}</div>
     <div class="card mt12">
       ${back ? kv("Your share", inr(gross)) + kv("Taken back (refunded shoots)", "− " + inr(back)) : ""}
