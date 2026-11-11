@@ -2060,9 +2060,9 @@ function pgCatToggle(c){
 function vSetupPg(){
   const d = S.auth.draft, st = d.step || 1;
   const back = st > 1 ? `S.auth.draft.step=${st-1};render()` : "";
-  return `${authTop("Your photographer profile", "Step " + st + " of 4", back)}
+  return `${authTop("Your photographer profile", "Step " + st + " of 3", back)}
   <div class="pad">
-    <div class="steps">${[1,2,3,4].map(i => `<i class="${st>=i?'on':''}"></i>`).join("")}</div>
+    <div class="steps">${[1,2,3].map(i => `<i class="${st>=i?'on':''}"></i>`).join("")}</div>
     ${st === 1 ? `
       <div class="h2">Who you are</div>
       <div class="sm muted mt4">This is the top of your public profile.</div>
@@ -2077,7 +2077,6 @@ function vSetupPg(){
     ` : st === 2 ? `
       <div class="h2">What do you shoot?</div>
       <div class="sm muted mt4">Pick every type you shoot. You'll be alerted about requests for these.</div>
-      <div class="mt16">${svcPicker(d.services, "S.auth.draft.services")}</div>
       <div class="field"><label>Types of shoot</label></div>
       <div class="grid3">
         ${CATEGORIES.map(c => `<button class="u-card ${d.cats.includes(c.id)?'on':''}" onclick="pgCatToggle('${c.id}')">
@@ -2085,12 +2084,6 @@ function vSetupPg(){
       </div>
       <div class="xs muted2 mt12">${d.cats.length}/3 selected</div>
       <button class="btn primary block mt16" onclick="pgSetupNext(2)">Continue</button>
-    ` : st === 3 ? `
-      <div class="h2">Your gear</div>
-      <div class="sm muted mt4">Customers see what you shoot with on your profile and next to every quote. You can skip this now — you'll need it before you can send quotes.</div>
-      <div class="mt16">${(S.gk = d.gk || (d.gk = gkFrom(null, false)), gkHtml(false))}</div>
-      <button class="btn primary block mt8" onclick="pgGearNext(false)">Continue</button>
-      <button class="btn block mt8" onclick="pgGearNext(true)">Skip for now — add it later</button>
     ` : `
       <div class="h2">Where you work</div>
       <div class="sm muted mt4">You'll see requests from customers in your city — and further, if you travel.</div>
@@ -2115,7 +2108,6 @@ function pgSetupNext(st){
   const d = S.auth.draft;
   if(st === 1 && (d.name||"").trim().length < 2){ S.auth.err = "Enter your name."; render(); return; }
   if(st === 1 && !normPhone(d.phone)){ S.auth.err = "Enter your 10-digit mobile number."; render(); return; }
-  if(st === 2 && !d.services){ S.auth.err = "Choose whether you shoot photos, video or both."; render(); return; }
   if(st === 2 && !d.cats.length){ S.auth.err = "Pick at least one type of shoot."; render(); return; }
   d.step = st + 1; S.auth.err = null; render(); scrollTop();
 }
@@ -2123,7 +2115,7 @@ function pgGearNext(skip){
   const d = S.auth.draft;
   if(!skip){ S.gk = d.gk; const err = gkError(false); if(err){ S.auth.err = err; render(); return; } d.gearDone = true; }
   else d.gearDone = false;
-  d.step = 4; S.auth.err = null; render(); scrollTop();
+  d.step = 3; S.auth.err = null; render(); scrollTop();
 }
 async function saveSetupPg(){
   const d = S.auth.draft;
@@ -2376,7 +2368,7 @@ function draftStart(){
 }
 function vNewRequest(){
   const d = S.draft; if(!d){ setTimeout(pop,0); return ""; }
-  if(hasUpi(false) !== true) return `${topbar("Post a shoot")}${upiGateHtml("request")}`;
+  const gate = readyGate("post"); if(gate) return `${topbar("Post a shoot")}${gate}`;
   const st = d.step, start = draftStart();
   const est = d.category ? suggestedPrice(d.category, d.hours, d.urgency, SVC_MULT[d.service || "photo"] || 1) : 0;
   if(st === 3 && !d.budget) d.budget = est || 3000;
@@ -3048,8 +3040,7 @@ function vPgReviews(){
 function vQuote(p){
   const r = S.d.openRequests.find(x => x.id === p.id);
   if(!r) return `${topbar("Send a quote")}${emptyState("⏳", "This request has closed", "The customer booked someone or it expired.")}`;
-  if(hasUpi(true) !== true) return `${topbar("Send a quote")}${upiGateHtml("quote")}`;
-  if(!gearReady()) return `${topbar("Send a quote")}${gearGateHtml()}`;
+  const gate = readyGate("quote"); if(gate) return `${topbar("Send a quote")}${gate}`;
   const cat = catById(r.category);
   const suggest = suggestedPrice(r.category, r.duration_hrs, r.urgency, (S.pg && S.pg.price_multiplier) || 1);
   if(!S.quote || S.quote.id !== r.id) S.quote = { id: r.id, price: suggest, eta: 30, note: "" };
@@ -6146,6 +6137,50 @@ async function uploadGearPhoto(input){
     await api.savePg({ gear_photo: path });
     S.loading.gphoto = false; toast("Photo sent", "We'll check it and add the Gear checked badge", "check"); render();
   }catch(e){ S.loading.gphoto = false; render(); toast("Couldn't upload", e.message || "Please try again", "x"); }
+}
+
+/* ===================== "BEFORE YOU POST / QUOTE" CHECKLIST =====================
+   Sign-up only asks for the basics (name, mobile number, city). The extra things
+   SnapPro needs are asked for only when someone wants to post a shoot (customers)
+   or send a quote (photographers): one simple list, each item opens its own short
+   screen and comes back here; when everything is ticked, the shoot form or the
+   quote form opens by itself. */
+
+function readyItems(kind){
+  loadMyUpi();
+  const out = [], me = S.me || {};
+  out.push({ k: "phone", ok: !!me.phone, t: "Mobile number", s: me.phone ? fmtPhone(me.phone) : "So SnapPro and the other person can reach you on the day", go: "push('editPhone')" });
+  if(kind === "quote"){
+    const u = hasUpi(true);
+    out.push({ k: "upi", ok: u === true, wait: u === undefined, t: "UPI ID for payouts", s: u === true ? ((S.payout && S.payout.upi_id) || "Added") : "Where SnapPro sends your share after each shoot", go: "push('editPayout')" });
+    const g = gearReady();
+    out.push({ k: "gear", ok: g, t: "Your gear and photos / video", s: g ? kitText(S.pg) + " · " + svcName(S.pg.services) : "Camera or phone model, and whether you shoot photos, video or both", go: "openGearSetup()" });
+    if(typeof agreementOk === "function"){
+      if(!S.agr) loadAgreement();
+      out.push({ k: "agr", ok: agreementOk(), wait: !S.agr, t: "Partner Agreement", s: agreementOk() ? "Accepted" : "Read the key points and tick to accept — about 2 minutes", go: "push('agreement')" });
+    }
+  } else {
+    const u = hasUpi(false);
+    out.push({ k: "upi", ok: u === true, wait: u === undefined, t: "UPI ID", s: u === true ? ((S.upi && S.upi.upi_id) || "Added") : "Only used if SnapPro ever needs to send you money", go: "push('editUpi')" });
+  }
+  return out;
+}
+/* null when everything's done; otherwise the checklist (or a loading skeleton) */
+function readyGate(kind){
+  const items = readyItems(kind);
+  if(items.every(x => x.ok)) return null;
+  if(items.some(x => x.wait && !x.ok)) return `<div class="pad"><div class="skeleton"></div></div>`;
+  const left = items.filter(x => !x.ok).length;
+  let n = 0;
+  return `<div class="pad" id="readyList">
+    <div class="h2">${kind === "quote" ? "Before you send quotes" : "Before you post your shoot"}</div>
+    <div class="sm muted mt4">Your account is ready. ${left === 1 ? "One quick thing is" : left + " quick things are"} needed ${kind === "quote" ? "before you can send quotes and get booked" : "before photographers can quote on your shoot"}. Tap each one — you'll come back here.</div>
+    <div class="stack gap8 mt16">${items.map(x => { if(!x.ok) n++; return `<button class="card tap" style="text-align:left;width:100%;display:block" ${x.ok ? "disabled" : `onclick="${x.go}"`}><div class="row gap12" style="align-items:center">
+      ${x.ok ? icon("check", 20, "var(--green)") : `<span class="chip accent" style="min-width:26px;justify-content:center">${n}</span>`}
+      <div class="grow"><div class="bold sm">${esc(x.t)}</div><div class="xs muted2">${esc(x.s)}</div></div>
+      ${x.ok ? `<span class="chip green">Done</span>` : `<span class="btn sm primary">Add</span>`}</div></button>`; }).join("")}</div>
+    <div class="xs muted2 mt12">${kind === "quote" ? "When everything is ticked, the quote form opens here." : "When everything is ticked, your shoot form opens here — nothing you've chosen is lost."}</div>
+  </div>`;
 }
 
 /* ============================================================
