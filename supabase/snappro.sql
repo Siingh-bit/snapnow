@@ -7016,6 +7016,7 @@ begin
     'saved', (select coalesce(jsonb_agg(jsonb_build_object('photographer_id', v.photographer_id, 'name', g.display_name, 'at', v.created_at) order by v.created_at desc), '[]')
               from public.saved_photographers v left join public.photographers g on g.id = v.photographer_id where v.user_id = p_user),
     'busy', (select coalesce(jsonb_agg(to_jsonb(b) order by b.starts_at desc), '[]') from (select * from public.busy_blocks where photographer_id = p_user order by starts_at desc limit 200) b),
+    'contact_notes', (select coalesce(jsonb_agg(to_jsonb(n) order by n.created_at desc), '[]') from public.admin_contact_notes n where n.user_id = p_user),
     'chats', (select coalesce(jsonb_agg(z order by z.last_at desc nulls last), '[]') from (
                 select k.id booking_id, k.status, k.start_at, k.customer_name, k.photographer_name, count(m.id) messages, max(m.created_at) last_at
                 from public.bookings k left join public.messages m on m.booking_id = k.id
@@ -7246,6 +7247,275 @@ revoke all on function public.admin_remind_photographers(uuid) from public, anon
 grant execute on function public.admin_remind_photographers(uuid) to authenticated;
 -- <<< 8s gear required
 
+-- >>> 8t admin command
+-- =====================================================================
+-- 8t. ADMIN COMMAND CENTRE
+--     • Cities: customers and photographers city by city, gaps, and a
+--       call list with contact notes (who was called, what they said,
+--       when to follow up).
+--     • Business health: the whole business on one page — funnel,
+--       marketplace health, money per booking, demand vs supply, repeat.
+--     • System health and Compliance: is everything switched on and
+--       working; agreements, ID checks, deletions, GST threshold.
+-- =====================================================================
+create table if not exists public.admin_contact_notes (
+  id           bigserial primary key,
+  user_id      uuid not null references public.profiles(id) on delete cascade,
+  staff_id     uuid,
+  staff_email  text,
+  outcome      text not null check (outcome in ('called','no_answer','interested','not_interested','follow_up','booked','other')),
+  note         text check (note is null or length(note) <= 500),
+  follow_up_on date,
+  created_at   timestamptz not null default now()
+);
+create index if not exists idx_contact_notes_user on public.admin_contact_notes(user_id, created_at desc);
+alter table public.admin_contact_notes enable row level security;
+drop policy if exists contact_notes_staff_read on public.admin_contact_notes;
+create policy contact_notes_staff_read on public.admin_contact_notes for select to authenticated using (public.is_staff());
+revoke insert, update, delete on public.admin_contact_notes from anon, authenticated;
+
+create or replace function public.admin_add_contact_note(p_user uuid, p_outcome text, p_note text default null, p_follow_up date default null)
+returns bigint language plpgsql security definer set search_path = public
+as $$
+declare s record; nid bigint; nm text;
+begin
+  select id, email into s from public.staff where id = auth.uid();
+  if not found then raise exception 'Staff only'; end if;
+  if p_outcome not in ('called','no_answer','interested','not_interested','follow_up','booked','other') then raise exception 'Pick what happened'; end if;
+  select name into nm from public.profiles where id = p_user;
+  if not found then raise exception 'No such person'; end if;
+  insert into public.admin_contact_notes (user_id, staff_id, staff_email, outcome, note, follow_up_on)
+  values (p_user, s.id, s.email, p_outcome, nullif(left(trim(coalesce(p_note, '')), 500), ''), p_follow_up) returning id into nid;
+  perform public._audit('contact_note', 'user', p_user::text, nm, jsonb_build_object('outcome', p_outcome, 'follow_up_on', p_follow_up));
+  return nid;
+end $$;
+revoke all on function public.admin_add_contact_note(uuid, text, text, date) from public, anon;
+grant execute on function public.admin_add_contact_note(uuid, text, text, date) to authenticated;
+
+create or replace function public._last_note(p uuid)
+returns jsonb language sql stable security definer set search_path = public
+as $$ select to_jsonb(z) from (select outcome, note, follow_up_on, created_at, staff_email from public.admin_contact_notes where user_id = p order by created_at desc limit 1) z $$;
+revoke all on function public._last_note(uuid) from public, anon, authenticated;
+
+-- every city: customers, photographers based there, photographers who travel there, demand
+create or replace function public.admin_city_board()
+returns jsonb language plpgsql security definer set search_path = public
+as $$
+begin
+  if not public.is_staff() then raise exception 'Staff only'; end if;
+  return (
+    with P as (select p.id, p.role, initcap(lower(trim(p.city))) city, p.state, p.created_at from public.profiles p
+                where coalesce(trim(p.city), '') <> '' and p.name <> 'Deleted user' and not exists (select 1 from public.staff s where s.id = p.id)),
+         G as (select g.id, coalesce(g.city, pr.city) city, coalesce(g.state, pr.state) state, g.travel, g.travel_km, g.approval_status
+                 from public.photographers g join public.profiles pr on pr.id = g.id where g.display_name <> 'Deleted photographer'),
+         Cities as (select city, max(state) state from P group by city),
+         R as (select initcap(lower(trim(r.city))) ccity, r.id, r.status, r.expires_at, r.created_at from public.requests r where coalesce(trim(r.city), '') <> '')
+    select coalesce(jsonb_agg(z order by z.customers + z.photographers_here desc, z.city), '[]') from (
+      select c.city, c.state,
+        (select count(*) from P where P.city = c.city and P.role = 'customer') customers,
+        (select count(*) from P where P.city = c.city and P.role = 'customer' and P.created_at > now() - interval '30 days') new_customers,
+        (select count(*) from G where lower(trim(G.city)) = lower(c.city) and G.approval_status = 'approved') photographers_here,
+        (select count(*) from G where lower(trim(G.city)) = lower(c.city) and G.approval_status = 'pending') photographers_pending,
+        (select count(*) from G where lower(trim(coalesce(G.city, ''))) <> lower(c.city) and G.approval_status = 'approved'
+            and public._pg_covers_km(G.travel, G.travel_km, G.city, G.state, c.city, c.state)) photographers_travel,
+        (select count(*) from R where R.ccity = c.city and R.status = 'broadcasting' and R.expires_at > now()) open_requests,
+        (select count(*) from R where R.ccity = c.city and R.status = 'broadcasting' and R.expires_at > now()
+            and not exists (select 1 from public.offers o where o.request_id = R.id)) open_no_quotes,
+        (select count(*) from R where R.ccity = c.city and R.created_at > now() - interval '30 days') requests_30d,
+        (select count(*) from public.bookings b join R on R.id = b.request_id where R.ccity = c.city and b.status not in ('pending_payment','cancelled')) bookings,
+        (select count(*) from public.admin_contact_notes n join P on P.id = n.user_id where P.city = c.city and n.follow_up_on <= public._ist(now())
+            and not exists (select 1 from public.admin_contact_notes n2 where n2.user_id = n.user_id and n2.created_at > n.created_at)) follow_ups_due
+      from Cities c) z);
+end $$;
+revoke all on function public.admin_city_board() from public, anon;
+grant execute on function public.admin_city_board() to authenticated;
+
+-- one city: every customer (left) and every photographer who can work there (right)
+create or replace function public.admin_city_people(p_city text)
+returns jsonb language plpgsql security definer set search_path = public
+as $$
+declare c text := lower(trim(coalesce(p_city, ''))); st text; money boolean := public._money_ok();
+begin
+  if not public.is_staff() then raise exception 'Staff only'; end if;
+  select max(state) into st from public.profiles where lower(trim(city)) = c;
+  return jsonb_build_object(
+    'city', initcap(c), 'state', st,
+    'customers', (select coalesce(jsonb_agg(z order by z.open_requests desc, z.last_seen_at desc nulls last), '[]') from (
+        select p.id, p.name, p.public_id, case when money then p.phone end phone, case when money then u.email end email, p.created_at, p.last_seen_at, p.pincode,
+          (select count(*) from public.requests r where r.customer_id = p.id) requests,
+          (select count(*) from public.requests r where r.customer_id = p.id and r.status = 'broadcasting' and r.expires_at > now()) open_requests,
+          (select count(*) from public.bookings b where b.customer_id = p.id and b.status not in ('pending_payment','cancelled')) bookings,
+          (select coalesce(jsonb_agg(jsonb_build_object('id', r.id, 'category', r.category, 'service', r.service, 'needs_pro', r.needs_pro, 'start_at', r.start_at,
+                     'budget', r.budget, 'duration_hrs', r.duration_hrs, 'quotes', (select count(*) from public.offers o where o.request_id = r.id)) order by r.start_at), '[]')
+             from public.requests r where r.customer_id = p.id and r.status = 'broadcasting' and r.expires_at > now()) open,
+          public._last_note(p.id) last_note
+        from public.profiles p left join auth.users u on u.id = p.id
+        where lower(trim(p.city)) = c and p.role = 'customer' and p.name <> 'Deleted user' and not exists (select 1 from public.staff s where s.id = p.id)) z),
+    'photographers', (select coalesce(jsonb_agg(z order by z.based_here desc, z.can_quote desc, z.jobs_done desc), '[]') from (
+        select g.id, g.display_name name, pr.public_id, case when money then pr.phone end phone, case when money then u.email end email,
+          coalesce(g.city, pr.city) city, g.approval_status, g.is_online, g.services, g.gear, g.categories, g.rating, g.review_count, g.jobs_done, g.travel, g.travel_km,
+          pr.last_seen_at, lower(trim(coalesce(g.city, pr.city, ''))) = c based_here,
+          (select count(*) from public.offers o where o.photographer_id = g.id and o.created_at > now() - interval '30 days') quotes_30d,
+          public._pg_missing(g.id) missing,
+          g.approval_status = 'approved' and cardinality(array_remove(array_remove(public._pg_missing(g.id), 'Identity check (ID + face photo)'), 'At least 6 portfolio photos')) = 0 can_quote,
+          public._last_note(g.id) last_note
+        from public.photographers g join public.profiles pr on pr.id = g.id left join auth.users u on u.id = g.id
+        where g.display_name <> 'Deleted photographer' and g.approval_status in ('approved','pending')
+          and (lower(trim(coalesce(g.city, pr.city, ''))) = c
+               or (g.approval_status = 'approved' and public._pg_covers_km(g.travel, g.travel_km, coalesce(g.city, pr.city), coalesce(g.state, pr.state), initcap(c), st)))) z),
+    'notes', (select coalesce(jsonb_agg(z order by z.created_at desc), '[]') from (
+        select n.user_id, n.outcome, n.note, n.follow_up_on, n.created_at, n.staff_email from public.admin_contact_notes n
+        join public.profiles p on p.id = n.user_id where lower(trim(p.city)) = c order by n.created_at desc limit 300) z)
+  );
+end $$;
+revoke all on function public.admin_city_people(text) from public, anon;
+grant execute on function public.admin_city_people(text) to authenticated;
+
+-- follow-ups due (for Home)
+create or replace function public.admin_follow_ups_due()
+returns integer language sql stable security definer set search_path = public
+as $$ select case when public.is_staff() then (select count(*)::int from public.admin_contact_notes n where n.follow_up_on <= public._ist(now())
+          and not exists (select 1 from public.admin_contact_notes n2 where n2.user_id = n.user_id and n2.created_at > n.created_at)) end $$;
+revoke all on function public.admin_follow_ups_due() from public, anon;
+grant execute on function public.admin_follow_ups_due() to authenticated;
+
+-- the whole business on one page
+create or replace function public.admin_health(p_from date, p_to date)
+returns jsonb language plpgsql security definer set search_path = public
+as $$
+declare f date := coalesce(p_from, public._ist(now()) - 29); t date := coalesce(p_to, public._ist(now())); money boolean := public._money_ok();
+begin
+  if not public.is_staff() then raise exception 'Staff only'; end if;
+  return (
+    with Pr as (select * from public.profiles p where public._ist(p.created_at) between f and t and p.name <> 'Deleted user' and not exists (select 1 from public.staff s where s.id = p.id)),
+         Rq as (select r.*, (select min(o.created_at) from public.offers o where o.request_id = r.id) first_quote,
+                       (select count(*) from public.offers o where o.request_id = r.id) quotes,
+                       exists (select 1 from public.bookings b where b.request_id = r.id and b.status not in ('pending_payment','cancelled')) booked
+                  from public.requests r where public._ist(r.created_at) between f and t),
+         Bk as (select * from public.bookings b where public._ist(b.created_at) between f and t and b.status not in ('pending_payment')),
+         Cb as (select customer_id, count(*) n from public.bookings where status not in ('pending_payment','cancelled') group by customer_id),
+         Ap as (select g.* from public.photographers g where g.approval_status = 'approved' and g.display_name <> 'Deleted photographer')
+    select jsonb_build_object(
+      'range', jsonb_build_object('from', f, 'to', t),
+      'funnel', jsonb_build_object(
+        'visitors', (select count(distinct visitor_id) from public.site_visits where day between f and t),
+        'signups_customers', (select count(*) from Pr where role = 'customer'),
+        'signups_photographers', (select count(*) from Pr where role = 'photographer'),
+        'customers_posted', (select count(distinct customer_id) from Rq),
+        'requests', (select count(*) from Rq),
+        'requests_quoted', (select count(*) from Rq where quotes > 0),
+        'requests_booked', (select count(*) from Rq where booked),
+        'bookings', (select count(*) from Bk where status <> 'cancelled'),
+        'completed', (select count(*) from Bk where status = 'completed'),
+        'cancelled', (select count(*) from Bk where status = 'cancelled')),
+      'speed', jsonb_build_object(
+        'median_first_quote_min', (select round(percentile_cont(0.5) within group (order by extract(epoch from first_quote - created_at) / 60)::numeric) from Rq where first_quote is not null),
+        'quoted_within_1h', (select count(*) from Rq where first_quote is not null and first_quote - created_at <= interval '1 hour'),
+        'avg_quotes', (select round(avg(quotes)::numeric, 1) from Rq)),
+      'supply', jsonb_build_object(
+        'approved', (select count(*) from Ap),
+        'pending', (select count(*) from public.photographers where approval_status = 'pending' and display_name <> 'Deleted photographer'),
+        'ready', (select count(*) from Ap where cardinality(array_remove(array_remove(public._pg_missing(Ap.id), 'Identity check (ID + face photo)'), 'At least 6 portfolio photos')) = 0),
+        'active', (select count(distinct o.photographer_id) from public.offers o where public._ist(o.created_at) between f and t),
+        'video', (select count(*) from Ap where services in ('video','both')),
+        'pro_camera', (select count(*) from Ap where public._gear_pro(gear)),
+        'avg_rating', (select round(avg(rating)::numeric, 2) from Ap where review_count > 0)),
+      'customers', jsonb_build_object(
+        'total', (select count(*) from public.profiles p where role = 'customer' and name <> 'Deleted user' and not exists (select 1 from public.staff s where s.id = p.id)),
+        'ever_booked', (select count(*) from Cb),
+        'repeat', (select count(*) from Cb where n >= 2)),
+      'money', case when money then jsonb_build_object(
+        'gmv', (select coalesce(sum(coalesce(price, total_amount)), 0) from Bk where status <> 'cancelled'),
+        'commission', (select coalesce(sum(commission_amount), 0) from Bk where status <> 'cancelled'),
+        'avg_booking', (select round(avg(coalesce(price, total_amount))) from Bk where status <> 'cancelled'),
+        'avg_commission', (select round(avg(commission_amount)) from Bk where status <> 'cancelled'),
+        'discounts', (select coalesce(sum(discount_amount), 0) from Bk where status <> 'cancelled'),
+        'refunded', (select coalesce(sum(amount), 0) from public.refunds where status = 'success' and public._ist(coalesce(processed_at, updated_at)) between f and t),
+        'owed_photographers', public._owed_total('ready')) end,
+      'categories', (select coalesce(jsonb_agg(z order by z.requests desc, z.photographers desc), '[]') from (
+        select c.cat category,
+          (select count(*) from Rq where Rq.category = c.cat) requests,
+          (select count(*) from Rq where Rq.category = c.cat and quotes > 0) quoted,
+          (select count(*) from Rq where Rq.category = c.cat and booked) booked,
+          (select count(*) from Ap where c.cat = any(Ap.categories)) photographers
+        from (select distinct unnest(categories) cat from Ap union select distinct category from Rq where category is not null) c) z),
+      'weeks', (select coalesce(jsonb_agg(z order by z.week), '[]') from (
+        select w.week,
+          (select count(*) from public.profiles p where date_trunc('week', public._ist(p.created_at)) = w.week and p.role = 'customer') customers,
+          (select count(*) from public.profiles p where date_trunc('week', public._ist(p.created_at)) = w.week and p.role = 'photographer') photographers,
+          (select count(*) from public.requests r where date_trunc('week', public._ist(r.created_at)) = w.week) requests,
+          (select count(*) from public.bookings b where date_trunc('week', public._ist(b.created_at)) = w.week and b.status not in ('pending_payment','cancelled')) bookings,
+          case when money then (select coalesce(sum(coalesce(price, total_amount)), 0) from public.bookings b where date_trunc('week', public._ist(b.created_at)) = w.week and b.status not in ('pending_payment','cancelled')) end gmv
+        from (select generate_series(date_trunc('week', public._ist(now()) - 55), date_trunc('week', public._ist(now())), interval '1 week')::date week) w) z)
+    ));
+end $$;
+revoke all on function public.admin_health(date, date) from public, anon;
+grant execute on function public.admin_health(date, date) to authenticated;
+
+-- is everything switched on and working?
+create or replace function public.admin_system_health()
+returns jsonb language plpgsql security definer set search_path = public
+as $$
+declare brevo boolean; hook boolean;
+begin
+  if coalesce(public.staff_role() in ('super_admin','admin'), false) is not true then raise exception 'Only admins can see system health'; end if;
+  begin select exists (select 1 from vault.decrypted_secrets where name = 'brevo_api_key') into brevo; exception when others then brevo := null; end;
+  begin select exists (select 1 from vault.decrypted_secrets where name = 'push_hook_secret') into hook; exception when others then hook := null; end;
+  return jsonb_build_object(
+    'email_key', brevo, 'push_hook', hook,
+    'last_payment', (select max(paid_at) from public.payments where status = 'paid'),
+    'last_payment_env', (select environment from public.payments where status = 'paid' order by paid_at desc nulls last limit 1),
+    'live_payments_30d', (select count(*) from public.payments where status = 'paid' and environment in ('live','production') and paid_at > now() - interval '30 days'),
+    'test_payments_30d', (select count(*) from public.payments where status = 'paid' and environment not in ('live','production') and paid_at > now() - interval '30 days'),
+    'last_webhook', (select max(received_at) from public.payment_events),
+    'webhooks_24h', (select count(*) from public.payment_events where received_at > now() - interval '24 hours'),
+    'stuck_payments', (select count(*) from public.payments where status not in ('paid','failed','cancelled','expired') and created_at < now() - interval '2 hours' and created_at > now() - interval '7 days'),
+    'push_waiting', (select count(*) from public.push_outbox where taken_at is null),
+    'push_oldest_waiting', (select min(created_at) from public.push_outbox where taken_at is null),
+    'push_sent_24h', (select count(*) from public.push_outbox where taken_at > now() - interval '24 hours' and coalesce(sent, 0) > 0),
+    'push_failed_24h', (select count(*) from public.push_outbox where taken_at > now() - interval '24 hours' and coalesce(failed, 0) > 0 and coalesce(sent, 0) = 0),
+    'phones_app', (select count(*) from public.push_subscriptions where endpoint like 'fcm:%'),
+    'phones_web', (select count(*) from public.push_subscriptions where endpoint not like 'fcm:%'),
+    'phones_failing', (select count(*) from public.push_subscriptions where fails >= 3),
+    'active_today', (select count(distinct visitor_id) from public.site_visits where day = public._ist(now())),
+    'signed_in_today', (select count(*) from public.profiles where last_seen_at > now() - interval '24 hours'),
+    'staff', (select count(*) from public.staff),
+    'settings', (select coalesce(jsonb_object_agg(key, value), '{}') from public.platform_settings where key in ('commission_pct','advance_pct','partner_agreement_version','require_gear_to_quote'))
+  );
+end $$;
+revoke all on function public.admin_system_health() from public, anon;
+grant execute on function public.admin_system_health() to authenticated;
+
+-- legal and compliance at a glance
+create or replace function public.admin_compliance()
+returns jsonb language plpgsql security definer set search_path = public
+as $$
+declare fy date := make_date(extract(year from public._ist(now()) - interval '3 months')::int, 4, 1);
+begin
+  if not public._money_ok() then raise exception 'Only admins can see compliance'; end if;
+  return jsonb_build_object(
+    'agreement_version', public.partner_agreement_version(),
+    'approved', (select count(*) from public.photographers where approval_status = 'approved' and display_name <> 'Deleted photographer'),
+    'agreement_current', (select count(distinct a.user_id) from public.partner_agreements a join public.photographers g on g.id = a.user_id
+                            where g.approval_status = 'approved' and a.version = public.partner_agreement_version()),
+    'agreement_paper', (select count(*) from public.partner_agreements where method = 'paper'),
+    'kyc', (select coalesce(jsonb_object_agg(status, n), '{}') from (select k.status, count(*) n from public.photographer_kyc k join public.photographers g on g.id = k.id
+                                                                       where g.approval_status = 'approved' group by k.status) z),
+    'approved_no_kyc', (select count(*) from public.photographers g where g.approval_status = 'approved' and g.display_name <> 'Deleted photographer'
+                          and not exists (select 1 from public.photographer_kyc k where k.id = g.id and k.status = 'verified')),
+    'deletions', (select count(*) from public.account_deletions),
+    'deletions_30d', (select count(*) from public.account_deletions d where d.deleted_at > now() - interval '30 days'),
+    'reports_open', (select count(*) from public.user_reports where status in ('open','reviewing')),
+    'fy_start', fy,
+    'fy_gmv', (select coalesce(sum(coalesce(price, total_amount)), 0) from public.bookings where status not in ('pending_payment','cancelled') and public._ist(created_at) >= fy),
+    'fy_commission', (select coalesce(sum(commission_amount), 0) from public.bookings where status not in ('pending_payment','cancelled') and public._ist(created_at) >= fy),
+    'fy_refunds', (select coalesce(sum(amount), 0) from public.refunds where status = 'success' and public._ist(coalesce(processed_at, updated_at)) >= fy)
+  );
+end $$;
+revoke all on function public.admin_compliance() from public, anon;
+grant execute on function public.admin_compliance() to authenticated;
+-- <<< 8t admin command
+
 -- =====================================================================
 -- 9. ONE-OFF CLEAN-UP
 -- =====================================================================
@@ -7337,4 +7607,5 @@ select
   (select count(*) = 3 from information_schema.columns where table_schema='public' and ((table_name='photographers' and column_name in ('services','gear')) or (table_name='requests' and column_name='service')))   as gear_ready,
   (select count(*) = 213 from public.city_geo) and exists (select 1 from pg_proc where proname = 'set_my_upi')   as upi_travel_ready,
   exists (select 1 from pg_proc where proname = 'admin_edit_person')   as admin_record_ready,
-  exists (select 1 from pg_proc where proname = 'admin_remind_photographers')   as gear_required_ready;
+  exists (select 1 from pg_proc where proname = 'admin_remind_photographers')   as gear_required_ready,
+  exists (select 1 from pg_proc where proname = 'admin_city_people')   as admin_command_ready;

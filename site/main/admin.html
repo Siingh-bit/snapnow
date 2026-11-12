@@ -311,7 +311,7 @@ html[data-theme=light] .modal-bg{background:rgba(20,20,30,.38)}
   body.print-sheet .sheet{box-shadow:none;border:0;max-width:none}
   body.print-sheet .trail,body.print-sheet button{display:none!important}
 }
-.pfgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}.pfi{position:relative;display:block;aspect-ratio:1;border-radius:10px;overflow:hidden;background:var(--surface-2)}.pfi img,.pfi video{width:100%;height:100%;object-fit:cover;display:block}.pfi i{position:absolute;left:6px;bottom:6px;font-style:normal;font-size:11px;background:rgba(0,0,0,.6);color:#fff;padding:2px 6px;border-radius:6px}</style>
+.pfgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}.pfi{position:relative;display:block;aspect-ratio:1;border-radius:10px;overflow:hidden;background:var(--surface-2)}.pfi img,.pfi video{width:100%;height:100%;object-fit:cover;display:block}.pfi i{position:absolute;left:6px;bottom:6px;font-style:normal;font-size:11px;background:rgba(0,0,0,.6);color:#fff;padding:2px 6px;border-radius:6px}.chip.blue{background:rgba(88,150,255,.12);border-color:rgba(88,150,255,.35);color:#9cc2ff}html[data-theme=light] .chip.blue{background:#e8f0ff;border-color:#9dbcf5;color:#1d4fa8}</style>
 </head>
 <body>
 <div id="app"><div class="center-card"><div class="spin" style="margin-top:20vh"></div></div></div>
@@ -3042,6 +3042,11 @@ function themeCharts(){
 
 /* ---------- small icons ---------- */
 const ICO = {
+  pin: '<path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/>',
+  doc: '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/>',
+  pulse: '<path d="M3 12h4l3-8 4 16 3-8h4"/>',
+  phone: '<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/>',
+  target: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/>',
   home: '<path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/>',
   users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7"/><path d="M18 14a6 6 0 0 1 3.5 6"/>',
   cam: '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>',
@@ -3082,10 +3087,11 @@ function navGroups(){
   const refunds = S.pay ? S.pay.payments.filter(p => ["refund_due","refund_failed"].includes(p.refund_status)).length : 0;
   const reports = S.dept && S.dept.trust && S.dept.trust.data ? S.dept.trust.data.reports_open || 0 : 0;
   const g = [
-    { t: "", items: [["overview", "home", "Home", "Today at a glance and what needs you"]] },
+    { t: "", items: [["overview", "home", "Home", "Today at a glance and what needs you"], ["health", "target", "Business health", "The whole business on one page"]] },
     { t: "People", items: [
       money && ["users", "users", "Everyone", "All customers and photographers"],
       ["pros", "cam", "Photographers", "Approve new ones, check IDs", waiting],
+      ["cities", "pin", "Cities", "Customers & photographers city by city, call list", S.fuDue || 0],
       ["customers", "heart", "Customer insights", "Who books, who comes back"],
       ["leads", "funnel", "Leads", "Where new people come from"],
       ["referrals", "gift", "Invites & referrals", "Friends inviting friends"] ] },
@@ -3103,6 +3109,8 @@ function navGroups(){
     { t: "Grow", items: [["marketing", "mega", "Marketing", "Campaigns, sources, conversion"]] },
     { t: "Safety", items: [
       ["trust", "shield", "Trust & support", "Reports, blocks, suspensions", reports],
+      money && ["compliance", "doc", "Legal & compliance", "Agreements, ID checks, GST tracker"],
+      money && ["system", "pulse", "System health", "Payments, emails, notifications working?"],
       money && ["activity", "list", "Staff activity", "Who on the team did what"],
       sup && ["team", "team", "Team", "Invite staff and set their access"] ] }
   ];
@@ -3160,7 +3168,8 @@ vConsole = function(){
 };
 function tabContent(){
   const V = { users: vUsers, bookings: vBookings, payments: vPayments, payouts: vPayouts, requests: vRequests, pros: vPros, offers: vOffers, activity: vActivity, team: vTeam,
-              leads: vLeads, marketing: vMarketing, finance: vFinance, ops: vOps, customers: vCustomers, referrals: vReferrals, trust: vTrust, timeline: vTimeline };
+              leads: vLeads, marketing: vMarketing, finance: vFinance, ops: vOps, customers: vCustomers, referrals: vReferrals, trust: vTrust, timeline: vTimeline,
+              cities: vCities, health: vHealth, system: vSystem, compliance: vCompliance };
   return V[S.tab] ? V[S.tab]() : vAttention() + vOverview();
 }
 /* one line about every page, and a tip */
@@ -3191,6 +3200,7 @@ function vAttention(){
   const k = S.insights && S.insights.kpis || {}, money = S.me.role !== "manager", T = S.dept && S.dept.trust && S.dept.trust.data;
   if(money && S.dept && !S.dept.trust && !S.attLoading){ S.attLoading = true; setTimeout(() => deptLoad("trust", true)); }
   const waiting = (S.photographers || []).filter(p => p.approval_status === "pending").length;
+  if(S.fuDue === undefined && typeof loadFollowUps === "function") setTimeout(loadFollowUps);
   const items = [
     [waiting || k.photographers_pending, "Photographers waiting for approval", "Check their profile and photos, then approve", "goPage('pros')", "cam"],
     [T && T.kyc && T.kyc.submitted, "ID checks to review", "Government ID + face photo sent in", "goPage('pros')", "shield"],
@@ -3198,6 +3208,7 @@ function vAttention(){
     money && [k.refunds_due, "Refunds to send", "Customers waiting for their money back", "openDrill('refunds_due','Refunds to do')", "card"],
     money && [k.payouts_due || 0, "Owed to photographers", "Customers have paid — send their share", "goPage('payouts')", "wallet", true],
     money && [k.balances_due, "Balances customers still owe", "Shoot started, balance not paid", "openDrill('balances_due','Balances owed by customers',null,true)", "clock"],
+    [S.fuDue, "Follow-up calls due", "People your team said they'd call back", "S.cityF='fu';goPage('cities')", "phone"],
     [k.now_open_requests, "Requests waiting for quotes", "Customers waiting — photographers can quote now", "openDrill('open_requests','Requests waiting for quotes',null,true)", "bolt"]
   ].filter(x => x && Number(x[0]) > 0);
   return `<div class="att">${items.length ? `<div class="att-t">Needs you now</div><div class="att-g">${items.map(([n, t, s, go, i, isMoney]) =>
@@ -3967,6 +3978,7 @@ function recordHtml(p){
     ${(R.agreements || []).length ? box("Partner Agreement acceptances", R.agreements.map(a => `<div class="kv"><span>${esc(a.version)} · ${esc(a.method || "")}</span><span>${a.accepted_at ? dt(a.accepted_at) : ""}<div class="xs muted2">${esc((a.items || []).join(", "))}${a.ip ? " · IP " + esc(a.ip) : ""}</div></span></div>`).join("")) : ""}
     ${box("Phones with notifications (" + (R.devices || []).length + ")", (R.devices || []).map(d => `<div class="kv"><span>${esc(d.device || d.kind)}</span><span>${esc(d.kind)} · since ${fmt(d.created_at)}${d.fails ? " · " + d.fails + " failures" : ""}</span></div>`).join("") || `<div class="xs muted2">None</div>`)}
     ${box("Chats (" + (R.chats || []).length + " bookings)", (R.chats || []).map(c => `<div class="kv"><span>${payRef(c.booking_id)} · ${esc(c.customer_name || "")} ↔ ${esc(c.photographer_name || "")}</span><span>${num(c.messages)} messages${c.last_at ? " · last " + ago(c.last_at) : ""} <button class="linkbtn" onclick="openChat('${c.booking_id}')">Read</button></span></div>`).join("") || `<div class="xs muted2">No bookings yet.</div>`)}
+    ${box("Calls & notes (" + (R.contact_notes || []).length + ")", `<button class="btn sm" style="margin-bottom:8px" onclick="openNote('${p.id}',${esc(JSON.stringify(p.name || ""))})">Add call note</button>` + ((R.contact_notes || []).map(n => `<div class="kv"><span>${dt(n.created_at)}<div class="xs muted2">${esc(n.staff_email || "")}</div></span><span><b>${esc(typeof outLabel === "function" ? outLabel(n.outcome) : n.outcome)}</b>${n.note ? " — " + esc(n.note) : ""}${n.follow_up_on ? `<div class="xs muted2">call back ${esc(n.follow_up_on)}</div>` : ""}</span></div>`).join("") || `<div class="xs muted2">No calls logged yet.</div>`))}
     ${(R.saved || []).length ? box("Saved photographers", R.saved.map(v => `<div class="kv"><span>${esc(v.name || "")}</span><span>${fmt(v.at)}</span></div>`).join("")) : ""}
     ${(R.busy || []).length ? box("Calendar blocks (" + R.busy.length + ")", R.busy.slice(0, 50).map(b => `<div class="kv"><span>${dt(b.starts_at)} → ${dt(b.ends_at)}</span><span>${esc(b.note || "")}</span></div>`).join("")) : ""}
   </div></details>`;
@@ -4062,6 +4074,329 @@ function copyIncompleteEmails(){
   render();
 }
 
+/* ===================== COMMAND CENTRE: Cities · Business health · System health · Legal & compliance =====================
+   Written so someone who has never seen SnapPro can read every page: each number says what it
+   means, green / amber / red says whether it's good, and "What to do next" turns numbers into actions. */
+
+DEPT_RPC.cities = () => ["admin_city_board", {}];
+DEPT_RPC.health = r => ["admin_health", { p_from: r.from, p_to: r.to }];
+DEPT_RPC.system = () => ["admin_system_health", {}];
+DEPT_RPC.compliance = () => ["admin_compliance", {}];
+Object.assign(PAGE_HELP, {
+  cities: ["Every city where SnapPro has people: customers on one side, photographers who can work there on the other.", "Open a city to call customers and photographers, match a request to the right photographer, and keep notes of every call."],
+  health: ["The whole business on one page: how people move from visiting to booking, whether customers get quotes, money per booking, and what to do next.", "Change the period at the top. Green is healthy, amber needs watching, red needs action."],
+  system: ["Is everything switched on and working: payments, emails, notifications and app activity.", "Anything amber or red says exactly what to do."],
+  compliance: ["The legal side: who accepted the Partner Agreement, ID checks, deleted accounts, open reports and the GST turnover tracker.", "This is a checklist, not legal advice — confirm anything important with your lawyer or CA."]
+});
+const tone = (v, good, ok, higherIsBetter = true) => v == null ? "" : (higherIsBetter ? (v >= good ? "ok" : v >= ok ? "warn" : "bad") : (v <= good ? "ok" : v <= ok ? "warn" : "bad"));
+const TONE_COL = { ok: "var(--green, #3fb37f)", warn: "#e0a43a", bad: "#e5484d" };
+function htile(v, label, meaning, t, onclick){
+  const dot = t ? `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${TONE_COL[t]};margin-right:6px"></span>` : "";
+  const inner = `<div class="v">${v}</div><div class="l">${dot}${label}${onclick ? ' <span class="go">›</span>' : ""}</div>${meaning ? `<div class="xs muted2 mt8">${meaning}</div>` : ""}`;
+  return onclick ? `<button class="stat tap" onclick="${onclick}">${inner}</button>` : `<div class="stat">${inner}</div>`;
+}
+const pctv = (a, b) => b ? Math.round(100 * a / b) : null;
+const pctTxt = v => v == null ? "—" : v + "%";
+const secT = (t, sub) => `<div class="sec mt24" style="margin-bottom:4px">${t}</div>${sub ? `<div class="xs muted2" style="margin-bottom:12px">${sub}</div>` : ""}`;
+const digits10 = p => String(p || "").replace(/\D/g, "").replace(/^91(\d{10})$/, "$1").slice(-10);
+const waLink = (phone, text) => "https://wa.me/91" + digits10(phone) + "?text=" + encodeURIComponent(text);
+const CAT_N = c => (typeof CAT_NAMES !== "undefined" && CAT_NAMES[c]) || c || "shoot";
+const SVC_N = s => ({ video: "video", both: "photos + video" })[s] || "photos";
+const OUTCOMES = [["called", "Called — spoke"], ["no_answer", "No answer"], ["interested", "Interested"], ["not_interested", "Not interested"], ["follow_up", "Call back later"], ["booked", "Booked / sorted"], ["other", "Other"]];
+const OUT_TONE = { interested: "green", booked: "green", not_interested: "red", no_answer: "amber", follow_up: "amber" };
+const outLabel = o => (OUTCOMES.find(x => x[0] === o) || [o, o])[1];
+const meFirst = () => String((S.me && (S.me.name || S.me.email)) || "SnapPro").split(/[\s@]/)[0];
+
+/* =============================== CITIES =============================== */
+function cityStatus(x){
+  const supply = Number(x.photographers_here) + Number(x.photographers_travel);
+  if(x.customers && !supply) return ["red", "No photographers"];
+  if(x.open_no_quotes) return ["amber", x.open_no_quotes + " request" + (x.open_no_quotes > 1 ? "s" : "") + " with no quote"];
+  if(supply && x.customers / supply > 5) return ["amber", "Need more photographers"];
+  if(supply && !x.customers) return ["blue", "Need customers"];
+  return ["green", "Balanced"];
+}
+function vCities(){
+  const w = deptWait("cities", true); if(w) return w;
+  if(S.city) return deptHead("cities", true) + cityDetail();
+  const L = S.dept.cities.data || [], f = S.cityF || "all", q = (S.cityQ || "").toLowerCase();
+  const noPg = L.filter(x => cityStatus(x)[1] === "No photographers"), waiting = L.reduce((t, x) => t + Number(x.open_no_quotes || 0), 0), fu = L.reduce((t, x) => t + Number(x.follow_ups_due || 0), 0);
+  const list = L.filter(x => (!q || x.city.toLowerCase().includes(q) || String(x.state || "").toLowerCase().includes(q)) && (f === "all"
+    || (f === "nopg" && cityStatus(x)[1] === "No photographers") || (f === "needpg" && ["No photographers", "Need more photographers"].includes(cityStatus(x)[1]))
+    || (f === "needcust" && cityStatus(x)[1] === "Need customers") || (f === "waiting" && x.open_no_quotes > 0) || (f === "fu" && x.follow_ups_due > 0)));
+  const chip = (k, l, n) => `<button class="btn sm ${f === k ? "primary" : ""}" onclick="S.cityF='${k}';render()">${l}${n != null ? " (" + n + ")" : ""}</button>`;
+  return deptHead("cities", true) + `
+  <div class="grid mt16">
+    ${htile(num(L.length), "Cities with people", "Cities where at least one customer or photographer lives")}
+    ${htile(num(noPg.length), "Cities with customers but no photographers", noPg.length ? "Customers here can't get quotes — recruit photographers" : "Every city with customers has a photographer", noPg.length ? "bad" : "ok", noPg.length ? "S.cityF='nopg';render()" : "")}
+    ${htile(num(waiting), "Requests with no quote yet", waiting ? "Call photographers who cover these cities" : "Every open request has a quote", waiting ? "warn" : "ok", waiting ? "S.cityF='waiting';render()" : "")}
+    ${htile(num(fu), "Follow-up calls due", fu ? "People you said you'd call back" : "No call-backs due", fu ? "warn" : "ok", fu ? "S.cityF='fu';render()" : "")}
+  </div>
+  <div class="row mt16" style="flex-wrap:wrap;gap:8px">
+    <input class="input" style="max-width:240px;padding:9px 12px" placeholder="Find a city or state" value="${esc(S.cityQ || "")}" oninput="S.cityQ=this.value;clearTimeout(window.__cq);window.__cq=setTimeout(render,250)">
+    ${chip("all", "All", L.length)}${chip("nopg", "No photographers", noPg.length)}${chip("needpg", "Need photographers", L.filter(x => ["No photographers", "Need more photographers"].includes(cityStatus(x)[1])).length)}${chip("needcust", "Need customers", L.filter(x => cityStatus(x)[1] === "Need customers").length)}${chip("waiting", "Requests waiting", L.filter(x => x.open_no_quotes > 0).length)}${chip("fu", "Call-backs due", L.filter(x => x.follow_ups_due > 0).length)}
+  </div>
+  <div class="card tblwrap mt12"><table><thead><tr><th>City</th><th>Customers</th><th>Photographers living there</th><th>Photographers who travel there</th><th>Open requests</th><th>Bookings</th><th>What it needs</th><th></th></tr></thead><tbody>
+  ${list.map(x => { const [c, l] = cityStatus(x); return `<tr class="rowlink" onclick="openCity(${esc(JSON.stringify(x.city))})">
+    <td><b>${esc(x.city)}</b><div class="xs muted2">${esc(x.state || "")}</div></td>
+    <td><b>${num(x.customers)}</b>${x.new_customers ? `<div class="xs muted2">${num(x.new_customers)} new in 30 days</div>` : ""}</td>
+    <td>${num(x.photographers_here)}${x.photographers_pending ? `<div class="xs muted2">+${num(x.photographers_pending)} waiting for approval</div>` : ""}</td>
+    <td>${num(x.photographers_travel)}</td>
+    <td>${num(x.open_requests)}${x.open_no_quotes ? `<div class="xs" style="color:#e0a43a">${num(x.open_no_quotes)} with no quote</div>` : ""}</td>
+    <td>${num(x.bookings)}</td>
+    <td><span class="chip ${c}">${esc(l)}</span>${x.follow_ups_due ? ` <span class="chip amber">${x.follow_ups_due} call-back${x.follow_ups_due > 1 ? "s" : ""}</span>` : ""}</td>
+    <td style="text-align:right"><span class="btn sm">Open ›</span></td></tr>`; }).join("") || `<tr><td colspan="8"><div class="empty">No city matches.</div></td></tr>`}
+  </tbody></table></div>
+  <div class="xs muted2 mt8">"Photographers who travel there" are approved photographers from other cities whose travel range covers this city.</div>`;
+}
+async function openCity(name){ S.city = name; S.cityPeople = null; S.matchReq = null; S.cpF = "all"; S.ppF = "all"; render(); await loadCityPeople(); try{ window.scrollTo(0, 0); }catch(e){} }
+async function loadCityPeople(){
+  const name = S.city; if(!name) return;
+  const { data, error } = await sb.rpc("admin_city_people", { p_city: name });
+  if(S.city !== name) return;
+  S.cityPeople = error ? { err: error.message } : data; render();
+}
+function custMsg(c, city){ return `Hi ${String(c.name || "").split(" ")[0]}, this is ${meFirst()} from SnapPro. You signed up to book a photographer in ${city}. Are you planning a shoot soon? I can help you find the right photographer and get quotes quickly.`; }
+function pgMsg(p, r, city){
+  if(!r) return `Hi ${String(p.name || "").split(" ")[0]}, this is ${meFirst()} from SnapPro. We have customers in ${city} looking for photographers. Please keep your profile and gear up to date in the SnapPro app so you can quote on their shoots.`;
+  return `Hi ${String(p.name || "").split(" ")[0]}, this is ${meFirst()} from SnapPro. A customer in ${city} wants a ${CAT_N(r.category).toLowerCase()} shoot (${SVC_N(r.service)}) on ${new Date(r.start_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}, ${r.duration_hrs || 2} hrs, budget ₹${Number(r.budget || 0).toLocaleString("en-IN")}. Are you free? If yes, please send your quote in the SnapPro app — Requests tab.`;
+}
+const hasCamA = p => (p.gear || []).some(g => g.t === "camera"), hasPhoneA = p => (p.gear || []).some(g => g.t === "phone");
+function fitsReq(p, r){
+  if(!r) return null;
+  const why = [];
+  if(p.approval_status !== "approved") why.push("not approved yet");
+  if((p.categories || []).length && !(p.categories || []).includes(r.category)) why.push("doesn't do " + CAT_N(r.category).toLowerCase());
+  const s = p.services || "photo"; if(!(s === "both" || s === (r.service || "photo"))) why.push("doesn't offer " + SVC_N(r.service));
+  if(r.needs_pro && !hasCamA(p)) why.push("no professional camera");
+  return why;
+}
+function personActions(x, msg, kind){
+  const money = S.me.role !== "manager";
+  return `<div class="row mt8" style="flex-wrap:wrap;gap:6px">
+    ${money && x.phone ? `<a class="btn sm" href="tel:+91${digits10(x.phone)}">Call</a><a class="btn sm" target="_blank" rel="noopener" href="${esc(waLink(x.phone, msg))}">WhatsApp</a>` : money ? `<span class="xs muted2">No phone number</span>` : ""}
+    <button class="btn sm" onclick="openNote('${x.id}',${esc(JSON.stringify(x.name || ""))})">Add call note</button>
+    <button class="btn sm" onclick="openUser('${x.id}')">Full record</button></div>`;
+}
+function noteChip(n){ return n ? `<span class="chip ${OUT_TONE[n.outcome] || ""}" title="${esc(n.note || "")}">${esc(outLabel(n.outcome))} · ${ago(n.created_at)}${n.follow_up_on ? " · call back " + esc(n.follow_up_on) : ""}</span>` : `<span class="chip">Not contacted yet</span>`; }
+function cityDetail(){
+  const P = S.cityPeople, city = S.city;
+  const back = `<button class="btn sm" onclick="S.city=null;S.cityPeople=null;S.matchReq=null;deptLoad('cities')">‹ All cities</button>`;
+  if(!P) return `<div class="mt16">${back}</div><div class="empty">Loading ${esc(city)}…</div>`;
+  if(P.err) return `<div class="mt16">${back}</div><div class="warn mt12">${esc(P.err)}</div>`;
+  const C = P.customers || [], G = P.photographers || [], M = S.matchReq, today = istToday();
+  const due = n => n && n.follow_up_on && n.follow_up_on <= today;
+  const ready = G.filter(p => p.can_quote).length, openN = C.reduce((t, c) => t + (c.open || []).length, 0);
+  const cf = S.cpF || "all", pf = S.ppF || "all";
+  const cl = C.filter(c => cf === "all" || (cf === "open" && (c.open || []).length) || (cf === "never" && !c.requests) || (cf === "new" && !c.last_note) || (cf === "due" && due(c.last_note)) || (cf === "booked" && c.bookings));
+  let gl = G.filter(p => pf === "all" || (pf === "ready" && p.can_quote) || (pf === "missing" && !p.can_quote) || (pf === "here" && p.based_here) || (pf === "travel" && !p.based_here));
+  if(M) gl = gl.slice().sort((a, b) => (fitsReq(a, M).length - fitsReq(b, M).length) || (b.can_quote - a.can_quote));
+  const chips = (key, cur, opts) => opts.map(([k, l, n]) => `<button class="btn sm ${cur === k ? "primary" : ""}" onclick="S.${key}='${k}';render()">${l} (${n})</button>`).join("");
+  return `<div class="between mt16" style="flex-wrap:wrap">${back}<div class="xs muted2">${esc(P.state || "")}</div></div>
+  <div class="h1 mt12">${esc(city)}</div>
+  <div class="grid mt12">
+    ${htile(num(C.length), "Customers", (n => n + (n === 1 ? " has" : " have") + " never posted a shoot")(C.filter(c => !c.requests).length))}
+    ${htile(num(G.length), "Photographers who can work here", G.filter(p => p.based_here).length + " live here · " + G.filter(p => !p.based_here).length + " travel in", G.length ? "" : "bad")}
+    ${htile(num(ready), "Ready to take orders", G.length - ready ? (G.length - ready) + " still missing something (gear, UPI or agreement)" : "Everyone here can quote", ready ? "ok" : "bad")}
+    ${htile(num(openN), "Open requests", openN ? "Customers waiting for quotes right now" : "Nothing waiting", openN ? "warn" : "")}
+  </div>
+  ${M ? `<div class="warn mt16 between" style="flex-wrap:wrap"><div><b>Matching:</b> ${esc(CAT_N(M.category))} · ${esc(SVC_N(M.service))}${M.needs_pro ? " · professional camera only" : ""} · ${dt(M.start_at)} · ₹${Number(M.budget || 0).toLocaleString("en-IN")} for <b>${esc(M.customer)}</b>. Photographers who fit are marked <b>✓ Fits</b> and listed first; WhatsApp sends them this request.</div><button class="btn sm" onclick="S.matchReq=null;render()">Stop matching</button></div>` : ""}
+  <div class="grid2 mt16" style="align-items:start">
+    <div class="card"><div class="sec">Customers in ${esc(city)} (${C.length})</div>
+      <div class="row mt8" style="flex-wrap:wrap;gap:6px">${chips("cpF", cf, [["all", "All", C.length], ["open", "Has an open request", C.filter(c => (c.open || []).length).length], ["never", "Never posted", C.filter(c => !c.requests).length], ["new", "Not contacted", C.filter(c => !c.last_note).length], ["due", "Call back due", C.filter(c => due(c.last_note)).length], ["booked", "Has booked", C.filter(c => c.bookings).length]])}</div>
+      <div class="mt12">${cl.map(c => `<div style="border-top:1px solid var(--border-soft);padding:12px 0">
+        <div class="between" style="align-items:flex-start"><div>${userLink(c.id, c.name, c.public_id)}<div class="xs muted2">${c.phone ? esc(fmtPhoneA(c.phone)) + " · " : ""}joined ${fmt(c.created_at)} · ${c.last_seen_at ? "last opened " + ago(c.last_seen_at) : "never opened the app again"}</div></div>
+          <div class="xs muted2" style="text-align:right">${num(c.requests)} posted · ${num(c.bookings)} booked</div></div>
+        <div class="row mt8" style="flex-wrap:wrap;gap:6px">${noteChip(c.last_note)}</div>
+        ${(c.open || []).map(r => `<div class="row mt8" style="flex-wrap:wrap;gap:6px;background:var(--surface-2);border-radius:10px;padding:8px 10px">
+          <span class="sm"><b>${esc(CAT_N(r.category))}</b> · ${esc(SVC_N(r.service))} · ${dt(r.start_at)} · ₹${Number(r.budget || 0).toLocaleString("en-IN")}</span>
+          <span class="chip ${r.quotes ? "green" : "amber"}">${r.quotes ? r.quotes + " quote" + (r.quotes > 1 ? "s" : "") : "No quote yet"}</span>
+          <button class="btn sm primary" onclick='S.matchReq=${esc(JSON.stringify(Object.assign({}, r, { customer: c.name })))};S.ppF="all";render()'>Find photographers</button></div>`).join("")}
+        ${personActions(c, custMsg(c, city), "c")}</div>`).join("") || `<div class="empty">No customers here.</div>`}</div></div>
+    <div class="card"><div class="sec">Photographers for ${esc(city)} (${G.length})</div>
+      <div class="row mt8" style="flex-wrap:wrap;gap:6px">${chips("ppF", pf, [["all", "All", G.length], ["ready", "Ready to take orders", ready], ["missing", "Missing something", G.length - ready], ["here", "Live here", G.filter(p => p.based_here).length], ["travel", "Travel in", G.filter(p => !p.based_here).length]])}</div>
+      <div class="mt12">${gl.map(p => { const why = fitsReq(p, M); return `<div style="border-top:1px solid var(--border-soft);padding:12px 0">
+        <div class="between" style="align-items:flex-start"><div>${userLink(p.id, p.name, p.public_id)}${p.approval_status !== "approved" ? ' <span class="chip amber">waiting for approval</span>' : ""}
+          <div class="xs muted2">${p.phone ? esc(fmtPhoneA(p.phone)) + " · " : ""}${p.based_here ? "lives here" : "lives in " + esc(p.city || "?") + " · travels " + (p.travel === "anywhere" ? "anywhere in India" : p.travel === "km" ? "up to " + p.travel_km + " km" : "across the state")} · ${p.last_seen_at ? "last opened " + ago(p.last_seen_at) : "not seen yet"}</div></div>
+          <div class="xs muted2" style="text-align:right">${p.review_count ? Number(p.rating).toFixed(1) + "★ · " : ""}${num(p.jobs_done)} shoots · ${num(p.quotes_30d)} quotes in 30 days</div></div>
+        <div class="row mt8" style="flex-wrap:wrap;gap:6px">
+          ${why ? (why.length ? `<span class="chip red">✗ ${esc(why.join(", "))}</span>` : `<span class="chip green">✓ Fits this request</span>`) : ""}
+          <span class="chip">${hasCamA(p) ? "Pro camera" : hasPhoneA(p) ? "Phone" : "No gear listed"}</span><span class="chip">${esc(({ photo: "Photos", video: "Video", both: "Photos + video" })[p.services || "photo"])}</span>
+          ${p.can_quote ? `<span class="chip green">Ready to take orders</span>` : `<span class="chip amber" title="${esc((p.missing || []).join(", "))}">Missing: ${esc((p.missing || []).slice(0, 2).join(", "))}${(p.missing || []).length > 2 ? "…" : ""}</span>`}
+          ${noteChip(p.last_note)}</div>
+        ${personActions(p, pgMsg(p, M, city), "p")}</div>`; }).join("") || `<div class="empty">No photographers can work here yet. Recruit locally — share snappro.in/photographer-jobs-in-${esc(city.toLowerCase().replace(/\s+/g, "-"))}/ in photographer groups.</div>`}</div></div>
+  </div>
+  ${secT("Call log for " + esc(city), "Every note your team has written for people in this city, newest first.")}
+  <div class="card">${(P.notes || []).length ? (P.notes || []).slice(0, 60).map(n => { const who = C.find(c => c.id === n.user_id) || G.find(g => g.id === n.user_id) || {};
+    return `<div class="tlrow"><div class="tlt">${dts(n.created_at)}</div><div class="grow">${userLink(n.user_id, who.name)} — <span class="chip ${OUT_TONE[n.outcome] || ""}">${esc(outLabel(n.outcome))}</span>${n.note ? " " + esc(n.note) : ""}${n.follow_up_on ? ` <span class="xs muted2">· call back ${esc(n.follow_up_on)}</span>` : ""}<div class="xs muted2">${esc(n.staff_email || "")}</div></div></div>`; }).join("") : `<div class="empty">No calls logged yet. Use "Add call note" after every call so the whole team knows what happened.</div>`}</div>`;
+}
+function fmtPhoneA(p){ const d = digits10(p); return d.length === 10 ? "+91 " + d.slice(0, 5) + " " + d.slice(5) : p; }
+
+/* call notes */
+function openNote(id, name){ S.noteFor = { id, name, outcome: "", note: "", fu: "" }; render(); }
+function vNoteSheet(){
+  const n = S.noteFor; if(!n) return "";
+  const tomorrow = addDays(istToday(), 1);
+  return `<div class="sheet-bg top" style="z-index:72" onclick="if(event.target===this){S.noteFor=null;render()}"><div class="sheet narrow" style="max-width:520px" role="dialog" aria-label="Call note">
+    <div class="between"><div class="h2">Call note · ${esc(n.name || "")}</div><button class="btn sm" onclick="S.noteFor=null;render()">Close</button></div>
+    <div class="xs muted2 mt8">What happened? Your team sees this on the Cities page and in this person's full record.</div>
+    <div class="row mt12" style="flex-wrap:wrap;gap:6px">${OUTCOMES.map(([k, l]) => `<button class="btn sm ${n.outcome === k ? "primary" : ""}" onclick="S.noteFor.outcome='${k}';${k === "follow_up" ? `if(!S.noteFor.fu)S.noteFor.fu='${tomorrow}';` : ""}render()">${l}</button>`).join("")}</div>
+    <textarea id="noteTxt" class="input mt12" rows="3" maxlength="500" placeholder="e.g. Wedding on 14 Dec in Candolim, budget about ₹40,000 — wants candid + video" oninput="S.noteFor.note=this.value">${esc(n.note)}</textarea>
+    <label class="xs muted mt12" style="display:block">Call back on <span class="muted2">(optional)</span> <input id="noteFu" class="input" type="date" style="width:auto;padding:8px 10px" min="${istToday()}" value="${esc(n.fu)}" onchange="S.noteFor.fu=this.value"></label>
+    <button class="btn primary mt16" ${n.outcome && !S.noteBusy ? "" : "disabled"} onclick="saveNote()">${S.noteBusy ? "Saving…" : "Save note"}</button>
+  </div></div>`;
+}
+async function saveNote(){
+  const n = S.noteFor; if(!n || !n.outcome) return;
+  S.noteBusy = true; render();
+  const { error } = await sb.rpc("admin_add_contact_note", { p_user: n.id, p_outcome: n.outcome, p_note: n.note || null, p_follow_up: n.fu || null });
+  S.noteBusy = false;
+  if(error){ S.err = error.message; render(); return; }
+  S.noteFor = null; S.note = "Call note saved."; S.fuDue = undefined;
+  if(S.city) await loadCityPeople(); else render();
+  if(S.u360 && S.u360.rec && typeof loadRecord === "function" && S.u360.data && S.u360.data.profile) loadRecord(S.u360.data.profile.id);
+}
+async function loadFollowUps(){ if(S.fuLoading) return; S.fuLoading = true; const { data } = await sb.rpc("admin_follow_ups_due"); S.fuDue = data || 0; S.fuLoading = false; render(); }
+
+/* =============================== BUSINESS HEALTH =============================== */
+function funnelBars(steps){
+  const max = Math.max(1, ...steps.map(s => Number(s[1]) || 0));
+  return steps.map(([l, v, mean], i) => { const prev = i ? Number(steps[i - 1][1]) : null, conv = i && prev ? Math.round(100 * v / prev) : null;
+    return `<div style="margin:10px 0"><div class="between sm"><span><b>${l}</b>${mean ? ` <span class="xs muted2">— ${mean}</span>` : ""}</span><span><b>${num(v)}</b>${conv != null ? ` <span class="xs ${conv >= 50 ? "" : "muted2"}">(${conv}% of the step above)</span>` : ""}</span></div>
+      <div style="height:10px;border-radius:6px;background:var(--surface-2);margin-top:6px;overflow:hidden"><div style="height:100%;width:${Math.max(2, Math.round(100 * (Number(v) || 0) / max))}%;background:var(--accent)"></div></div></div>`; }).join("");
+}
+function healthAdvice(D, cities){
+  const F = D.funnel || {}, Sp = D.supply || {}, Cu = D.customers || {}, out = [];
+  const quotedPct = pctv(F.requests_quoted, F.requests), postPct = pctv(F.customers_posted, F.signups_customers), signPct = pctv(F.signups_customers + F.signups_photographers, F.visitors);
+  if(F.requests && quotedPct < 70) out.push(["bad", `Only ${quotedPct}% of shoot requests got a quote. Customers who get no quote leave. Recruit photographers in the cities marked red on the Cities page and remind the ones who can't quote yet.`, "goPage('cities')", "Open Cities"]);
+  if(Sp.approved && Sp.ready < Sp.approved) out.push(["warn", `${Sp.approved - Sp.ready} approved photographer${Sp.approved - Sp.ready > 1 ? "s" : ""} can't take orders yet (missing gear, UPI or agreement). Send them the reminder email.`, "goPage('pros')", "Open Photographers"]);
+  if(F.signups_customers >= 5 && postPct != null && postPct < 40) out.push(["warn", `Only ${postPct}% of new customers posted a shoot. Call the others — the Cities page lists everyone who never posted, with a ready WhatsApp message.`, "S.cityF='all';goPage('cities')", "Call customers"]);
+  if(F.visitors >= 200 && signPct != null && signPct < 2) out.push(["warn", `Only ${signPct}% of visitors sign up. Check which pages they land on (Marketing) and make the "Get free quotes" button clearer there.`, "goPage('marketing')", "Open Marketing"]);
+  if(D.speed && D.speed.median_first_quote_min > 60) out.push(["warn", `The first quote takes about ${D.speed.median_first_quote_min} minutes. Customers book whoever answers first — ask photographers to turn on notifications.`, "", ""]);
+  if(Cu.ever_booked >= 5 && pctv(Cu.repeat, Cu.ever_booked) < 15) out.push(["warn", `Few customers book a second time. Send past customers an offer for their next shoot (Offers & promo codes).`, "goPage('offers')", "Open Offers"]);
+  const red = (cities || []).filter(x => x.customers && !(Number(x.photographers_here) + Number(x.photographers_travel)));
+  if(red.length) out.push(["bad", `${red.length} cit${red.length > 1 ? "ies have" : "y has"} customers but no photographers: ${red.slice(0, 5).map(x => x.city).join(", ")}${red.length > 5 ? "…" : ""}. Share the photographer-jobs page for these cities in local photographer groups.`, "S.cityF='nopg';goPage('cities')", "See cities"]);
+  if(F.cancelled && F.bookings && pctv(F.cancelled, F.bookings + F.cancelled) > 15) out.push(["warn", `${pctv(F.cancelled, F.bookings + F.cancelled)}% of bookings were cancelled. Look at the reasons in Operations.`, "goPage('ops')", "Open Operations"]);
+  if(!out.length) out.push(["ok", "Nothing urgent. Keep growing visitors (Marketing) and photographers in busy cities.", "", ""]);
+  return out;
+}
+function vHealth(){
+  if(!S.dept.cities && !S.citiesForHealth){ S.citiesForHealth = 1; setTimeout(() => deptLoad("cities", true)); }
+  const w = deptWait("health"); if(w) return w;
+  const D = S.dept.health.data, F = D.funnel, Sp = D.speed, Su = D.supply, Cu = D.customers, M = D.money, r = D.range;
+  const quotedPct = pctv(F.requests_quoted, F.requests), bookedPct = pctv(F.requests_booked, F.requests), repeatPct = pctv(Cu.repeat, Cu.ever_booked), take = M && M.gmv ? Math.round(1000 * M.commission / M.gmv) / 10 : null;
+  const adv = healthAdvice(D, S.dept.cities && S.dept.cities.data);
+  const story = `From ${fmt(r.from)} to ${fmt(r.to)}, <b>${num(F.visitors)}</b> people visited snappro.in and <b>${num(F.signups_customers + F.signups_photographers)}</b> signed up (${num(F.signups_customers)} customers, ${num(F.signups_photographers)} photographers). Customers posted <b>${num(F.requests)}</b> shoot${F.requests === 1 ? "" : "s"}; ${num(F.requests_quoted)} got at least one quote and <b>${num(F.requests_booked)}</b> ${F.requests_booked === 1 ? "was" : "were"} booked${M ? `, worth <b>${inr(M.gmv)}</b> — SnapPro's share is <b>${inr(M.commission)}</b>` : ""}.`;
+  return deptHead("health") + `
+  <div class="card mt16" style="font-size:16px;line-height:1.6">${story}</div>
+  ${secT("What to do next", "Worked out automatically from the numbers on this page.")}
+  <div class="stack" style="display:grid;gap:8px">${adv.map(([t, txt, go, btn]) => `<div class="card between" style="border-left:4px solid ${TONE_COL[t]};flex-wrap:wrap"><div class="sm" style="max-width:780px">${txt}</div>${go ? `<button class="btn sm" onclick="${go}">${btn} ›</button>` : ""}</div>`).join("")}</div>
+  ${secT("The customer journey", "How many people make it to each step. The biggest drop is where to focus.")}
+  <div class="card">${funnelBars([["Visited the website", F.visitors, "unique visitors"], ["Signed up as a customer", F.signups_customers, ""], ["Posted a shoot", F.customers_posted, "customers who posted at least one"], ["Got a quote", F.requests_quoted, "requests with at least one quote"], ["Booked", F.requests_booked, "requests that became a paid booking"], ["Shoot completed", F.completed, "of bookings made in this period"]])}</div>
+  ${secT("Is the marketplace working?", "When a customer posts a shoot, do photographers answer — and fast?")}
+  <div class="grid">
+    ${htile(pctTxt(quotedPct), "Requests that got a quote", "Healthy is 80% or more. Below 60% means too few photographers.", tone(quotedPct, 80, 60))}
+    ${htile(Sp.median_first_quote_min != null ? Sp.median_first_quote_min + " min" : "—", "Time to the first quote", "Half of requests got their first quote within this time. Under 30 minutes is great.", tone(Sp.median_first_quote_min, 30, 120, false))}
+    ${htile(Sp.avg_quotes != null ? Sp.avg_quotes : "—", "Quotes per request", "2–4 gives customers a real choice.", tone(Sp.avg_quotes, 2, 1))}
+    ${htile(pctTxt(bookedPct), "Requests that were booked", "Share of posted shoots that turned into a paid booking.", tone(bookedPct, 30, 15))}
+    ${htile(num(F.cancelled), "Cancelled bookings", "Cancellations in this period.", F.cancelled ? "warn" : "ok")}
+  </div>
+  ${secT("Photographers (supply)", "Enough photographers who can actually take orders?")}
+  <div class="grid">
+    ${htile(num(Su.approved), "Approved photographers", Su.pending ? Su.pending + " more waiting for your approval" : "", "", "goPage('pros')")}
+    ${htile(num(Su.ready), "Ready to take orders", "Approved and finished gear, UPI and agreement", tone(pctv(Su.ready, Su.approved), 80, 50))}
+    ${htile(num(Su.active), "Active in this period", "Sent at least one quote")}
+    ${htile(num(Su.video), "Shoot video", "Offer video or photos + video")}
+    ${htile(num(Su.pro_camera), "Have a professional camera", "The rest shoot on a phone or haven't listed gear")}
+    ${htile(Su.avg_rating ? Su.avg_rating + "★" : "—", "Average rating", "From customers after completed shoots", tone(Su.avg_rating, 4.5, 4))}
+  </div>
+  ${M ? `${secT("Money", "What customers spent and what SnapPro earned, for bookings made in this period.")}
+  <div class="grid">
+    ${htile(inr(M.gmv), "Customers booked (GMV)", "Total value of bookings", "", "goPage('finance')")}
+    ${htile(inr(M.commission), "SnapPro's earnings", take != null ? "That's " + take + "% of booking value (take rate)" : "")}
+    ${htile(inr(M.avg_booking), "Average booking", "Typical value of one shoot")}
+    ${htile(inr(M.avg_commission), "SnapPro earns per booking", "Average commission per booking")}
+    ${htile(inr(M.discounts), "Discounts given", "Promo codes and rewards")}
+    ${htile(inr(M.refunded), "Refunded", "Money returned to customers", M.refunded ? "warn" : "")}
+    ${htile(inr(M.owed_photographers), "Owed to photographers now", "Pay them on Photographer payouts", M.owed_photographers ? "warn" : "ok", "goPage('payouts')")}
+  </div>` : ""}
+  ${secT("Customers coming back", "Repeat customers are the cheapest growth.")}
+  <div class="grid">
+    ${htile(num(Cu.total), "Customers (all time)", "", "", "goPage('customers')")}
+    ${htile(num(Cu.ever_booked), "Have booked at least once", pctTxt(pctv(Cu.ever_booked, Cu.total)) + " of all customers")}
+    ${htile(num(Cu.repeat), "Booked more than once", pctTxt(repeatPct) + " of customers who booked", tone(repeatPct, 25, 10))}
+  </div>
+  ${secT("Demand vs supply by shoot type", "Where to recruit photographers, and what to advertise to customers.")}
+  <div class="card tblwrap"><table><thead><tr><th>Shoot type</th><th>Requests</th><th>Got a quote</th><th>Booked</th><th>Photographers offering it</th><th>Suggestion</th></tr></thead><tbody>
+  ${(D.categories || []).map(c => { const q = pctv(c.quoted, c.requests); const sug = c.requests && !c.photographers ? ["bad", "Recruit — nobody offers this"] : c.requests && q < 60 ? ["warn", "Recruit more photographers"] : !c.requests && c.photographers >= 2 ? ["blue", "Advertise to customers"] : ["green", "OK"];
+    return `<tr><td><b>${esc(CAT_N(c.category))}</b></td><td>${num(c.requests)}</td><td>${num(c.quoted)}${c.requests ? ` <span class="xs muted2">(${q}%)</span>` : ""}</td><td>${num(c.booked)}</td><td>${num(c.photographers)}</td><td><span class="chip ${sug[0] === "bad" ? "red" : sug[0] === "warn" ? "amber" : sug[0]}">${sug[1]}</span></td></tr>`; }).join("")}
+  </tbody></table></div>
+  ${secT("Last 8 weeks", "Week by week, to see if things are growing.")}
+  <div class="card tblwrap"><table><thead><tr><th>Week starting</th><th>New customers</th><th>New photographers</th><th>Shoots posted</th><th>Bookings</th>${M ? "<th>Booked value</th>" : ""}</tr></thead><tbody>
+  ${(D.weeks || []).slice().reverse().map(x => `<tr><td>${fmt(x.week)}</td><td>${num(x.customers)}</td><td>${num(x.photographers)}</td><td>${num(x.requests)}</td><td>${num(x.bookings)}</td>${M ? `<td>${inr(x.gmv || 0)}</td>` : ""}</tr>`).join("")}
+  </tbody></table></div>`;
+}
+
+/* =============================== SYSTEM HEALTH =============================== */
+function vSystem(){
+  const w = deptWait("system", true); if(w) return w;
+  const D = S.dept.system.data, set = D.settings || {};
+  const minsAgo = t => t ? Math.round((Date.now() - Date.parse(t)) / 60000) : null;
+  const pushLag = minsAgo(D.push_oldest_waiting);
+  const rows = [
+    ["Emails (Brevo)", D.email_key === true ? "ok" : D.email_key === false ? "bad" : "warn", D.email_key === true ? "Brevo key is saved — approval, reminder and invite emails can be sent." : "No Brevo key in Supabase Vault, so no emails are sent.", D.email_key === true ? "" : "Supabase → Vault → add a secret named brevo_api_key."],
+    ["Phone notifications", D.push_hook === true ? (pushLag != null && pushLag > 15 ? "warn" : "ok") : "bad", D.push_hook === true ? `${num(D.push_sent_24h)} sent in 24 h · ${num(D.push_failed_24h)} failed · ${num(D.push_waiting)} waiting${pushLag != null ? " (oldest " + pushLag + " min)" : ""}` : "The notification sender isn't connected (push_hook_secret missing in Vault).", pushLag != null && pushLag > 15 ? "Notifications are piling up — check the 'push' Edge Function logs in Supabase." : D.push_hook === true ? "" : "Supabase → Vault → push_hook_secret (see the setup guide)."],
+    ["Phones receiving notifications", D.phones_failing ? "warn" : "ok", `${num(D.phones_app)} Android app · ${num(D.phones_web)} browsers${D.phones_failing ? " · " + num(D.phones_failing) + " failing repeatedly" : ""}`, D.phones_failing ? "Failing phones are usually uninstalled apps — they're removed automatically." : ""],
+    ["Payments mode", D.live_payments_30d ? "ok" : D.test_payments_30d ? "warn" : "warn", D.live_payments_30d ? `${num(D.live_payments_30d)} real (live) payments in 30 days` : D.test_payments_30d ? `Only TEST payments in 30 days (${num(D.test_payments_30d)}) — customers can't pay real money yet.` : "No payments in 30 days.", D.live_payments_30d ? "" : "Put the Razorpay LIVE keys in Supabase Edge Function secrets and create the live webhook."],
+    ["Last payment", D.last_payment ? "ok" : "warn", D.last_payment ? `${ago(D.last_payment)} (${esc(D.last_payment_env || "")})` : "None yet", ""],
+    ["Razorpay webhook", D.last_webhook ? "ok" : "warn", D.last_webhook ? `Last message ${ago(D.last_webhook)} · ${num(D.webhooks_24h)} in 24 h` : "No webhook received yet", D.last_webhook ? "" : "Razorpay → Webhooks → add the SnapPro webhook URL (see PAYMENTS.md)."],
+    ["Payments stuck", D.stuck_payments ? "warn" : "ok", D.stuck_payments ? `${num(D.stuck_payments)} payment${D.stuck_payments > 1 ? "s" : ""} started more than 2 hours ago with no result` : "None", D.stuck_payments ? "Open Payments & refunds and check them against the Razorpay dashboard." : ""],
+    ["People using SnapPro today", "ok", `${num(D.active_today)} website visitors · ${num(D.signed_in_today)} signed-in users in the last 24 h`, ""]
+  ];
+  const lbl = { ok: "Working", warn: "Check", bad: "Not working" };
+  return deptHead("system", true) + `
+  <div class="card tblwrap mt16"><table><thead><tr><th>What</th><th>Status</th><th>Details</th><th>What to do</th></tr></thead><tbody>
+  ${rows.map(([w2, t, d, todo]) => `<tr><td><b>${w2}</b></td><td><span class="chip ${t === "ok" ? "green" : t === "warn" ? "amber" : "red"}">${lbl[t]}</span></td><td class="sm">${d}</td><td class="xs muted2">${esc(todo)}</td></tr>`).join("")}
+  </tbody></table></div>
+  ${secT("Current settings", "Change them on the Commission and Offers pages, or in Supabase → platform_settings.")}
+  <div class="grid">
+    ${htile((set.commission_pct != null ? set.commission_pct : 20) + "%", "Standard commission", "What SnapPro keeps from each booking", "", "goPage('commission')")}
+    ${htile((set.advance_pct != null ? set.advance_pct : 25) + "%", "Advance customers pay to book", "The rest is paid once the shoot starts")}
+    ${htile(esc(String(set.partner_agreement_version || "1.0")), "Partner Agreement version", "Photographers re-accept when this changes")}
+    ${htile(String(set.require_gear_to_quote) === "false" ? "Off" : "On", "Gear needed before quoting", "Photographers must list a camera or phone to send quotes")}
+    ${htile(num(D.staff), "Team members", "", "", S.me.role === "super_admin" ? "goPage('team')" : "")}
+  </div>`;
+}
+
+/* =============================== LEGAL & COMPLIANCE =============================== */
+function vCompliance(){
+  const w = deptWait("compliance", true); if(w) return w;
+  const D = S.dept.compliance.data, k = D.kyc || {}, GST = 2000000;
+  const agrPct = pctv(D.agreement_current, D.approved), fyPct = Math.min(100, Math.round(100 * Number(D.fy_gmv || 0) / GST));
+  return deptHead("compliance", true) + `
+  ${secT("Photographers' paperwork", "Every approved photographer should have accepted the current Partner Agreement and passed the ID check.")}
+  <div class="grid">
+    ${htile(`${num(D.agreement_current)} of ${num(D.approved)}`, "Accepted the current Partner Agreement (v" + esc(D.agreement_version) + ")", agrPct != null && agrPct < 100 ? "The rest are asked to accept before their next quote" : "Everyone is on the current version", tone(agrPct, 100, 80), "goPage('pros')")}
+    ${htile(num(D.agreement_paper), "Signed on paper", "Recorded from the admin")}
+    ${htile(num(k.verified || 0), "ID verified", (k.submitted ? num(k.submitted) + " waiting for your check · " : "") + (k.rejected ? num(k.rejected) + " asked to redo" : ""), k.submitted ? "warn" : "ok", "goPage('pros')")}
+    ${htile(num(D.approved_no_kyc), "Approved without a verified ID", D.approved_no_kyc ? "Ask them to finish the ID check — it protects customers and you" : "All approved photographers are verified", D.approved_no_kyc ? "warn" : "ok", "goPage('pros')")}
+  </div>
+  ${secT("Users and safety")}
+  <div class="grid">
+    ${htile(num(D.reports_open), "Open reports from users", D.reports_open ? "Review them on Trust & support" : "Nothing open", D.reports_open ? "warn" : "ok", "goPage('trust')")}
+    ${htile(num(D.deletions), "Accounts deleted (all time)", num(D.deletions_30d) + " in the last 30 days. Personal data is erased; booking and payment records are kept for tax law.")}
+  </div>
+  ${secT("GST turnover tracker", "Booked value since " + fmt(D.fy_start) + " (this financial year).")}
+  <div class="card">
+    <div class="between sm"><span>Booked value this year: <b>${inr(D.fy_gmv)}</b> · SnapPro's commission: <b>${inr(D.fy_commission)}</b> · refunded: ${inr(D.fy_refunds)}</span><span class="xs muted2">${fyPct}% of ₹20 lakh</span></div>
+    <div style="height:10px;border-radius:6px;background:var(--surface-2);margin-top:10px;overflow:hidden"><div style="height:100%;width:${Math.max(1, fyPct)}%;background:${fyPct >= 80 ? "#e5484d" : fyPct >= 50 ? "#e0a43a" : "var(--accent)"}"></div></div>
+    <div class="xs muted2 mt12">Service businesses in India generally have to register for GST once turnover crosses ₹20 lakh in a financial year (₹10 lakh in some states), and online marketplaces can have extra rules. Which number counts for SnapPro — total booking value or only your commission — is a question for your CA. This bar is a reminder, not tax advice.</div>
+  </div>
+  ${secT("Your public policies")}
+  <div class="card"><div class="row" style="flex-wrap:wrap;gap:8px">${[["Terms", "/terms.html"], ["Privacy", "/privacy.html"], ["Cancellation & refunds", "/refunds.html"], ["Delivery", "/delivery.html"], ["Partner Agreement", "/photographer-agreement.html"], ["Delete account", "/delete-account.html"], ["Contact", "/contact.html"]].map(([l, u]) => `<a class="btn sm" target="_blank" rel="noopener" href="${u}">${l} ↗</a>`).join("")}</div>
+    <div class="xs muted2 mt12">Have a lawyer review the Terms and the Partner Agreement once before you scale up.</div></div>`;
+}
+
 /* ============================ render ========================== */
 
 function render(){
@@ -4077,7 +4412,7 @@ function render(){
     S.view==="newpw"   ? vNewPw()   :
     S.view==="code"    ? vCode()    :
     S.view==="denied"  ? vDenied()  :
-    S.view==="console" ? vConsole() + vDrill() + vUser360() + vPgDoc() + vBooking() + vChatView() : vLogin();
+    S.view==="console" ? vConsole() + vDrill() + vUser360() + vPgDoc() + vBooking() + vChatView() + vNoteSheet() : vLogin();
 
   try{ drawCharts(); }catch(e){ console.warn('charts', e); }
   try{ drawReportCharts(); }catch(e){ console.warn('report charts', e); }
