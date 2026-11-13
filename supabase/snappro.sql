@@ -7516,6 +7516,68 @@ revoke all on function public.admin_compliance() from public, anon;
 grant execute on function public.admin_compliance() to authenticated;
 -- <<< 8t admin command
 
+-- >>> 8u media domain
+-- =====================================================================
+-- 8u. MEDIA LINKS ON media.snappro.in (CDN)
+--     Portfolio photos and videos live in Amazon S3. Once a CloudFront CDN
+--     answers on https://media.snappro.in, a super admin presses one button
+--     (System health) to switch every saved link from the long amazonaws.com
+--     address to media.snappro.in — and can switch back the same way.
+--     New uploads use the address in the media function's MEDIA_PUBLIC_BASE.
+-- =====================================================================
+create or replace function public._swap_media_host(u text, p_from_re text, p_to text)
+returns text language sql immutable
+as $$ select case when u ~ p_from_re then regexp_replace(u, p_from_re, rtrim(p_to, '/') || '/') else u end $$;
+
+create or replace function public.admin_switch_media_domain(p_base text)
+returns jsonb language plpgsql security definer set search_path = public
+as $$
+declare b text := rtrim(trim(coalesce(p_base, '')), '/'); s3 text; cur text; re text; n_pg int; n_media int;
+begin
+  if coalesce(public.staff_role() = 'super_admin', false) is not true then raise exception 'Only a super admin can switch media links'; end if;
+  if b !~ '^https://[a-z0-9.-]+$' then raise exception 'Use an address like https://media.snappro.in'; end if;
+  -- remember the original Amazon S3 address the first time, so we can switch back
+  select value #>> '{}' into s3 from public.platform_settings where key = 'media_s3_base';
+  if s3 is null then
+    select substring(url from '^(https://[^/]+\.amazonaws\.com)/') into s3 from public.portfolio_media where url ~ '^https://[^/]+\.amazonaws\.com/' limit 1;
+    if s3 is not null then
+      insert into public.platform_settings (key, value) values ('media_s3_base', to_jsonb(s3)) on conflict (key) do update set value = excluded.value, updated_at = now();
+    end if;
+  end if;
+  select value #>> '{}' into cur from public.platform_settings where key = 'media_base';
+  -- links to rewrite: any amazonaws.com address, plus the current CDN address
+  re := '^https://([^/]+\.amazonaws\.com' || case when cur is not null and cur <> b then '|' || regexp_replace(substring(cur from '^https://(.*)$'), '([.])', '\\\1', 'g') else '' end || ')/';
+  perform set_config('snappro.system', 'on', true);
+  update public.portfolio_media set url = public._swap_media_host(url, re, b), updated_at = now() where url ~ re;
+  get diagnostics n_media = row_count;
+  update public.photographers set portfolio = (select coalesce(array_agg(public._swap_media_host(x, re, b) order by o), '{}') from unnest(portfolio) with ordinality t(x, o))
+   where exists (select 1 from unnest(portfolio) x where x ~ re);
+  get diagnostics n_pg = row_count;
+  insert into public.platform_settings (key, value) values ('media_base', to_jsonb(b)) on conflict (key) do update set value = excluded.value, updated_at = now();
+  perform public._audit('media_domain_switched', 'settings', 'media_base', b, jsonb_build_object('from', cur, 'files', n_media, 'photographers', n_pg));
+  return jsonb_build_object('base', b, 'files', n_media, 'photographers', n_pg, 's3_base', s3);
+end $$;
+revoke all on function public.admin_switch_media_domain(text) from public, anon;
+grant execute on function public.admin_switch_media_domain(text) to authenticated;
+
+-- for the System health page: where links point now, and one sample to test
+create or replace function public.admin_media_status()
+returns jsonb language plpgsql security definer set search_path = public
+as $$
+begin
+  if coalesce(public.staff_role() in ('super_admin','admin'), false) is not true then raise exception 'Admins only'; end if;
+  return jsonb_build_object(
+    'media_base', (select value #>> '{}' from public.platform_settings where key = 'media_base'),
+    's3_base', coalesce((select value #>> '{}' from public.platform_settings where key = 'media_s3_base'),
+                        (select substring(url from '^(https://[^/]+\.amazonaws\.com)/') from public.portfolio_media where url ~ '^https://[^/]+\.amazonaws\.com/' limit 1)),
+    'on_s3', (select count(*) from public.portfolio_media where status <> 'deleted' and url ~ '^https://[^/]+\.amazonaws\.com/'),
+    'total', (select count(*) from public.portfolio_media where status <> 'deleted'),
+    'sample', (select s3_key from public.portfolio_media where status = 'ready' and kind = 'image' order by created_at desc limit 1));
+end $$;
+revoke all on function public.admin_media_status() from public, anon;
+grant execute on function public.admin_media_status() to authenticated;
+-- <<< 8u media domain
+
 -- =====================================================================
 -- 9. ONE-OFF CLEAN-UP
 -- =====================================================================
@@ -7608,4 +7670,5 @@ select
   (select count(*) = 213 from public.city_geo) and exists (select 1 from pg_proc where proname = 'set_my_upi')   as upi_travel_ready,
   exists (select 1 from pg_proc where proname = 'admin_edit_person')   as admin_record_ready,
   exists (select 1 from pg_proc where proname = 'admin_remind_photographers')   as gear_required_ready,
-  exists (select 1 from pg_proc where proname = 'admin_city_people')   as admin_command_ready;
+  exists (select 1 from pg_proc where proname = 'admin_city_people')   as admin_command_ready,
+  exists (select 1 from pg_proc where proname = 'admin_switch_media_domain')   as media_domain_ready;
