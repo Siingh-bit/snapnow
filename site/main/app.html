@@ -480,7 +480,7 @@ html,body,#app,.tabbar,.card,.input{transition:background-color .25s,border-colo
 
 /* portfolio videos + storage */
 .vthumb{position:relative;display:block;width:100%;height:100%;background:#000}
-.vthumb video{width:100%;height:100%;object-fit:cover;display:block}
+.vthumb video,.vthumb img{width:100%;height:100%;object-fit:cover;display:block}
 .vthumb .play{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:30px;height:30px;border-radius:50%;background:rgba(0,0,0,.55);display:grid;place-items:center}
 .pstrip .vthumb.pimg{width:84px;height:84px;flex:0 0 84px;border-radius:4px;overflow:hidden}
 .photo-view video{max-width:100%;max-height:100%}
@@ -684,6 +684,10 @@ body.gal-open{overflow:hidden}
 .chip.amber{background:#f7ecd6;color:#8a5a12}
 html[data-theme=dark] .chip.amber{background:#3a2c14;color:#e9b866}
 .chip.kit{color:var(--text);font-weight:600}
+.stg-nag{position:fixed;inset:0;z-index:85;display:flex;align-items:flex-end;justify-content:center}
+.stg-nag-bg{position:absolute;inset:0;background:rgba(0,0,0,.35)}
+.stg-nag-card{position:relative;width:min(520px,100%);border-radius:16px 16px 0 0;padding:20px 18px calc(18px + env(safe-area-inset-bottom));box-shadow:var(--shadow);animation:stgUp .22s ease-out}
+@keyframes stgUp{from{transform:translateY(30px);opacity:0}to{transform:none;opacity:1}}
 
 </style>
 </head>
@@ -2347,7 +2351,7 @@ function vPgProfile(p){
     <button class="btn primary" onclick="startRequest(null,'${esc((pg.categories||[])[0] || "")}' || null)">Post a shoot</button></div>` : `<div style="height:24px"></div>`}`;
 }
 function vPhoto(p){
-  return `<div class="photo-view"><button class="iconbtn photo-close" aria-label="Close" onclick="pop()">${icon("x",20)}</button>${isVideoUrl(p.url) ? `<video src="${esc(p.url)}" controls autoplay playsinline></video>` : `<img src="${esc(p.url)}" alt="">`}</div>`;
+  return `<div class="photo-view"><button class="iconbtn photo-close" aria-label="Close" onclick="pop()">${icon("x",20)}</button>${isVideoUrl(p.url) ? `<video src="${esc(p.url)}" poster="${esc(posterOf(p.url))}" controls autoplay playsinline></video>` : `<img src="${esc(p.url)}" alt="">`}</div>`;
 }
 
 /* ============================================================
@@ -3517,10 +3521,18 @@ function payBox(price, pgFirst){
 const isVideoUrl = u => /\.(mp4|mov|webm)(\?|$)/i.test(String(u || ""));
 const fmtBytes = n => { n = Number(n) || 0; if(!n) return "0 MB"; return n >= 1024*1024*1024 ? (n / 1073741824).toFixed(n % 1073741824 ? 1 : 0) + " GB"
   : n >= 1024*1024 ? Math.round(n / 1048576) + " MB" : Math.max(1, Math.round(n / 1024)) + " KB"; };
-/* a thumbnail for a photo or a video (videos show their first frame and a play badge) */
+/* a video's still preview sits next to it on S3: <video>.mp4.poster.jpg */
+const posterOf = u => String(u || "").replace(/(\.(mp4|mov|webm))(\?.*)?$/i, "$1.poster.jpg$3");
+/* no preview (older videos, or one the phone couldn't make): show the video's first frame instead */
+function posterFallback(img){
+  const u = img.getAttribute("data-v"), v = document.createElement("video");
+  v.src = u + "#t=0.1"; v.muted = true; v.playsInline = true; v.setAttribute("playsinline", ""); v.preload = "metadata";
+  img.replaceWith(v);
+}
+/* a thumbnail for a photo or a video (videos show a still preview and a play badge) */
 function mediaThumb(u, cls){
   return isVideoUrl(u)
-    ? `<span class="vthumb ${cls||""}"><video src="${esc(u)}#t=0.1" muted playsinline preload="metadata"></video><i class="play">${icon("play",16,"#fff")}</i></span>`
+    ? `<span class="vthumb ${cls||""}"><img src="${esc(posterOf(u))}" data-v="${esc(u)}" alt="" loading="lazy" onerror="posterFallback(this)"><i class="play">${icon("play",16,"#fff")}</i></span>`
     : `<img class="${cls||""}" src="${esc(u)}" alt="" loading="lazy">`;
 }
 async function mediaFn(action, body){
@@ -3529,8 +3541,33 @@ async function mediaFn(action, body){
   return data;
 }
 async function loadStorage(){
-  try{ const { data, error } = await sb.rpc("my_storage"); if(!error && data){ S.storage = data; } }catch(e){}
+  try{ const { data, error } = await sb.rpc("my_storage"); if(!error && data){ S.storage = data; setTimeout(storageNag, 800); } }catch(e){}
   return S.storage;
+}
+/* make a small JPEG still from a video on the phone (no upload of anything else) */
+function videoPoster(file){
+  return new Promise(resolve => {
+    let done = false; const v = document.createElement("video"), src = URL.createObjectURL(file);
+    const fin = b => { if(done) return; done = true; try{ URL.revokeObjectURL(src); v.removeAttribute("src"); v.load(); }catch(e){} resolve(b || null); };
+    v.muted = true; v.playsInline = true; v.setAttribute("playsinline", ""); v.preload = "auto";
+    v.onloadedmetadata = () => { try{ v.currentTime = Math.min(1, (isFinite(v.duration) ? v.duration : 2) / 4); }catch(e){ fin(null); } };
+    v.onseeked = () => { try{
+      const w = v.videoWidth, h = v.videoHeight; if(!w || !h) return fin(null);
+      const k = Math.min(1, 720 / Math.max(w, h)), c = document.createElement("canvas");
+      c.width = Math.round(w * k); c.height = Math.round(h * k); c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
+      c.toBlob(b => fin(b), "image/jpeg", 0.8);
+    }catch(e){ fin(null); } };
+    v.onerror = () => fin(null); setTimeout(() => fin(null), 8000);
+    v.src = src; try{ v.load(); }catch(e){}
+  });
+}
+async function uploadPoster(key, file){
+  try{
+    const b = await videoPoster(file); if(!b || b.size > 400 * 1024) return false;
+    const slot = await mediaFn("poster", { key, bytes: b.size });
+    await putWithProgress(slot.upload_url, slot.headers, b);
+    return true;
+  }catch(e){ console.warn("SnapPro preview", e); return false; }
 }
 /* upload with progress (fetch can't report progress) */
 function putWithProgress(url, headers, blob, onPct){
@@ -3558,6 +3595,7 @@ async function uploadPortfolio(files){
       const type = video ? f.type : "image/jpeg";
       const slot = await mediaFn("sign", { type, bytes: blob.size });
       await putWithProgress(slot.upload_url, slot.headers, blob, pct => setBusyNote("Uploading " + label + " — " + pct + "%"));
+      if(video){ setBusyNote("Making a preview for " + label + "…"); await uploadPoster(slot.key, f); }
       setBusyNote("Checking " + label + "…");
       await mediaFn("confirm", { key: slot.key });
       added++;
@@ -4993,6 +5031,8 @@ function openTarget(t){
   else if(t.open === "chat" && id) push("chat", { id });
   else if(t.open === "reviews" && isPg()) push("pgReviews");
   else if(t.open === "payouts" && isPg()){ S.myPay = null; push("payouts"); }
+  else if(t.open === "storage" && isPg()) push("storage");
+  else if(t.open === "portfolio" && isPg()) push("portfolio");
   else render();
 }
 function openTargetFromUrl(u){
@@ -5611,7 +5651,7 @@ function galleryAfterRender(){
       <div class="grow"><div class="gal-name">${esc(pg.display_name || "Portfolio")}</div><div class="gal-count" id="galCount">${i0 + 1} / ${list.length}</div></div>
     </div>
     <div class="gal-track" id="galTrack">${list.map((u, i) => `<div class="gal-s" data-i="${i}">${isVideoUrl(u)
-      ? `<video src="${esc(u)}" controls playsinline preload="${Math.abs(i - i0) <= 1 ? "metadata" : "none"}"></video>`
+      ? `<video src="${esc(u)}" poster="${esc(posterOf(u))}" controls playsinline preload="${Math.abs(i - i0) <= 1 ? "metadata" : "none"}"></video>`
       : `<img src="${esc(u)}" alt="Photo ${i + 1} of ${list.length}" ${Math.abs(i - i0) <= 2 ? "" : 'loading="lazy"'} decoding="async" draggable="false">`}</div>`).join("")}</div>
     <button class="gal-nav prev" aria-label="Previous photo" onclick="galleryStep(-1)">${icon("chevron", 26, "#fff")}</button>
     <button class="gal-nav next" aria-label="Next photo" onclick="galleryStep(1)">${icon("chevron", 26, "#fff")}</button>`;
@@ -6183,6 +6223,57 @@ function readyGate(kind){
     <div class="xs muted2 mt12">${kind === "quote" ? "When everything is ticked, the quote form opens here." : "When everything is ticked, your shoot form opens here — nothing you've chosen is lost."}</div>
   </div>`;
 }
+
+/* ============================================================
+   Storage almost full (photographers) + app error reports.
+   ============================================================ */
+
+/* Once a day, when a photographer has used 80% or more of their portfolio storage,
+   a small card pops up from the bottom: "Get more storage" opens the storage plans. */
+function storageNag(){
+  try{
+    const st = S.storage, top = S.stack && S.stack.length ? S.stack[S.stack.length - 1].v : "";
+    if(!isPg() || !st || !(st.quota > 0) || st.used < 0.8 * st.quota) return;
+    if(top === "storage" || document.getElementById("stgNag") || document.body.classList.contains("gal-open")) return;
+    const today = new Date().toISOString().slice(0, 10);
+    if(S.prefs.stgNag === today) return;
+    S.prefs.stgNag = today; savePrefs();
+    const pct = Math.min(100, Math.round(100 * st.used / st.quota)), full = pct >= 100;
+    const d = document.createElement("div"); d.id = "stgNag"; d.className = "stg-nag"; d.setAttribute("role", "dialog"); d.setAttribute("aria-label", "Storage almost full");
+    d.innerHTML = `<div class="stg-nag-bg" onclick="closeStorageNag()"></div>
+      <div class="stg-nag-card card">
+        <div class="row" style="gap:10px">${icon("image", 20, "var(--accent)")}<div class="h2" style="margin:0">${full ? "Your portfolio storage is full" : "Your portfolio storage is almost full"}</div></div>
+        <p class="sm muted mt8">You've used <b>${fmtBytes(st.used)}</b> of ${fmtBytes(st.quota)} (${pct}%). ${full ? "You can't add new photos or videos until you make room." : "When it's full you won't be able to add new photos or videos."}</p>
+        <div class="meter mt12 hot"><i style="width:${pct}%"></i></div>
+        ${PLAY_APP
+          ? `<p class="xs muted2 mt12">To make room, remove items you no longer need from your portfolio.</p>
+             <button class="btn primary block mt12" onclick="closeStorageNag();push('storage')">See storage</button>`
+          : `<button class="btn primary block mt16" onclick="closeStorageNag();push('storage')">Get more storage</button>`}
+        <button class="btn block mt8" onclick="closeStorageNag()">Not now</button>
+      </div>`;
+    document.body.appendChild(d);
+  }catch(e){}
+}
+function closeStorageNag(){ const n = document.getElementById("stgNag"); if(n) n.remove(); }
+
+/* App errors on people's phones go to the admin (Plans & usage → App errors), so bugs get fixed
+   even when nobody reports them. Only when logged in, at most 5 different errors per visit. */
+(function(){
+  let sent = 0; const seen = {};
+  function report(msg, stack){
+    try{
+      if(typeof S === "undefined" || !S.me || !sb || sent >= 5) return;
+      msg = String(msg || "").slice(0, 300); stack = String(stack || "");
+      if(!msg || seen[msg] || /ResizeObserver loop|^Script error\.?$|extension:\/\//i.test(msg + " " + stack)) return;
+      seen[msg] = 1; sent++;
+      const page = S.stack && S.stack.length ? S.stack[S.stack.length - 1].v : (S.tab || "");
+      sb.rpc("log_client_error", { p_message: msg, p_stack: stack.slice(0, 2000), p_page: String(page || "").slice(0, 60),
+        p_device: ((typeof PLAY_APP !== "undefined" && PLAY_APP) ? "Android app" : "Web") + " · " + String(navigator.userAgent || "").slice(0, 160) }).then(() => {}, () => {});
+    }catch(e){}
+  }
+  window.addEventListener("error", e => report(e.message, e.error && e.error.stack));
+  window.addEventListener("unhandledrejection", e => { const r = e.reason; report(r && r.message ? r.message : String(r), r && r.stack); });
+})();
 
 /* ============================================================
    NAVIGATION

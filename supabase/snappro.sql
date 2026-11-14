@@ -7578,6 +7578,431 @@ revoke all on function public.admin_media_status() from public, anon;
 grant execute on function public.admin_media_status() to authenticated;
 -- <<< 8u media domain
 
+-- >>> 8v admin grow
+-- =====================================================================
+-- 8v. GROWTH, QUALITY & COMPANY TOOLS (admin)
+--     Plans & usage (free limits of every service), storage per photographer,
+--     segments + broadcast messages, India map, ad spend vs results,
+--     retention cohorts, photographer scorecard, data quality,
+--     monthly finance pack for the CA, and app error reports.
+-- =====================================================================
+
+-- ---------- emails sent (to watch Brevo's daily limit) ----------
+create table if not exists public.email_log (
+  id      bigserial primary key,
+  kind    text,
+  sent_at timestamptz not null default now()
+);
+create index if not exists idx_email_log_at on public.email_log(sent_at);
+alter table public.email_log enable row level security;
+drop policy if exists email_log_staff on public.email_log;
+create policy email_log_staff on public.email_log for select to authenticated using (public.is_staff());
+revoke insert, update, delete on public.email_log from anon, authenticated;
+
+create or replace function public._send_email(p_to text, p_subject text, p_html text)
+returns bigint language plpgsql security definer set search_path = public, extensions
+as $$
+declare api_key text; req bigint;
+begin
+  begin
+    select decrypted_secret into api_key from vault.decrypted_secrets where name = 'brevo_api_key' limit 1;
+  exception when others then api_key := null;
+  end;
+  if coalesce(api_key,'') = '' or coalesce(p_to,'') = '' then return null; end if;
+  select net.http_post(
+    url     := 'https://api.brevo.com/v3/smtp/email',
+    body    := jsonb_build_object('sender', jsonb_build_object('name','SnapPro','email','noreply@snappro.in'),
+                                  'to', jsonb_build_array(jsonb_build_object('email', p_to)),
+                                  'subject', p_subject, 'htmlContent', p_html),
+    headers := jsonb_build_object('api-key', api_key, 'content-type','application/json', 'accept','application/json'),
+    timeout_milliseconds := 8000) into req;
+  insert into public.email_log (kind) values (left(p_subject, 80));
+  return req;
+end $$;
+
+-- ---------- app errors (so problems customers hit show up in admin) ----------
+create table if not exists public.client_errors (
+  id       bigserial primary key,
+  at       timestamptz not null default now(),
+  user_id  uuid,
+  page     text,
+  message  text,
+  stack    text,
+  device   text
+);
+create index if not exists idx_client_errors_at on public.client_errors(at);
+alter table public.client_errors enable row level security;
+drop policy if exists client_errors_staff on public.client_errors;
+create policy client_errors_staff on public.client_errors for select to authenticated using (public.is_staff());
+revoke insert, update, delete on public.client_errors from anon, authenticated;
+create or replace function public.log_client_error(p_message text, p_stack text, p_page text, p_device text)
+returns void language plpgsql security definer set search_path = public
+as $$
+begin
+  if auth.uid() is null or coalesce(trim(p_message), '') = '' then return; end if;
+  if (select count(*) from public.client_errors where user_id = auth.uid() and at > now() - interval '1 hour') >= 20 then return; end if;
+  insert into public.client_errors (user_id, page, message, stack, device)
+  values (auth.uid(), left(p_page, 120), left(p_message, 300), left(p_stack, 1200), left(p_device, 160));
+end $$;
+revoke all on function public.log_client_error(text, text, text, text) from public, anon;
+grant execute on function public.log_client_error(text, text, text, text) to authenticated;
+
+-- ---------- plans & usage ----------
+create or replace function public.admin_usage()
+returns jsonb language plpgsql security definer set search_path = public
+as $$
+declare stor bigint; auth_mails int; res jsonb;
+begin
+  if coalesce(public.staff_role() in ('super_admin','admin'), false) is not true then raise exception 'Admins only'; end if;
+  begin execute 'select coalesce(sum((metadata->>''size'')::bigint), 0) from storage.objects' into stor; exception when others then stor := null; end;
+  begin execute 'select count(*) from auth.audit_log_entries where created_at > now() - interval ''24 hours'' and payload->>''action'' in (''user_confirmation_requested'',''user_recovery_requested'',''user_reauthenticate_requested'',''user_invited'')' into auth_mails;
+  exception when others then auth_mails := null; end;
+  select jsonb_build_object(
+    'db_bytes', pg_database_size(current_database()),
+    'file_bytes', stor,
+    's3_bytes', (select coalesce(sum(bytes), 0) from public.portfolio_media where status in ('ready','hidden','pending')),
+    's3_files', (select count(*) from public.portfolio_media where status in ('ready','hidden','pending')),
+    's3_videos', (select count(*) from public.portfolio_media where status in ('ready','hidden') and kind = 'video'),
+    'mau', (select count(*) from public.profiles where last_seen_at > now() - interval '30 days'),
+    'emails_24h', (select count(*) from public.email_log where sent_at > now() - interval '24 hours'),
+    'emails_30d', (select count(*) from public.email_log where sent_at > now() - interval '30 days'),
+    'auth_emails_24h', auth_mails,
+    'push_30d', (select coalesce(sum(sent), 0) from public.push_outbox where taken_at > now() - interval '30 days'),
+    'payments_30d', (select count(*) from public.payments where status = 'paid' and paid_at > now() - interval '30 days'),
+    'photographers_near_full', (select count(*) from public.photographers g where g.approval_status in ('approved','pending')
+                                  and public.storage_used(g.id) >= 0.8 * public.storage_quota(g.id)),
+    'errors_24h', (select count(*) from public.client_errors where at > now() - interval '24 hours'),
+    'errors', (select coalesce(jsonb_agg(z order by z.last desc), '[]') from (
+        select message, count(*) n, max(at) last, max(page) page, count(distinct user_id) people from public.client_errors
+        where at > now() - interval '7 days' group by message order by max(at) desc limit 25) z)
+  ) into res;
+  return res;
+end $$;
+revoke all on function public.admin_usage() from public, anon;
+grant execute on function public.admin_usage() to authenticated;
+
+-- storage used by every photographer
+create or replace function public.admin_storage_usage()
+returns jsonb language sql stable security definer set search_path = public
+as $$ select case when public.is_staff() then (select coalesce(jsonb_object_agg(g.id, jsonb_build_object(
+          'used', public.storage_used(g.id), 'quota', public.storage_quota(g.id),
+          'plan', case when s.plan <> 'free' and s.expires_at > now() then s.plan else 'free' end, 'expires_at', case when s.plan <> 'free' then s.expires_at end)), '{}')
+        from public.photographers g left join public.photographer_storage s on s.id = g.id) end $$;
+revoke all on function public.admin_storage_usage() from public, anon;
+grant execute on function public.admin_storage_usage() to authenticated;
+
+-- ---------- segments + broadcast ----------
+create or replace function public._segment_ids(p_key text, p_city text)
+returns table (id uuid) language sql stable security definer set search_path = public
+as $$
+  with P as (select p.* from public.profiles p where p.name <> 'Deleted user' and not exists (select 1 from public.staff s where s.id = p.id)
+               and (coalesce(trim(p_city), '') = '' or lower(trim(p.city)) = lower(trim(p_city)))),
+       G as (select g.* from public.photographers g join P on P.id = g.id where g.display_name <> 'Deleted photographer')
+  select id from (
+    select G.id from G where p_key = 'pg_no_quote_14d' and G.approval_status = 'approved'
+        and not exists (select 1 from public.offers o where o.photographer_id = G.id and o.created_at > now() - interval '14 days')
+    union all select G.id from G where p_key = 'pg_cant_quote' and G.approval_status = 'approved'
+        and cardinality(array_remove(array_remove(public._pg_missing(G.id), 'Identity check (ID + face photo)'), 'At least 6 portfolio photos')) > 0
+    union all select G.id from G where p_key = 'pg_pending' and G.approval_status = 'pending'
+    union all select G.id from G where p_key = 'pg_storage_full' and public.storage_used(G.id) >= 0.8 * public.storage_quota(G.id)
+    union all select G.id from G where p_key = 'pg_all' and G.approval_status = 'approved'
+    union all select P.id from P where p_key = 'cust_never_posted' and P.role = 'customer' and not exists (select 1 from public.requests r where r.customer_id = P.id)
+    union all select P.id from P where p_key = 'cust_no_booking' and P.role = 'customer' and exists (select 1 from public.requests r where r.customer_id = P.id)
+        and not exists (select 1 from public.bookings b where b.customer_id = P.id and b.status not in ('pending_payment','cancelled'))
+    union all select P.id from P where p_key = 'cust_past' and P.role = 'customer' and exists (select 1 from public.bookings b where b.customer_id = P.id and b.status = 'completed')
+    union all select P.id from P where p_key = 'cust_dormant' and P.role = 'customer' and coalesce(P.last_seen_at, P.created_at) < now() - interval '30 days'
+    union all select P.id from P where p_key = 'cust_all' and P.role = 'customer'
+  ) z $$;
+revoke all on function public._segment_ids(text, text) from public, anon, authenticated;
+
+create or replace function public.admin_segments(p_city text default null)
+returns jsonb language plpgsql security definer set search_path = public
+as $$
+declare k text; res jsonb := '{}';
+begin
+  if not public.is_staff() then raise exception 'Staff only'; end if;
+  foreach k in array array['pg_no_quote_14d','pg_cant_quote','pg_pending','pg_storage_full','pg_all','cust_never_posted','cust_no_booking','cust_past','cust_dormant','cust_all'] loop
+    res := res || jsonb_build_object(k, (select count(*) from public._segment_ids(k, p_city)));
+  end loop;
+  return res;
+end $$;
+revoke all on function public.admin_segments(text) from public, anon;
+grant execute on function public.admin_segments(text) to authenticated;
+
+create or replace function public.admin_segment_people(p_key text, p_city text default null)
+returns jsonb language plpgsql security definer set search_path = public
+as $$
+declare money boolean := public._money_ok();
+begin
+  if not public.is_staff() then raise exception 'Staff only'; end if;
+  return (select coalesce(jsonb_agg(z order by z.last_seen_at desc nulls last), '[]') from (
+    select p.id, coalesce(g.display_name, p.name) name, p.public_id, p.role, p.city, p.created_at, p.last_seen_at,
+           case when money then p.phone end phone, case when money then u.email end email,
+           exists (select 1 from public.push_subscriptions s where s.user_id = p.id) has_push
+    from public._segment_ids(p_key, p_city) x join public.profiles p on p.id = x.id
+    left join public.photographers g on g.id = p.id left join auth.users u on u.id = p.id limit 2000) z);
+end $$;
+revoke all on function public.admin_segment_people(text, text) from public, anon;
+grant execute on function public.admin_segment_people(text, text) to authenticated;
+
+create table if not exists public.broadcasts (
+  id          bigserial primary key,
+  created_at  timestamptz not null default now(),
+  staff_email text,
+  segment     text,
+  city        text,
+  title       text,
+  body        text,
+  channels    text[],
+  recipients  int,
+  sent_app    int,
+  sent_email  int,
+  skipped     int
+);
+alter table public.broadcasts enable row level security;
+drop policy if exists broadcasts_staff on public.broadcasts;
+create policy broadcasts_staff on public.broadcasts for select to authenticated using (public.is_staff());
+revoke insert, update, delete on public.broadcasts from anon, authenticated;
+
+create or replace function public.admin_broadcast(p_key text, p_city text, p_title text, p_body text, p_channels text[], p_link text default null)
+returns jsonb language plpgsql security definer set search_path = public
+as $$
+declare r record; n int := 0; a int := 0; e int := 0; skip int := 0; room int; t text := left(trim(coalesce(p_title, '')), 80); b text := left(trim(coalesce(p_body, '')), 400);
+        link text := coalesce(nullif(trim(p_link), ''), '/app.html'); se text;
+begin
+  if coalesce(public.staff_role() in ('super_admin','admin'), false) is not true then raise exception 'Only admins can send messages'; end if;
+  if length(t) < 3 or length(b) < 5 then raise exception 'Write a title and a message'; end if;
+  if link !~ '^/' then raise exception 'The link must be a SnapPro page, like /app.html'; end if;
+  if not (p_channels && array['app','email']) then raise exception 'Pick at least one way to send'; end if;
+  select email into se from public.staff where id = auth.uid();
+  room := greatest(0, 280 - (select count(*) from public.email_log where sent_at > now() - interval '24 hours'));   -- stay under Brevo's 300/day
+  for r in select p.id, u.email, split_part(coalesce(g.display_name, p.name), ' ', 1) first from public._segment_ids(p_key, p_city) x
+             join public.profiles p on p.id = x.id left join public.photographers g on g.id = p.id left join auth.users u on u.id = p.id loop
+    n := n + 1;
+    if 'app' = any(p_channels) and exists (select 1 from public.push_subscriptions s where s.user_id = r.id) then
+      insert into public.push_outbox (user_id, kind, title, body, url, tag) values (r.id, 'broadcast', t, b, link, 'bc-' || to_char(now(), 'YYYYMMDDHH24MI'));
+      a := a + 1;
+    end if;
+    if 'email' = any(p_channels) and r.email is not null then
+      if room > 0 then
+        if public._send_email(r.email, t, public._email_shell(replace(replace(t, '<', ''), '>', ''),
+          'Hi ' || replace(replace(coalesce(r.first, ''), '<', ''), '>', '') || ',<br><br>' || replace(replace(replace(b, '&', '&amp;'), '<', '&lt;'), E'\n', '<br>')
+          || '<br><br><span style="font-size:12px;color:#9a9184">You''re getting this because you have a SnapPro account.</span>', 'Open SnapPro', 'https://snappro.in' || link)) is not null then
+          e := e + 1; room := room - 1;
+        else skip := skip + 1; end if;
+      else skip := skip + 1; end if;
+    end if;
+  end loop;
+  insert into public.broadcasts (staff_email, segment, city, title, body, channels, recipients, sent_app, sent_email, skipped)
+  values (se, p_key, nullif(trim(p_city), ''), t, b, p_channels, n, a, e, skip);
+  perform public._audit('broadcast', 'segment', p_key, t, jsonb_build_object('city', p_city, 'recipients', n, 'app', a, 'email', e, 'skipped', skip));
+  return jsonb_build_object('recipients', n, 'app', a, 'email', e, 'skipped', skip);
+end $$;
+revoke all on function public.admin_broadcast(text, text, text, text, text[], text) from public, anon;
+grant execute on function public.admin_broadcast(text, text, text, text, text[], text) to authenticated;
+
+create or replace function public.admin_broadcast_history()
+returns jsonb language sql stable security definer set search_path = public
+as $$ select case when public.is_staff() then (select coalesce(jsonb_agg(to_jsonb(b) order by b.created_at desc), '[]') from (select * from public.broadcasts order by created_at desc limit 50) b) end $$;
+revoke all on function public.admin_broadcast_history() from public, anon;
+grant execute on function public.admin_broadcast_history() to authenticated;
+
+-- ---------- map of India ----------
+create or replace function public.admin_map()
+returns jsonb language plpgsql security definer set search_path = public
+as $$
+begin
+  if not public.is_staff() then raise exception 'Staff only'; end if;
+  return (with C as (select lower(trim(city)) c, count(*) filter (where role = 'customer') customers from public.profiles p
+                      where coalesce(trim(city), '') <> '' and name <> 'Deleted user' and not exists (select 1 from public.staff s where s.id = p.id) group by 1),
+               G as (select lower(trim(coalesce(g.city, pr.city))) c, count(*) photographers from public.photographers g join public.profiles pr on pr.id = g.id
+                      where g.approval_status = 'approved' and g.display_name <> 'Deleted photographer' and coalesce(trim(coalesce(g.city, pr.city)), '') <> '' group by 1),
+               R as (select lower(trim(city)) c, count(*) open from public.requests where status = 'broadcasting' and expires_at > now() and coalesce(trim(city), '') <> '' group by 1),
+               A as (select coalesce(C.c, G.c, R.c) c, coalesce(C.customers, 0) customers, coalesce(G.photographers, 0) photographers, coalesce(R.open, 0) open
+                       from C full join G on G.c = C.c full join R on R.c = coalesce(C.c, G.c))
+          select jsonb_build_object(
+            'points', (select coalesce(jsonb_agg(jsonb_build_object('city', initcap(A.c), 'lat', g.lat, 'lng', g.lng, 'customers', A.customers, 'photographers', A.photographers, 'open', A.open)), '[]')
+                         from A join public.city_geo g on g.name = A.c),
+            'unplaced', (select coalesce(jsonb_agg(jsonb_build_object('city', initcap(A.c), 'customers', A.customers, 'photographers', A.photographers, 'open', A.open)), '[]')
+                         from A where not exists (select 1 from public.city_geo g where g.name = A.c))));
+end $$;
+revoke all on function public.admin_map() from public, anon;
+grant execute on function public.admin_map() to authenticated;
+
+-- ---------- ad spend vs results ----------
+create table if not exists public.marketing_spend (
+  id          bigserial primary key,
+  month       date not null,
+  channel     text not null,
+  amount      numeric(12,2) not null check (amount >= 0),
+  note        text,
+  staff_email text,
+  created_at  timestamptz not null default now()
+);
+alter table public.marketing_spend enable row level security;
+drop policy if exists marketing_spend_staff on public.marketing_spend;
+create policy marketing_spend_staff on public.marketing_spend for select to authenticated using (public._money_ok());
+revoke insert, update, delete on public.marketing_spend from anon, authenticated;
+create or replace function public.admin_spend_save(p_month date, p_channel text, p_amount numeric, p_note text default null)
+returns bigint language plpgsql security definer set search_path = public
+as $$
+declare nid bigint;
+begin
+  if not public._money_ok() then raise exception 'Only admins can record ad spend'; end if;
+  if p_amount is null or p_amount < 0 or p_amount > 100000000 then raise exception 'Enter the amount in rupees'; end if;
+  if coalesce(trim(p_channel), '') = '' then raise exception 'Pick a channel'; end if;
+  insert into public.marketing_spend (month, channel, amount, note, staff_email)
+  values (date_trunc('month', p_month)::date, left(trim(p_channel), 40), p_amount, left(p_note, 200), (select email from public.staff where id = auth.uid())) returning id into nid;
+  perform public._audit('ad_spend_added', 'marketing', nid::text, p_channel, jsonb_build_object('month', p_month, 'amount', p_amount));
+  return nid;
+end $$;
+create or replace function public.admin_spend_delete(p_id bigint)
+returns void language plpgsql security definer set search_path = public
+as $$ begin
+  if not public._money_ok() then raise exception 'Only admins can change ad spend'; end if;
+  delete from public.marketing_spend where id = p_id;
+  perform public._audit('ad_spend_deleted', 'marketing', p_id::text, null, null);
+end $$;
+revoke all on function public.admin_spend_save(date, text, numeric, text) from public, anon;
+revoke all on function public.admin_spend_delete(bigint) from public, anon;
+grant execute on function public.admin_spend_save(date, text, numeric, text) to authenticated;
+grant execute on function public.admin_spend_delete(bigint) to authenticated;
+
+create or replace function public.admin_marketing_roi(p_from date, p_to date)
+returns jsonb language plpgsql security definer set search_path = public
+as $$
+declare f date := coalesce(p_from, public._ist(now()) - 29); t date := coalesce(p_to, public._ist(now()));
+begin
+  if not public._money_ok() then raise exception 'Only admins can see ad spend'; end if;
+  return jsonb_build_object('range', jsonb_build_object('from', f, 'to', t),
+    'spend_rows', (select coalesce(jsonb_agg(to_jsonb(s) order by s.month desc, s.channel), '[]') from public.marketing_spend s
+                    where s.month between date_trunc('month', f)::date and t),
+    'channels', (with U as (select p.id, public._lead_channel(p.referred_by, p.channel) ch, p.role from public.profiles p
+                             where public._ist(p.created_at) between f and t and p.name <> 'Deleted user' and not exists (select 1 from public.staff s where s.id = p.id)),
+                      Sp as (select lower(channel) ch, sum(amount) amt from public.marketing_spend where month between date_trunc('month', f)::date and t group by 1),
+                      Res as (select lower(coalesce(U.ch, 'direct')) ch, count(*) signups, count(*) filter (where U.role = 'customer') customers,
+                                count(*) filter (where U.role = 'photographer') photographers,
+                                count(distinct b.customer_id) bookers, count(b.id) bookings, coalesce(sum(coalesce(b.price, b.total_amount)), 0) gmv, coalesce(sum(b.commission_amount), 0) commission
+                              from U left join public.bookings b on b.customer_id = U.id and b.status not in ('pending_payment','cancelled') group by 1)
+                 select coalesce(jsonb_agg(jsonb_build_object('channel', coalesce(Res.ch, Sp.ch), 'spend', coalesce(Sp.amt, 0), 'signups', coalesce(Res.signups, 0),
+                          'customers', coalesce(Res.customers, 0), 'photographers', coalesce(Res.photographers, 0), 'bookers', coalesce(Res.bookers, 0),
+                          'bookings', coalesce(Res.bookings, 0), 'gmv', coalesce(Res.gmv, 0), 'commission', coalesce(Res.commission, 0))
+                          order by coalesce(Sp.amt, 0) desc, coalesce(Res.signups, 0) desc), '[]')
+                 from Res full join Sp on Sp.ch = Res.ch));
+end $$;
+revoke all on function public.admin_marketing_roi(date, date) from public, anon;
+grant execute on function public.admin_marketing_roi(date, date) to authenticated;
+
+-- ---------- retention cohorts ----------
+create or replace function public.admin_cohorts(p_weeks int default 12)
+returns jsonb language plpgsql security definer set search_path = public
+as $$
+begin
+  if not public.is_staff() then raise exception 'Staff only'; end if;
+  return (select coalesce(jsonb_agg(z order by z.week desc), '[]') from (
+    select date_trunc('week', public._ist(p.created_at))::date week, count(*) joined,
+      count(*) filter (where coalesce(p.last_seen_at, p.created_at) > p.created_at + interval '1 day') came_back,
+      count(*) filter (where exists (select 1 from public.requests r where r.customer_id = p.id)) posted,
+      count(*) filter (where exists (select 1 from public.bookings b where b.customer_id = p.id and b.status not in ('pending_payment','cancelled'))) booked,
+      count(*) filter (where (select count(*) from public.bookings b where b.customer_id = p.id and b.status not in ('pending_payment','cancelled')) >= 2) repeat
+    from public.profiles p
+    where p.role = 'customer' and p.name <> 'Deleted user' and not exists (select 1 from public.staff s where s.id = p.id)
+      and p.created_at > date_trunc('week', now()) - make_interval(weeks => greatest(1, least(coalesce(p_weeks, 12), 52)) - 1)
+    group by 1) z);
+end $$;
+revoke all on function public.admin_cohorts(int) from public, anon;
+grant execute on function public.admin_cohorts(int) to authenticated;
+
+-- ---------- photographer scorecard ----------
+create or replace function public.admin_scorecard(p_days int default 90)
+returns jsonb language plpgsql security definer set search_path = public
+as $$
+declare since timestamptz := now() - make_interval(days => greatest(7, least(coalesce(p_days, 90), 365)));
+begin
+  if not public.is_staff() then raise exception 'Staff only'; end if;
+  return (select coalesce(jsonb_agg(z order by z.quotes desc, z.name), '[]') from (
+    select g.id, g.display_name name, pr.public_id, coalesce(g.city, pr.city) city, g.rating, g.review_count, g.jobs_done, pr.last_seen_at, g.is_online,
+      (select count(*) from public.requests r where r.created_at > since and r.customer_id <> g.id
+          and (cardinality(coalesce(g.categories, '{}')) = 0 or r.category = any(g.categories)) and public._svc_ok(g.services, r.service)
+          and public._pg_covers_km(g.travel, g.travel_km, coalesce(g.city, pr.city), coalesce(g.state, pr.state), r.city, r.state)) could_quote,
+      (select count(*) from public.offers o where o.photographer_id = g.id and o.created_at > since) quotes,
+      (select round(percentile_cont(0.5) within group (order by extract(epoch from o.created_at - r.created_at) / 60)::numeric)
+         from public.offers o join public.requests r on r.id = o.request_id where o.photographer_id = g.id and o.created_at > since) median_quote_min,
+      (select count(*) from public.bookings b where b.photographer_id = g.id and b.created_at > since and b.status not in ('pending_payment')) won,
+      (select count(*) from public.bookings b where b.photographer_id = g.id and b.created_at > since and b.status = 'completed') completed,
+      (select count(*) from public.bookings b where b.photographer_id = g.id and b.created_at > since and b.status = 'cancelled' and b.cancelled_by = 'photographer') cancelled_by_them,
+      (select max(o.created_at) from public.offers o where o.photographer_id = g.id) last_quote_at
+    from public.photographers g join public.profiles pr on pr.id = g.id
+    where g.approval_status = 'approved' and g.display_name <> 'Deleted photographer') z);
+end $$;
+revoke all on function public.admin_scorecard(int) from public, anon;
+grant execute on function public.admin_scorecard(int) to authenticated;
+
+-- ---------- data quality ----------
+create or replace function public._norm_email(e text)
+returns text language sql immutable
+as $$ select case when split_part(lower(e), '@', 2) in ('gmail.com','googlemail.com')
+                  then replace(split_part(split_part(lower(e), '@', 1), '+', 1), '.', '') || '@gmail.com'
+                  else split_part(lower(e), '@', 1) || '@' || split_part(lower(e), '@', 2) end $$;
+create or replace function public.admin_data_quality()
+returns jsonb language plpgsql security definer set search_path = public
+as $$
+declare money boolean := public._money_ok();
+begin
+  if not public.is_staff() then raise exception 'Staff only'; end if;
+  return (with P as (select p.id, p.name, p.public_id, p.role, p.city, p.phone, p.created_at, p.last_seen_at, u.email
+                       from public.profiles p left join auth.users u on u.id = p.id
+                      where p.name <> 'Deleted user' and not exists (select 1 from public.staff s where s.id = p.id)),
+               who as (select id, name, public_id, role, city, created_at, last_seen_at, case when money then phone end phone, case when money then email end email from P)
+    select jsonb_build_object(
+      'same_phone', (select coalesce(jsonb_agg(z), '[]') from (
+          select case when money then phone else 'hidden' end phone, count(*) n, jsonb_agg(jsonb_build_object('id', id, 'name', name, 'public_id', public_id, 'role', role, 'created_at', created_at)) people
+          from P where coalesce(phone, '') <> '' group by phone having count(*) > 1) z),
+      'same_email', (select coalesce(jsonb_agg(z), '[]') from (
+          select case when money then public._norm_email(email) else 'hidden' end email, count(*) n, jsonb_agg(jsonb_build_object('id', id, 'name', name, 'public_id', public_id, 'role', role, 'email', case when money then email end)) people
+          from P where email is not null group by public._norm_email(email) having count(*) > 1) z),
+      'disposable', (select coalesce(jsonb_agg(to_jsonb(w)), '[]') from who w join P on P.id = w.id
+          where split_part(lower(P.email), '@', 2) in ('mailinator.com','yopmail.com','guerrillamail.com','10minutemail.com','tempmail.com','temp-mail.org','trashmail.com','sharklasers.com','getnada.com','dispostable.com','maildrop.cc','fakeinbox.com','throwawaymail.com','mintemail.com','emailondeck.com')),
+      'vanished', (select coalesce(jsonb_agg(to_jsonb(w) order by w.created_at desc), '[]') from (select * from who w
+          where w.created_at < now() - interval '7 days' and (w.last_seen_at is null or w.last_seen_at < w.created_at + interval '1 hour')
+            and not exists (select 1 from public.requests r where r.customer_id = w.id) and not exists (select 1 from public.offers o where o.photographer_id = w.id) limit 300) w),
+      'no_city', (select coalesce(jsonb_agg(to_jsonb(w)), '[]') from (select * from who where coalesce(trim(city), '') = '' limit 300) w),
+      'no_phone', (select coalesce(jsonb_agg(to_jsonb(w)), '[]') from (select * from who w join P using (id) where coalesce(P.phone, '') = '' limit 300) w),
+      'pg_empty', (select coalesce(jsonb_agg(jsonb_build_object('id', g.id, 'name', g.display_name, 'approval', g.approval_status, 'created_at', g.created_at, 'photos', cardinality(coalesce(g.portfolio, '{}')))), '[]')
+          from public.photographers g where g.display_name <> 'Deleted photographer' and g.created_at < now() - interval '7 days' and cardinality(coalesce(g.portfolio, '{}')) < 3)
+    ));
+end $$;
+revoke all on function public.admin_data_quality() from public, anon;
+grant execute on function public.admin_data_quality() to authenticated;
+
+-- ---------- monthly finance pack (for the CA) ----------
+create or replace function public.admin_finance_pack(p_month date)
+returns jsonb language plpgsql security definer set search_path = public
+as $$
+declare f date := date_trunc('month', coalesce(p_month, public._ist(now())))::date; t date := (date_trunc('month', coalesce(p_month, public._ist(now()))) + interval '1 month - 1 day')::date;
+begin
+  if not public._money_ok() then raise exception 'Only admins can download finance'; end if;
+  perform public._audit('finance_pack_downloaded', 'finance', to_char(f, 'YYYY-MM'), null, null);
+  return jsonb_build_object('month', to_char(f, 'YYYY-MM'), 'from', f, 'to', t,
+    'bookings', (select coalesce(jsonb_agg(z order by z.created_at), '[]') from (
+        select b.id, b.created_at, b.start_at, b.status, b.category, b.city, b.customer_name, b.photographer_name, coalesce(b.price, b.total_amount) price, b.discount_amount,
+               b.total_amount, b.commission_pct, b.commission_amount, b.photographer_amount, b.payment_status, b.balance_status, b.payout_status, b.payout_at, b.payout_ref
+        from public.bookings b where public._ist(b.created_at) between f and t and b.status <> 'pending_payment') z),
+    'payments', (select coalesce(jsonb_agg(z order by z.paid_at), '[]') from (
+        select p.receipt_no, p.paid_at, p.booking_id, p.stage, p.amount, p.commission_amount, p.photographer_amount, p.payment_group method, p.gateway_order_id, p.gateway_payment_id,
+               p.bank_reference, p.environment, p.refund_status, p.refunded_amount
+        from public.payments p where p.status = 'paid' and public._ist(p.paid_at) between f and t) z),
+    'refunds', (select coalesce(jsonb_agg(z order by z.processed_at), '[]') from (
+        select r.refund_id, r.order_id, r.amount, r.status, r.gateway_refund_id, r.reason, coalesce(r.processed_at, r.updated_at) processed_at
+        from public.refunds r where public._ist(coalesce(r.processed_at, r.updated_at)) between f and t) z),
+    'payouts', (select coalesce(jsonb_agg(z order by z.paid_at), '[]') from (
+        select o.payout_no, o.paid_at, o.photographer_name, o.upi_id, o.amount, o.method, o.utr, o.note, o.paid_by_email
+        from public.payouts o where public._ist(o.paid_at) between f and t) z));
+end $$;
+revoke all on function public.admin_finance_pack(date) from public, anon;
+grant execute on function public.admin_finance_pack(date) to authenticated;
+-- <<< 8v admin grow
+
 -- =====================================================================
 -- 9. ONE-OFF CLEAN-UP
 -- =====================================================================
@@ -7671,4 +8096,5 @@ select
   exists (select 1 from pg_proc where proname = 'admin_edit_person')   as admin_record_ready,
   exists (select 1 from pg_proc where proname = 'admin_remind_photographers')   as gear_required_ready,
   exists (select 1 from pg_proc where proname = 'admin_city_people')   as admin_command_ready,
-  exists (select 1 from pg_proc where proname = 'admin_switch_media_domain')   as media_domain_ready;
+  exists (select 1 from pg_proc where proname = 'admin_switch_media_domain')   as media_domain_ready,
+  exists (select 1 from pg_proc where proname = 'admin_finance_pack')   as admin_grow_ready;

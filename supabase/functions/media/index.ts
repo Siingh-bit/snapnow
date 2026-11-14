@@ -3,6 +3,7 @@
 // Actions (POST JSON, signed-in photographer's Supabase token in Authorization):
 //   { action: "sign", kind: "image"|"video", type, bytes }   → one-time S3 upload link (10 minutes)
 //   { action: "confirm", key }                                → checks the real size on S3, shows it on the profile
+//   { action: "poster", key, bytes }                          → upload link for a video's still preview (key + ".poster.jpg")
 //   { action: "delete", url }                                 → removes it from the profile and from S3
 //   { action: "buy", plan }                                   → Razorpay order for a yearly storage plan
 //   { action: "verify_buy", order_id, razorpay_payment_id, razorpay_order_id, razorpay_signature }
@@ -88,14 +89,17 @@ async function signingKey(cfg, day) {
   return hmac(kService, "aws4_request");
 }
 // A pre-signed PUT link: the browser uploads straight to S3 with exactly this Content-Type.
-export async function presignPut(cfg, key, contentType, expires = 600, now = Date.now()) {
+// With contentLength, the file must be exactly that many bytes (used for small preview images).
+export async function presignPut(cfg, key, contentType, expires = 600, now = Date.now(), contentLength = null) {
   const { amz, day } = amzDates(now);
   const scope = day + "/" + cfg.region + "/s3/aws4_request";
+  const signed = contentLength != null ? "content-length;content-type;host" : "content-type;host";
   const q = { "X-Amz-Algorithm": "AWS4-HMAC-SHA256", "X-Amz-Credential": cfg.awsKey + "/" + scope, "X-Amz-Date": amz,
-              "X-Amz-Expires": String(expires), "X-Amz-SignedHeaders": "content-type;host" };
+              "X-Amz-Expires": String(expires), "X-Amz-SignedHeaders": signed };
   const qs = Object.keys(q).sort().map((k) => rfc3986(k) + "=" + rfc3986(q[k])).join("&");
   const path = "/" + encodeKey(key);
-  const canonical = ["PUT", path, qs, "content-type:" + contentType + "\nhost:" + cfg.host + "\n", "content-type;host", "UNSIGNED-PAYLOAD"].join("\n");
+  const hdrs = (contentLength != null ? "content-length:" + contentLength + "\n" : "") + "content-type:" + contentType + "\nhost:" + cfg.host + "\n";
+  const canonical = ["PUT", path, qs, hdrs, signed, "UNSIGNED-PAYLOAD"].join("\n");
   const sts = ["AWS4-HMAC-SHA256", amz, scope, await sha256Hex(canonical)].join("\n");
   const sig = hex(await hmac(await signingKey(cfg, day), sts));
   return "https://" + cfg.host + path + "?" + qs + "&X-Amz-Signature=" + sig;
@@ -117,11 +121,14 @@ export async function s3Request(cfg, fetchImpl, method, key, now = Date.now()) {
 async function s3Delete(cfg, fetchImpl, key) {
   try { const r = await s3Request(cfg, fetchImpl, "DELETE", key); return r.ok || r.status === 404; } catch (_) { return false; }
 }
+// Videos may have a still preview next to them (same name + ".poster.jpg"); it goes when the video goes.
+const isVideoKey = (k) => /\.(mp4|mov|webm)$/i.test(String(k || ""));
+async function deletePoster(cfg, fetchImpl, key) { if (isVideoKey(key)) await s3Delete(cfg, fetchImpl, key + ".poster.jpg"); }
 // Clean up a few files whose 30 days are up (runs alongside normal requests).
 async function purgeSome(cfg, fetchImpl, limit) {
   const keys = await rpc(cfg, fetchImpl, "media_purge_list", { p_limit: limit });
   const done = [];
-  for (const k of keys || []) if (await s3Delete(cfg, fetchImpl, k)) done.push(k);
+  for (const k of keys || []) if (await s3Delete(cfg, fetchImpl, k)) { done.push(k); await deletePoster(cfg, fetchImpl, k); }
   if (done.length) await rpc(cfg, fetchImpl, "media_mark_purged", { p_keys: done });
   return done.length;
 }
@@ -146,7 +153,7 @@ async function confirm(cfg, fetchImpl, user, body) {
   const size = Number(head.headers.get("content-length") || 0);
   const res = await rpc(cfg, fetchImpl, "media_confirm", { p_user: user.id, p_key: key, p_bytes: size });
   if (res && res.result === "rejected") {
-    await s3Delete(cfg, fetchImpl, key);
+    await s3Delete(cfg, fetchImpl, key); await deletePoster(cfg, fetchImpl, key);
     throw new HttpError(400, "That file is bigger than the space you have left. Delete something or upgrade your storage.");
   }
   purgeSome(cfg, fetchImpl, 10).catch(() => {});
@@ -156,8 +163,20 @@ async function remove(cfg, fetchImpl, user, body) {
   const url = String(body.url || "");
   if (!url) throw new HttpError(400, "Missing item.");
   const res = await rpc(cfg, fetchImpl, "media_delete", { p_user: user.id, p_url: url });
-  if (res && res.delete_key) await s3Delete(cfg, fetchImpl, res.delete_key);
+  if (res && res.delete_key) { await s3Delete(cfg, fetchImpl, res.delete_key); await deletePoster(cfg, fetchImpl, res.delete_key); }
   return { removed: true };
+}
+// A still preview for a video the photographer just uploaded: a small JPEG made on their phone,
+// so portfolios show a picture instantly instead of loading every video.
+const MAX_POSTER = 400 * 1024;
+async function poster(cfg, fetchImpl, user, body) {
+  const key = String(body.key || ""), bytes = Math.floor(Number(body.bytes));
+  if (!key.startsWith("portfolio/" + user.id + "/") || key.includes("..") || !isVideoKey(key)) throw new HttpError(400, "Video not found.");
+  if (!(bytes > 0 && bytes <= MAX_POSTER)) throw new HttpError(400, "The preview image is too big.");
+  const head = await s3Request(cfg, fetchImpl, "HEAD", key);
+  if (!head.ok) throw new HttpError(400, "Video not found.");
+  const pkey = key + ".poster.jpg";
+  return { key: pkey, upload_url: await presignPut(cfg, pkey, "image/jpeg", 600, Date.now(), bytes), headers: { "Content-Type": "image/jpeg" } };
 }
 
 // ---------- buying storage (Razorpay) ----------
@@ -261,11 +280,12 @@ export async function handler(req, env, fetchImpl) {
     try { body = await req.json(); } catch (_) { throw new HttpError(400, "Bad request"); }
     const user = await currentUser(cfg, fetchImpl, req);
     const a = body.action;
-    if ((a === "sign" || a === "confirm" || a === "delete" || a === "purge") && (!cfg.awsKey || !cfg.awsSecret || !cfg.host))
+    if ((a === "sign" || a === "confirm" || a === "poster" || a === "delete" || a === "purge") && (!cfg.awsKey || !cfg.awsSecret || !cfg.host))
       throw new HttpError(503, "Photo storage isn't set up yet.");
     let out;
     if (a === "sign") out = await sign(cfg, fetchImpl, user, body);
     else if (a === "confirm") out = await confirm(cfg, fetchImpl, user, body);
+    else if (a === "poster") out = await poster(cfg, fetchImpl, user, body);
     else if (a === "delete") out = await remove(cfg, fetchImpl, user, body);
     else if (a === "buy") out = await buy(cfg, fetchImpl, user, body);
     else if (a === "verify_buy") out = await verifyBuy(cfg, fetchImpl, user, body);

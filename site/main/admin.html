@@ -1481,7 +1481,7 @@ function pendingCard(p, canDecide){
     ${p.bio ? `<p class="sm muted mt12" style="white-space:pre-wrap;margin-bottom:0">${esc(p.bio)}</p>` : ""}
     ${photos.length ? `<div class="thumbs mt12">${photos.slice(0, 12).map((u, i) => `<button class="pft" title="Open full screen" onclick="pfOpen('${p.id}',${i})">${/\.(mp4|mov|webm)(\?|$)/i.test(u) ? `<video src="${esc(u)}#t=0.1" muted preload="metadata"></video>` : `<img src="${esc(u)}" alt="" loading="lazy">`}</button>`).join("")}${photos.length > 12 ? `<button class="pft more" onclick="pfOpen('${p.id}',12)">+${photos.length - 12}</button>` : ""}</div>` : ""}
     ${flags.length ? `<div class="xs mt12" style="color:#ffd88a">Worth checking: ${flags.map(esc).join(" · ")}</div>` : ""}
-    <div class="xs muted2 mt12">Offers: <b>${esc(SVC_NAMES[p.services || "photo"])}</b> · Gear: ${esc(gearText(p) || "not listed")}</div>
+    <div class="xs muted2 mt12">Offers: <b>${esc(SVC_NAMES[p.services || "photo"])}</b> · Gear: ${esc(gearText(p) || "not listed")} · Storage: ${S.storeUse && S.storeUse[p.id] ? MB(S.storeUse[p.id].used) + " of " + MB(S.storeUse[p.id].quota) : (loadStoreUse(), "…")}</div>
     <div class="mt12">${pgDocButtons(p)}</div>
     ${S.me.role !== "manager" ? kycBox(p, canDecide) : ""}
     ${canDecide ? (S.rejecting === p.id ? `
@@ -1511,12 +1511,12 @@ function vPros(){
   <div class="between mt24"><div class="sec" style="margin:0">Approved (${live.length})</div><button class="btn sm" onclick="exportPhotographers()">Download CSV (all photographers)</button></div>
   ${proFilterChips()}
   ${!live.length ? `<div class="card"><div class="empty">No approved photographers yet.</div></div>` : `<div class="card tblwrap"><table>
-    <thead><tr><th>Name</th><th>City</th><th>Rating</th><th>Shoots</th><th>Photos</th><th>Offers &amp; gear</th><th>Records</th><th>Status</th><th>Verified</th>${canDecide ? "<th>Commission</th>" : ""}</tr></thead>
+    <thead><tr><th>Name</th><th>City</th><th>Rating</th><th>Shoots</th><th>Photos</th><th>Storage</th><th>Offers &amp; gear</th><th>Records</th><th>Status</th><th>Verified</th>${canDecide ? "<th>Commission</th>" : ""}</tr></thead>
     <tbody>${live.map(p=>`<tr>
       <td style="font-weight:600">${esc(p.display_name||'—')}${p.featured_until && Date.parse(p.featured_until) > Date.now() ? ' <span class="chip amber">★ Featured</span>' : ""}<div class="xs" style="color:var(--accent)">${esc(idOf(p.id))}</div><div class="xs muted2">${emailOf(p.id) ? esc(emailOf(p.id)) + " · " : ""}approved ${fmt(p.approved_at || p.created_at)}</div></td>
       <td class="muted">${esc(p.city||'—')}${p.state?', '+esc(p.state):''}</td>
       <td>${p.review_count ? Number(p.rating).toFixed(1)+'★ <span class="muted2">('+p.review_count+')</span>' : '<span class="muted2">No reviews</span>'}</td>
-      <td>${p.jobs_done||0}</td><td>${(p.portfolio||[]).length}</td><td>${gearCell(p)}</td><td>${pgDocButtons(p)}</td>
+      <td>${p.jobs_done||0}</td><td>${(p.portfolio||[]).length}</td><td>${storageCell(p)}</td><td>${gearCell(p)}</td><td>${pgDocButtons(p)}</td>
       <td><span class="chip ${p.is_online?'green':''}">${p.is_online?'Available':'Away'}</span></td>
       <td>${canDecide ? `<label class="sw"><input type="checkbox" ${p.is_verified?'checked':''} onchange="setVerified('${p.id}',this.checked)">${p.is_verified?'Verified':'No'}</label>`
                       : (p.is_verified?'<span class="chip admin">Verified</span>':'<span class="muted2">No</span>')}</td>
@@ -3053,6 +3053,15 @@ function themeCharts(){
 
 /* ---------- small icons ---------- */
 const ICO = {
+  grid: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+  gauge: '<path d="M4 18a8 8 0 1 1 16 0"/><path d="M12 18l4-6"/><circle cx="12" cy="18" r="1.2"/>',
+  send: '<path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4z"/>',
+  map: '<path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2z"/><path d="M9 4v14M15 6v14"/>',
+  coin: '<circle cx="12" cy="12" r="9"/><path d="M9 8h6M9 11h6M13 8c2 0 2 6-2 6l4 4"/>',
+  repeat: '<path d="M17 2l4 4-4 4"/><path d="M3 11V9a3 3 0 0 1 3-3h15"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a3 3 0 0 1-3 3H3"/>',
+  star: '<path d="M12 3l2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3 6.4 20.2l1.1-6.2L3 9.6l6.2-.9z"/>',
+  filter: '<path d="M3 5h18l-7 8v6l-4 2v-8z"/>',
+  dl: '<path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M4 20h16"/>',
   pin: '<path d="M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/>',
   doc: '<path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/>',
   pulse: '<path d="M3 12h4l3-8 4 16 3-8h4"/>',
@@ -3098,11 +3107,18 @@ function navGroups(){
   const refunds = S.pay ? S.pay.payments.filter(p => ["refund_due","refund_failed"].includes(p.refund_status)).length : 0;
   const reports = S.dept && S.dept.trust && S.dept.trust.data ? S.dept.trust.data.reports_open || 0 : 0;
   const g = [
-    { t: "", items: [["overview", "home", "Home", "Today at a glance and what needs you"], ["health", "target", "Business health", "The whole business on one page"]] },
+    { t: "", items: [["overview", "home", "Home", "Today at a glance and what needs you"]] },
+    { t: "Company", items: [
+      ["departments", "grid", "All departments", "Every part of SnapPro and where to go"],
+      ["health", "target", "Business health", "The whole business on one page"],
+      money && ["usage", "gauge", "Plans & usage", "Free limits used — when to upgrade", S.usageWarn || 0],
+      money && ["system", "pulse", "System health", "Payments, emails, notifications working?"],
+      money && ["compliance", "doc", "Legal & compliance", "Agreements, ID checks, GST tracker"] ] },
     { t: "People", items: [
       money && ["users", "users", "Everyone", "All customers and photographers"],
       ["pros", "cam", "Photographers", "Approve new ones, check IDs", waiting],
       ["cities", "pin", "Cities", "Customers & photographers city by city, call list", S.fuDue || 0],
+      ["scorecard", "star", "Photographer scorecard", "Who quotes, wins, cancels — who to call"],
       ["customers", "heart", "Customer insights", "Who books, who comes back"],
       ["leads", "funnel", "Leads", "Where new people come from"],
       ["referrals", "gift", "Invites & referrals", "Friends inviting friends"] ] },
@@ -3116,12 +3132,17 @@ function navGroups(){
       money && ["payouts", "wallet", "Photographer payouts", "Who's owed, pay them, holds", S.po && S.po.data ? (S.po.data.photographers || []).filter(p => Number(p.ready) > 0).length : 0],
       money && ["finance", "chart", "Profit & finance", "Revenue, commission, profit"],
       money && ["commission", "pct", "Commission", "Standard rate and each photographer's rate"],
-      money && ["offers", "tag", "Offers & promo codes", "Discounts and rewards"] ] },
-    { t: "Grow", items: [["marketing", "mega", "Marketing", "Campaigns, sources, conversion"]] },
+      money && ["offers", "tag", "Offers & promo codes", "Discounts and rewards"],
+      money && ["financepack", "dl", "Monthly finance pack", "One Excel file for your CA"] ] },
+    { t: "Grow", items: [
+      ["marketing", "mega", "Marketing", "Campaigns, sources, conversion"],
+      money && ["adspend", "coin", "Ad spend & results", "What each channel costs and brings"],
+      ["segments", "send", "Segments & messages", "Ready-made lists, message them at once"],
+      ["map", "map", "Map of India", "Customers, photographers, requests by city"],
+      ["retention", "repeat", "Retention", "Do customers come back?"] ] },
     { t: "Safety", items: [
       ["trust", "shield", "Trust & support", "Reports, blocks, suspensions", reports],
-      money && ["compliance", "doc", "Legal & compliance", "Agreements, ID checks, GST tracker"],
-      money && ["system", "pulse", "System health", "Payments, emails, notifications working?"],
+      ["quality", "filter", "Data quality", "Duplicate, fake or unfinished accounts"],
       money && ["activity", "list", "Staff activity", "Who on the team did what"],
       sup && ["team", "team", "Team", "Invite staff and set their access"] ] }
   ];
@@ -3180,7 +3201,8 @@ vConsole = function(){
 function tabContent(){
   const V = { users: vUsers, bookings: vBookings, payments: vPayments, payouts: vPayouts, requests: vRequests, pros: vPros, offers: vOffers, activity: vActivity, team: vTeam,
               leads: vLeads, marketing: vMarketing, finance: vFinance, ops: vOps, customers: vCustomers, referrals: vReferrals, trust: vTrust, timeline: vTimeline,
-              cities: vCities, health: vHealth, system: vSystem, compliance: vCompliance };
+              cities: vCities, health: vHealth, system: vSystem, compliance: vCompliance,
+              departments: vDepartments, usage: vUsage, segments: vSegments, map: vMap, adspend: vAdspend, retention: vRetention, scorecard: vScorecard, quality: vQuality, financepack: vFinancePack };
   return V[S.tab] ? V[S.tab]() : vAttention() + vOverview();
 }
 /* one line about every page, and a tip */
@@ -4494,6 +4516,344 @@ function mediaPanel(){
         ${sup && st.s3_base ? `<button class="btn sm" ${S.mediaBusy ? "disabled" : ""} onclick="mediaSwitch('${esc(st.s3_base)}')">Switch back to Amazon S3</button>` : ""}</div>
       <div class="xs muted2 mt8">New uploads also use media.snappro.in once MEDIA_PUBLIC_BASE is set in the media function's secrets.</div>`}
   </div>`;
+}
+
+/* ===================== COMPANY & GROWTH PAGES =====================
+   Departments · Plans & usage · Segments & messages · Map · Ad spend & results · Retention ·
+   Photographer scorecard · Data quality · Monthly finance pack · storage per photographer.
+   Same rule as the rest of admin: every number says what it means and what to do. */
+
+DEPT_RPC.usage = () => ["admin_usage", {}];
+DEPT_RPC.segments = () => ["admin_segments", { p_city: S.segCity || null }];
+DEPT_RPC.map = () => ["admin_map", {}];
+DEPT_RPC.adspend = r => ["admin_marketing_roi", { p_from: r.from, p_to: r.to }];
+DEPT_RPC.retention = () => ["admin_cohorts", { p_weeks: 12 }];
+DEPT_RPC.scorecard = () => ["admin_scorecard", { p_days: S.scDays || 90 }];
+DEPT_RPC.quality = () => ["admin_data_quality", {}];
+Object.assign(PAGE_HELP, {
+  departments: ["Every department of SnapPro on one page: what each one looks after, its key numbers right now, and where to go to act.", "New to SnapPro? Start here. Click any department to open its pages."],
+  usage: ["Every outside service SnapPro runs on, how much of its free allowance is used, and when to upgrade.", "Green is fine, amber means plan an upgrade soon, red means upgrade now. Some numbers can only be seen in that service's own dashboard — there's a link."],
+  segments: ["Ready-made lists of people (for example photographers who haven't quoted in 14 days) and a way to message a whole list at once.", "Pick a list, check the people, then send an app notification or email — or download phone numbers for WhatsApp."],
+  map: ["Customers, photographers and open requests on a map of India.", "Big blue circle with no green = customers but no photographers: recruit there."],
+  adspend: ["What you spend on each marketing channel and what it brings back: sign-ups, bookings and SnapPro's earnings.", "Add each month's spend per channel. Cost per booking tells you which channel to put more money into."],
+  retention: ["Of the customers who joined each week, how many came back, posted a shoot and booked.", "If later weeks do better than earlier ones, the product is improving."],
+  scorecard: ["How every approved photographer performs: do they quote on requests they could take, how fast, how often they win, and do they cancel.", "Flags show who needs a call and who deserves a 'Featured' badge."],
+  quality: ["Accounts that look duplicated, fake or unfinished.", "Check each one in its full record before acting. Nothing here is deleted automatically."],
+  financepack: ["One download for your CA every month: bookings, payments with Razorpay IDs, refunds and payouts.", "Pick the month and download. Open it in Excel — each part is on its own sheet."]
+});
+const MB = b => b == null ? "—" : b >= 1073741824 ? (b / 1073741824).toFixed(2) + " GB" : b >= 1048576 ? (b / 1048576).toFixed(1) + " MB" : Math.round((b || 0) / 1024) + " KB";
+function bar(p, t){ const c = t ? TONE_COL[t] : "var(--accent)"; return `<div style="height:8px;border-radius:5px;background:var(--surface-2);overflow:hidden;margin-top:6px"><div style="height:100%;width:${Math.max(1, Math.min(100, p || 0))}%;background:${c}"></div></div>`; }
+const pctTone = p => p == null ? "" : p >= 90 ? "bad" : p >= 70 ? "warn" : "ok";
+function csvDownload(name, rows){ if(typeof downloadCsv === "function") downloadCsv(name, rows); }
+
+/* =============================== DEPARTMENTS =============================== */
+function vDepartments(){
+  if(!S.dept.health){ S.dept.health = { busy: true }; setTimeout(() => deptLoad("health", true)); }
+  const H = S.dept.health && S.dept.health.data, F = H && H.funnel, Su = H && H.supply, M = H && H.money, Cu = H && H.customers;
+  const money = S.me.role !== "manager";
+  const d = (icon, name, who, watch, nums, pages) => `<div class="card"><div class="row" style="gap:10px">${ic(icon, 22)}<div><div class="h2" style="margin:0">${name}</div><div class="xs muted2">${who}</div></div></div>
+    <div class="sm mt12">${watch}</div>
+    ${nums.length ? `<div class="grid mt12" style="grid-template-columns:repeat(auto-fit,minmax(120px,1fr))">${nums.map(([v, l]) => `<div class="stat"><div class="v" style="font-size:20px">${v}</div><div class="l">${l}</div></div>`).join("")}</div>` : ""}
+    <div class="row mt12" style="flex-wrap:wrap;gap:6px">${pages.filter(p => navItem(p[0])).map(([k, l]) => `<button class="btn sm" onclick="goPage('${k}')">${l} ›</button>`).join("")}</div></div>`;
+  const v = x => H ? x : "…";
+  return `<div class="xs muted2">Numbers are for the last 30 days unless it says otherwise. ${H ? "" : "Loading…"}</div>
+  <div class="grid2 mt12" style="align-items:start">
+    ${d("target", "Leadership (CEO)", "Where the company is and what to do next", "The whole business in one paragraph, the biggest problems this week and the trend over 8 weeks.",
+        [[v(num(F && F.signups_customers)), "new customers"], [v(num(F && F.requests_booked)), "shoots booked"], ...(money ? [[v(inr(M && M.commission)), "SnapPro earned"]] : [])], [["health", "Business health"], ["overview", "Home"]])}
+    ${d("bolt", "Operations", "Every shoot runs on time", "Requests getting quotes quickly, today's shoots, cancellations and busy cities.",
+        [[v(pctTxt(F && pctv(F.requests_quoted, F.requests))), "requests quoted"], [v(H && H.speed.median_first_quote_min != null ? H.speed.median_first_quote_min + " min" : "—"), "to first quote"], [v(num(F && F.cancelled)), "cancelled"]],
+        [["ops", "Operations"], ["requests", "Shoot requests"], ["bookings", "Bookings"], ["timeline", "Live timeline"]])}
+    ${d("cam", "Supply (photographers)", "Enough good photographers in every city", "Approvals, ID checks, who can take orders, performance and who to call.",
+        [[v(num(Su && Su.approved)), "approved"], [v(num(Su && Su.ready)), "ready for orders"], [v(num(Su && Su.active)), "quoted recently"]],
+        [["pros", "Photographers"], ["scorecard", "Scorecard"], ["cities", "Cities"]])}
+    ${d("heart", "Customers", "People who book come back", "Who books, who doesn't, call lists and repeat customers.",
+        [[v(num(Cu && Cu.total)), "customers"], [v(num(Cu && Cu.ever_booked)), "have booked"], [v(num(Cu && Cu.repeat)), "booked again"]],
+        [["customers", "Customer insights"], ["cities", "Cities"], ["retention", "Retention"], ["segments", "Segments & messages"]])}
+    ${d("mega", "Growth & marketing", "More visitors, more sign-ups, cheaper", "Where people come from, what each channel costs and brings, and messages to whole groups.",
+        [[v(num(F && F.visitors)), "visitors"], [v(num(F && (F.signups_customers + F.signups_photographers))), "sign-ups"]],
+        [["marketing", "Marketing"], ["adspend", "Ad spend & results"], ["leads", "Leads"], ["map", "Map"], ["referrals", "Invites"]])}
+    ${money ? d("chart", "Finance (CFO)", "Money in, money out, nothing missing", "Payments, refunds, what's owed to photographers, profit and the monthly pack for your CA.",
+        [[v(inr(M && M.gmv)), "booked value"], [v(inr(M && M.owed_photographers)), "owed to photographers"], [v(inr(M && M.refunded)), "refunded"]],
+        [["finance", "Profit & finance"], ["payments", "Payments"], ["payouts", "Payouts"], ["financepack", "Finance pack"], ["commission", "Commission"]]) : ""}
+    ${money ? d("pulse", "Technology (CTO / IT)", "Everything switched on, nothing running out", "Payments, emails, notifications, app errors and how much of every free plan is used.",
+        [], [["system", "System health"], ["usage", "Plans & usage"]]) : ""}
+    ${money ? d("doc", "Legal & compliance", "Paperwork in order", "Partner Agreements, ID checks, deleted accounts, GST turnover and your policies.",
+        [], [["compliance", "Legal & compliance"]]) : ""}
+    ${d("shield", "Trust & safety", "Safe for customers and photographers", "Reports, blocks, suspensions, fake or duplicate accounts.",
+        [], [["trust", "Trust & support"], ["quality", "Data quality"]])}
+    ${d("team", "People (HR)", "Your team and what they do", "Who has access to admin, what each person can see, and everything they did.",
+        [], [["team", "Team"], ["activity", "Staff activity"]])}
+  </div>`;
+}
+
+/* =============================== PLANS & USAGE =============================== */
+function vUsage(){
+  const w = deptWait("usage", true); if(w) return w;
+  const D = S.dept.usage.data, GB = 1073741824, mails = Number(D.emails_24h || 0) + Number(D.auth_emails_24h || 0);
+  const row = (svc, what, used, limit, usedTxt, limitTxt, upgrade, link) => { const p = used != null && limit ? Math.round(100 * used / limit) : null, t = pctTone(p);
+    return `<tr><td><b>${svc}</b><div class="xs muted2">${what}</div></td><td>${usedTxt}${p != null ? bar(p, t) : ""}</td><td>${limitTxt}</td>
+      <td>${p != null ? `<span class="chip ${t === "ok" ? "green" : t === "warn" ? "amber" : "red"}">${p}% used</span>` : `<span class="chip">See dashboard</span>`}</td>
+      <td class="xs muted2">${upgrade}${link ? ` <a class="lnk" target="_blank" rel="noopener" href="${link}">Open ↗</a>` : ""}</td></tr>`; };
+  const s3cost = (Number(D.s3_bytes || 0) / GB) * 0.025;
+  S.usageWarn = [D.db_bytes / (500 * 1048576), D.file_bytes / GB, D.mau / 50000, mails / 300].filter(x => x >= 0.7).length;
+  return deptHead("usage", true) + `
+  <div class="card tblwrap mt16"><table><thead><tr><th>Service</th><th>Used now</th><th>Free allowance</th><th>Status</th><th>When to upgrade</th></tr></thead><tbody>
+    ${row("Supabase — database", "All accounts, requests, bookings, payments", D.db_bytes, 500 * 1048576, MB(D.db_bytes), "500 MB", "Upgrade to Supabase Pro (8 GB) before 90%. If it fills, the database goes read-only.", "https://supabase.com/dashboard/project/_/settings/billing/usage")}
+    ${row("Supabase — file storage", "ID photos and other private files", D.file_bytes, GB, D.file_bytes == null ? "—" : MB(D.file_bytes), "1 GB", "Pro includes 100 GB.", "https://supabase.com/dashboard/project/_/settings/billing/usage")}
+    ${row("Supabase — monthly active users", "People who opened SnapPro in 30 days", D.mau, 50000, num(D.mau), "50,000", "Pro includes 100,000.", "")}
+    ${row("Supabase — bandwidth (egress)", "Data sent from Supabase to phones", null, 0, "Only in Supabase", "5 GB / month", "Watch it in Supabase → Usage. Photos and videos don't count — they come from S3 / CloudFront.", "https://supabase.com/dashboard/project/_/settings/billing/usage")}
+    ${row("Supabase — Edge Functions", "Payments, uploads and notifications run here", null, 0, "Only in Supabase", "500,000 calls / month", "Pro includes 2 million.", "https://supabase.com/dashboard/project/_/settings/billing/usage")}
+    ${row("Brevo — emails", "Sign-up codes, approvals, reminders, messages", mails, 300, num(mails) + " in the last 24 h" + (D.auth_emails_24h == null ? ` <span class="xs muted2">(app emails only; sign-up codes are counted in Brevo)</span>` : ""), "300 per day", "Brevo Starter removes the daily limit. When near 300, important emails (sign-up codes) can fail — upgrade before a big campaign.", "https://app.brevo.com/")}
+    ${row("Amazon S3 — portfolio storage", num(D.s3_files) + " files · " + num(D.s3_videos) + " videos", null, 0, MB(D.s3_bytes) + ` <div class="xs muted2">≈ $${s3cost.toFixed(2)} / month</div>`, "No free allowance — about $0.025 per GB a month (Mumbai)", "Costs grow slowly with photos and videos. Check the AWS bill each month.", "https://console.aws.amazon.com/billing/home")}
+    ${row("Amazon CloudFront — CDN", "Delivers photos and videos fast (media.snappro.in)", null, 0, "Only in AWS", "1 TB + 10 million requests / month (always free)", "Above 1 TB, India is about $0.109 per GB. Keep the AWS budget alert on.", "https://console.aws.amazon.com/cloudfront/v4/home#/reports")}
+    ${row("Firebase — app notifications", "Notifications to the Android app", null, 0, num(D.push_30d) + " sent in 30 days", "Free, no monthly limit", "Nothing to upgrade.", "")}
+    ${row("Razorpay — payments", "Customer payments", null, 0, num(D.payments_30d) + " payments in 30 days", "No plan limit — a fee per payment", "Fees are on your Razorpay dashboard.", "https://dashboard.razorpay.com/")}
+    ${row("Hostinger — website hosting", "snappro.in pages and the app", null, 0, "Only in Hostinger", "Depends on your plan", "Check bandwidth and storage in hPanel.", "https://hpanel.hostinger.com/")}
+  </tbody></table></div>
+  <div class="xs muted2 mt8">Free allowances as published by each service in 2026 — they can change, so check the provider's pricing page before a big decision.</div>
+  ${secT("Photographers' portfolio storage", "Each photographer gets 250 MB free; plans give more.")}
+  <div class="grid">${htile(num(D.photographers_near_full), "Photographers 80%+ full", D.photographers_near_full ? "They see an 'almost full' message in the app. Message them from Segments." : "Nobody is close to full", D.photographers_near_full ? "warn" : "ok", D.photographers_near_full ? "S.segKey='pg_storage_full';goPage('segments')" : "")}</div>
+  ${secT("App errors (last 7 days)", "Errors that happened on people's phones or browsers. Same message many times = a bug to fix.")}
+  <div class="card tblwrap">${(D.errors || []).length ? `<table><thead><tr><th>Error</th><th>Times</th><th>People</th><th>Last seen</th><th>Screen</th></tr></thead><tbody>${D.errors.map(x => `<tr><td class="sm mono">${esc(x.message)}</td><td>${num(x.n)}</td><td>${num(x.people)}</td><td>${ago(x.last)}</td><td class="xs">${esc(x.page || "")}</td></tr>`).join("")}</tbody></table>` : `<div class="empty">No app errors reported in the last 7 days.</div>`}</div>`;
+}
+
+/* =============================== SEGMENTS & MESSAGES =============================== */
+const SEGS = [["pg_no_quote_14d", "Photographers — no quote in 14 days", "Approved but quiet. Remind them there's work."], ["pg_cant_quote", "Photographers — can't take orders yet", "Missing gear, UPI or agreement."],
+  ["pg_pending", "Photographers — waiting for approval", "Tell them what to add to get approved."], ["pg_storage_full", "Photographers — storage almost full", "80% or more of their storage used."], ["pg_all", "All approved photographers", ""],
+  ["cust_never_posted", "Customers — never posted a shoot", "Signed up but never asked for a photographer."], ["cust_no_booking", "Customers — posted but never booked", "Got stuck between quotes and booking."],
+  ["cust_past", "Customers — completed a shoot", "Happy customers: ask for a review or the next shoot."], ["cust_dormant", "Customers — not seen in 30 days", "Bring them back with an offer."], ["cust_all", "All customers", ""]];
+function vSegments(){
+  const w = deptWait("segments", true); if(w) return w;
+  const C = S.dept.segments.data || {}, k = S.segKey, money = S.me.role !== "manager", admin = S.me.role === "super_admin" || S.me.role === "admin";
+  if(k && (!S.segPeople || S.segPeople.key !== k || S.segPeople.city !== (S.segCity || ""))) loadSegPeople();
+  const P = S.segPeople && S.segPeople.key === k ? S.segPeople.list : null, seg = SEGS.find(x => x[0] === k);
+  if(!S.bcHist && !S.bcLoading){ S.bcLoading = 1; sb.rpc("admin_broadcast_history").then(r => { S.bcHist = r.data || []; S.bcLoading = 0; render(); }); }
+  const m = S.bcMsg || (S.bcMsg = { title: "", body: "", link: "/app.html", app: true, email: false });
+  return deptHead("segments", true) + `
+  <div class="row mt12" style="flex-wrap:wrap;gap:8px"><input class="input" style="max-width:240px;padding:9px 12px" placeholder="Only one city (optional)" value="${esc(S.segCity || "")}" onchange="S.segCity=this.value.trim();S.segPeople=null;deptLoad('segments')"><span class="xs muted2">Leave empty for all of India.</span></div>
+  <div class="grid mt12">${SEGS.map(([key, label, sub]) => `<button class="stat tap ${k === key ? "on" : ""}" style="${k === key ? "border-color:var(--accent)" : ""}" onclick="S.segKey='${key}';S.segPeople=null;render()"><div class="v">${num(C[key])}</div><div class="l">${esc(label)}</div>${sub ? `<div class="xs muted2 mt8">${esc(sub)}</div>` : ""}</button>`).join("")}</div>
+  ${k ? `${secT(esc(seg ? seg[1] : k) + (S.segCity ? " · " + esc(S.segCity) : ""), P ? num(P.length) + " people" : "Loading…")}
+  ${P ? `<div class="row" style="flex-wrap:wrap;gap:8px">
+      <button class="btn sm" onclick="csvDownload('segment-${k}', S.segPeople.list.map(p => ({ name: p.name, snappro_id: p.public_id, role: p.role, city: p.city, phone: p.phone, email: p.email, joined: p.created_at, last_seen: p.last_seen_at })))">Download CSV</button>
+      ${money ? `<button class="btn sm" onclick="copySegPhones()">Copy phone numbers (for a WhatsApp broadcast list)</button>` : ""}</div>
+    ${admin ? `<div class="card mt12"><div class="sec">Send a message to these ${num(P.length)} people</div>
+      <input id="bcTitle" class="input mt8" maxlength="80" placeholder="Title, e.g. 3 weddings are waiting for quotes in Pune" value="${esc(m.title)}" oninput="S.bcMsg.title=this.value">
+      <textarea id="bcBody" class="input mt8" rows="3" maxlength="400" placeholder="Message" oninput="S.bcMsg.body=this.value">${esc(m.body)}</textarea>
+      <div class="row mt8" style="flex-wrap:wrap;gap:14px">
+        <label class="sm"><input type="checkbox" ${m.app ? "checked" : ""} onchange="S.bcMsg.app=this.checked"> App notification (${num(P.filter(p => p.has_push).length)} have notifications on)</label>
+        <label class="sm"><input type="checkbox" ${m.email ? "checked" : ""} onchange="S.bcMsg.email=this.checked"> Email (Brevo: 300 a day in total)</label>
+        <label class="sm">Opens <select class="input" style="width:auto;padding:6px 10px" onchange="S.bcMsg.link=this.value">${[["/app.html", "SnapPro app — Home"], ["/app.html?open=portfolio", "Their portfolio (photographers)"], ["/app.html?open=storage", "Storage plans (photographers)"]].map(([u, l]) => `<option value="${u}" ${m.link === u ? "selected" : ""}>${l}</option>`).join("")}</select></label></div>
+      <div class="xs muted2 mt8">Send only messages about their SnapPro account or work. Promotions need the person's consent. Emails stop automatically before Brevo's daily limit.</div>
+      <button class="btn primary mt12" ${S.bcBusy ? "disabled" : ""} onclick="sendBroadcast()">${S.bcBusy ? "Sending…" : "Send"}</button></div>` : ""}
+    <div class="card tblwrap mt12"><table><thead><tr><th>Name</th><th>City</th><th>Joined</th><th>Last opened</th>${money ? "<th>Contact</th>" : ""}</tr></thead><tbody>
+      ${P.slice(0, 300).map(p => `<tr><td>${userLink(p.id, p.name, p.public_id)}</td><td>${esc(p.city || "")}</td><td>${fmt(p.created_at)}</td><td>${p.last_seen_at ? ago(p.last_seen_at) : "—"}</td>
+        ${money ? `<td>${p.phone ? `<a class="btn sm" target="_blank" rel="noopener" href="${esc(waLink(p.phone, (m.body || m.title || "Hi " + String(p.name || "").split(" ")[0] + ", this is " + meFirst() + " from SnapPro.")))}">WhatsApp</a>` : ""}</td>` : ""}</tr>`).join("") || `<tr><td colspan="5"><div class="empty">Nobody in this list.</div></td></tr>`}
+    </tbody></table>${P.length > 300 ? `<div class="xs muted2 mt8">Showing 300 of ${num(P.length)} — download the CSV for everyone.</div>` : ""}</div>` : `<div class="empty">Loading…</div>`}` : `<div class="empty mt16">Pick a list above.</div>`}
+  ${secT("Messages sent")}
+  <div class="card tblwrap">${(S.bcHist || []).length ? `<table><thead><tr><th>When</th><th>List</th><th>Message</th><th>Reached</th><th>By</th></tr></thead><tbody>${S.bcHist.map(b => `<tr><td>${dt(b.created_at)}</td><td class="xs">${esc((SEGS.find(x => x[0] === b.segment) || [, b.segment])[1])}${b.city ? " · " + esc(b.city) : ""}</td><td><b>${esc(b.title)}</b><div class="xs muted2">${esc(b.body)}</div></td><td class="xs">${num(b.recipients)} people · ${num(b.sent_app)} app · ${num(b.sent_email)} email${b.skipped ? " · " + num(b.skipped) + " not emailed (daily limit)" : ""}</td><td class="xs">${esc(b.staff_email || "")}</td></tr>`).join("")}</tbody></table>` : `<div class="empty">Nothing sent yet.</div>`}</div>`;
+}
+async function loadSegPeople(){
+  const k = S.segKey, city = S.segCity || ""; if(S.segLoading === k + city) return; S.segLoading = k + city;
+  const { data, error } = await sb.rpc("admin_segment_people", { p_key: k, p_city: city || null });
+  S.segLoading = null; if(S.segKey !== k) return;
+  S.segPeople = { key: k, city, list: error ? [] : (data || []) }; if(error) S.err = error.message; render();
+}
+function copySegPhones(){ const t = (S.segPeople.list || []).map(p => p.phone).filter(Boolean).map(p => "+91" + digits10(p)).join("\n");
+  try{ navigator.clipboard.writeText(t); S.note = "Copied " + t.split("\n").filter(Boolean).length + " phone numbers."; }catch(e){ prompt("Copy these numbers:", t); } render(); }
+async function sendBroadcast(){
+  const m = S.bcMsg, ch = [m.app && "app", m.email && "email"].filter(Boolean);
+  if((m.title || "").trim().length < 3 || (m.body || "").trim().length < 5){ S.err = "Write a title and a message."; render(); return; }
+  if(!ch.length){ S.err = "Pick app notification, email or both."; render(); return; }
+  if(!confirm("Send this to " + num(S.segPeople.list.length) + " people?")) return;
+  S.bcBusy = true; render();
+  const { data, error } = await sb.rpc("admin_broadcast", { p_key: S.segKey, p_city: S.segCity || null, p_title: m.title, p_body: m.body, p_channels: ch, p_link: m.link });
+  S.bcBusy = false;
+  if(error){ S.err = error.message; render(); return; }
+  S.note = `Sent: ${num(data.app)} app notifications, ${num(data.email)} emails${data.skipped ? " (" + num(data.skipped) + " not emailed — daily limit)" : ""}.`;
+  S.bcMsg = null; S.bcHist = null; render();
+}
+
+/* =============================== MAP =============================== */
+function vMap(){
+  const w = deptWait("map", true); if(w) return w;
+  const D = S.dept.map.data, pts = D.points || [];
+  setTimeout(drawMap, 30);
+  const L2 = (D.points || []).concat(D.unplaced || []).sort((a, b) => (b.customers + b.open) - (a.customers + a.open));
+  return deptHead("map", true) + `
+  <div class="row mt12" style="flex-wrap:wrap;gap:14px" id="mapLegend">
+    ${[["c", "Customers", "#3b82f6"], ["p", "Photographers", "#22c55e"], ["r", "Open requests", "#f97316"]].map(([k, l, c]) => `<label class="sm"><input type="checkbox" ${(S.mapHide || {})[k] ? "" : "checked"} onchange="S.mapHide=S.mapHide||{};S.mapHide['${k}']=!this.checked;drawMap(true)"> <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${c}"></span> ${l}</label>`).join("")}</div>
+  <div id="snapMap" class="card mt12" style="height:520px;padding:0;overflow:hidden;position:relative"><div class="empty" id="mapFallback">Loading the map…</div></div>
+  ${secT("Cities", "Same data as a list. Click a city to open it.")}
+  <div class="card tblwrap"><table><thead><tr><th>City</th><th>Customers</th><th>Photographers</th><th>Open requests</th><th></th></tr></thead><tbody>
+    ${L2.map(x => `<tr class="rowlink" onclick="openCity(${esc(JSON.stringify(x.city))});goPage('cities')"><td><b>${esc(x.city)}</b></td><td>${num(x.customers)}</td><td>${num(x.photographers)}</td><td>${num(x.open)}</td><td>${x.customers && !x.photographers ? '<span class="chip red">No photographers</span>' : ""}</td></tr>`).join("")}
+  </tbody></table></div>`;
+}
+function loadLeaflet(cb){
+  if(window.L && window.L.map) return cb(true);
+  if(S.leafletFailed) return cb(false);
+  if(!document.getElementById("lfcss")){ const l = document.createElement("link"); l.id = "lfcss"; l.rel = "stylesheet"; l.href = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"; document.head.appendChild(l); }
+  const s = document.createElement("script"); s.src = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js";
+  s.onload = () => cb(!!window.L); s.onerror = () => { S.leafletFailed = true; cb(false); }; document.head.appendChild(s);
+  setTimeout(() => { if(!window.L){ S.leafletFailed = true; cb(false); } }, 8000);
+}
+function drawMap(force){
+  const el = document.getElementById("snapMap"); if(!el || !S.dept.map || !S.dept.map.data) return;
+  if(el.dataset.ready && !force) return;
+  loadLeaflet(ok => {
+    const fb = document.getElementById("mapFallback");
+    if(!ok){ if(fb) fb.textContent = "The map couldn't load (no internet or blocked). The city list below has the same numbers."; return; }
+    if(!S.lmap || !document.body.contains(S.lmap.getContainer())){
+      el.innerHTML = ""; S.lmap = L.map(el, { scrollWheelZoom: false }).setView([22.5, 79], 4.6);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 12, attribution: "© OpenStreetMap contributors" }).addTo(S.lmap);
+      S.lmapLayer = L.layerGroup().addTo(S.lmap);
+    }
+    el.dataset.ready = "1"; S.lmapLayer.clearLayers();
+    const hide = S.mapHide || {}, r = n => 4 + Math.sqrt(n) * 4;
+    (S.dept.map.data.points || []).forEach(p => {
+      const pop = `<b>${esc(p.city)}</b><br>${num(p.customers)} customers · ${num(p.photographers)} photographers · ${num(p.open)} open requests<br><a href="#" onclick="openCity(${esc(JSON.stringify(p.city))});goPage('cities');return false">Open city ›</a>`;
+      if(!hide.c && p.customers) L.circleMarker([p.lat, p.lng], { radius: r(p.customers), color: "#3b82f6", fillOpacity: .35, weight: 1 }).bindPopup(pop).addTo(S.lmapLayer);
+      if(!hide.p && p.photographers) L.circleMarker([p.lat + .12, p.lng + .12], { radius: r(p.photographers), color: "#22c55e", fillOpacity: .45, weight: 1 }).bindPopup(pop).addTo(S.lmapLayer);
+      if(!hide.r && p.open) L.circleMarker([p.lat - .12, p.lng + .12], { radius: r(p.open), color: "#f97316", fillOpacity: .6, weight: 1 }).bindPopup(pop).addTo(S.lmapLayer);
+    });
+  });
+}
+
+/* =============================== AD SPEND & RESULTS =============================== */
+const SPEND_CHANNELS = ["Paid ads", "Social", "Search", "Email", "Offline / QR / SMS", "Other campaigns", "Other websites", "AI assistants", "Referral"];
+function vAdspend(){
+  const w = deptWait("adspend"); if(w) return w;
+  const D = S.dept.adspend.data, rows = D.channels || [], sp = S.spendNew || (S.spendNew = { month: istToday().slice(0, 7), channel: "Paid ads", amount: "", note: "" });
+  const tot = rows.reduce((t, x) => ({ spend: t.spend + Number(x.spend), signups: t.signups + Number(x.signups), bookings: t.bookings + Number(x.bookings), commission: t.commission + Number(x.commission) }), { spend: 0, signups: 0, bookings: 0, commission: 0 });
+  const per = (a, b) => b ? inr(Math.round(a / b)) : "—";
+  return deptHead("adspend") + `
+  <div class="grid mt16">
+    ${htile(inr(tot.spend), "Spent on marketing", "In the selected period")}
+    ${htile(per(tot.spend, tot.signups), "Cost per sign-up", "Spend ÷ people who signed up")}
+    ${htile(per(tot.spend, tot.bookings), "Cost per booking", "Spend ÷ bookings by those people")}
+    ${htile(tot.spend ? (Math.round(100 * tot.commission / tot.spend) / 100) + "×" : "—", "Return on spend", "SnapPro's earnings ÷ spend. Above 1× pays for itself.", tot.spend ? tone(tot.commission / tot.spend, 1, 0.5) : "")}
+  </div>
+  ${secT("Results by channel", "Sign-ups are counted by where each person first came from.")}
+  <div class="card tblwrap"><table><thead><tr><th>Channel</th><th>Spent</th><th>Sign-ups</th><th>Customers</th><th>Photographers</th><th>Bookings</th><th>Booked value</th><th>SnapPro earned</th><th>Cost / sign-up</th><th>Cost / booking</th></tr></thead><tbody>
+    ${rows.map(x => `<tr><td><b>${esc(x.channel)}</b></td><td>${inr(x.spend)}</td><td>${num(x.signups)}</td><td>${num(x.customers)}</td><td>${num(x.photographers)}</td><td>${num(x.bookings)}</td><td>${inr(x.gmv)}</td><td>${inr(x.commission)}</td><td>${per(x.spend, x.signups)}</td><td>${per(x.spend, x.bookings)}</td></tr>`).join("") || `<tr><td colspan="10"><div class="empty">No sign-ups or spend in this period.</div></td></tr>`}
+  </tbody></table></div>
+  ${secT("Add spend", "Enter what you spent in a month on one channel (e.g. Google or Instagram ads = Paid ads).")}
+  <div class="card"><div class="row" style="flex-wrap:wrap;gap:8px">
+    <input class="input" type="month" style="width:auto" value="${esc(sp.month)}" onchange="S.spendNew.month=this.value">
+    <select class="input" style="width:auto" onchange="S.spendNew.channel=this.value">${SPEND_CHANNELS.map(c => `<option ${sp.channel === c ? "selected" : ""}>${c}</option>`).join("")}</select>
+    <input class="input" id="spAmt" type="number" min="0" step="1" style="width:140px" placeholder="₹ amount" value="${esc(sp.amount)}" oninput="S.spendNew.amount=this.value">
+    <input class="input" style="max-width:260px" maxlength="200" placeholder="Note (optional), e.g. Instagram reels" value="${esc(sp.note)}" oninput="S.spendNew.note=this.value">
+    <button class="btn sm primary" onclick="saveSpend()">Add</button></div>
+    ${(D.spend_rows || []).length ? `<div class="tblwrap mt12"><table><thead><tr><th>Month</th><th>Channel</th><th>Amount</th><th>Note</th><th>By</th><th></th></tr></thead><tbody>${D.spend_rows.map(s => `<tr><td>${esc(String(s.month).slice(0, 7))}</td><td>${esc(s.channel)}</td><td>${inr(s.amount)}</td><td class="xs">${esc(s.note || "")}</td><td class="xs">${esc(s.staff_email || "")}</td><td><button class="linkbtn" onclick="delSpend(${s.id})">Remove</button></td></tr>`).join("")}</tbody></table></div>` : ""}</div>`;
+}
+async function saveSpend(){
+  const s = S.spendNew, amt = Number(s.amount);
+  if(!(amt >= 0) || s.amount === ""){ S.err = "Enter the amount in rupees."; render(); return; }
+  const { error } = await sb.rpc("admin_spend_save", { p_month: s.month + "-01", p_channel: s.channel, p_amount: amt, p_note: s.note || null });
+  if(error){ S.err = error.message; render(); return; }
+  S.note = "Spend added."; S.spendNew = null; deptLoad("adspend");
+}
+async function delSpend(id){ if(!confirm("Remove this spend entry?")) return; const { error } = await sb.rpc("admin_spend_delete", { p_id: id }); if(error){ S.err = error.message; render(); return; } deptLoad("adspend"); }
+
+/* =============================== RETENTION =============================== */
+function vRetention(){
+  const w = deptWait("retention", true); if(w) return w;
+  const L = S.dept.retention.data || [];
+  const cell = (n, of) => { const p = of ? Math.round(100 * n / of) : 0; return `<td style="background:rgba(255,122,26,${(p / 140).toFixed(2)})"><b>${p}%</b> <span class="xs muted2">(${num(n)})</span></td>`; };
+  return deptHead("retention", true) + `
+  <div class="card tblwrap mt16"><table><thead><tr><th>Customers who joined in the week of</th><th>Joined</th><th>Came back after day 1</th><th>Posted a shoot</th><th>Booked</th><th>Booked 2+ times</th></tr></thead><tbody>
+    ${L.map(x => `<tr><td><b>${fmt(x.week)}</b></td><td>${num(x.joined)}</td>${cell(x.came_back, x.joined)}${cell(x.posted, x.joined)}${cell(x.booked, x.joined)}${cell(x.repeat, x.joined)}</tr>`).join("") || `<tr><td colspan="6"><div class="empty">No customers joined in the last 12 weeks.</div></td></tr>`}
+  </tbody></table></div>
+  <div class="xs muted2 mt8">Darker = better. Recent weeks have had less time to book, so compare a week with the weeks around it.</div>`;
+}
+
+/* =============================== PHOTOGRAPHER SCORECARD =============================== */
+function scFlags(x){
+  const f = [], rr = x.could_quote ? x.quotes / x.could_quote : null, wr = x.quotes ? x.won / x.quotes : null;
+  if(x.could_quote >= 5 && !x.quotes) f.push(["red", "Never quotes"]);
+  else if(rr != null && x.could_quote >= 5 && rr < 0.2) f.push(["amber", "Rarely quotes"]);
+  if(x.median_quote_min > 120) f.push(["amber", "Slow to quote"]);
+  if(x.quotes >= 10 && wr < 0.1) f.push(["amber", "Low win rate — check prices"]);
+  if(x.cancelled_by_them >= 2) f.push(["red", "Cancels shoots"]);
+  if(x.review_count >= 3 && x.rating < 4) f.push(["red", "Low rating"]);
+  if(x.quotes >= 5 && wr >= 0.3 && (!x.review_count || x.rating >= 4.5) && !x.cancelled_by_them) f.push(["green", "Top performer"]);
+  return f;
+}
+function vScorecard(){
+  const w = deptWait("scorecard", true); if(w) return w;
+  const L = S.dept.scorecard.data || [], f = S.scF || "all", days = S.scDays || 90;
+  const list = L.filter(x => f === "all" || (f === "flag" && scFlags(x).some(y => y[0] !== "green")) || (f === "top" && scFlags(x).some(y => y[0] === "green")));
+  const pc2 = (a, b) => b ? Math.round(100 * a / b) + "%" : "—";
+  return deptHead("scorecard", true) + `
+  <div class="row mt12" style="flex-wrap:wrap;gap:6px">${[30, 90, 180].map(d => `<button class="btn sm ${days === d ? "primary" : ""}" onclick="S.scDays=${d};deptLoad('scorecard')">Last ${d} days</button>`).join("")}
+    <span style="width:12px"></span>${[["all", "All", L.length], ["flag", "Needs attention", L.filter(x => scFlags(x).some(y => y[0] !== "green")).length], ["top", "Top performers", L.filter(x => scFlags(x).some(y => y[0] === "green")).length]].map(([k, l, n]) => `<button class="btn sm ${f === k ? "primary" : ""}" onclick="S.scF='${k}';render()">${l} (${n})</button>`).join("")}</div>
+  <div class="card tblwrap mt12"><table><thead><tr><th>Photographer</th><th title="Requests in their city/range and shoot types">Could quote</th><th>Quoted</th><th>Response rate</th><th>Time to quote</th><th>Won</th><th>Win rate</th><th>Completed</th><th>Cancelled by them</th><th>Rating</th><th>Last opened</th><th>Flags</th></tr></thead><tbody>
+    ${list.map(x => `<tr><td>${userLink(x.id, x.name, x.public_id)}<div class="xs muted2">${esc(x.city || "")}</div></td><td>${num(x.could_quote)}</td><td>${num(x.quotes)}</td><td>${pc2(x.quotes, x.could_quote)}</td><td>${x.median_quote_min != null ? x.median_quote_min + " min" : "—"}</td><td>${num(x.won)}</td><td>${pc2(x.won, x.quotes)}</td><td>${num(x.completed)}</td><td>${num(x.cancelled_by_them)}</td><td>${x.review_count ? Number(x.rating).toFixed(1) + "★ (" + x.review_count + ")" : "—"}</td><td>${x.last_seen_at ? ago(x.last_seen_at) : "—"}</td>
+      <td>${scFlags(x).map(([c, l]) => `<span class="chip ${c}" style="margin:2px">${l}</span>`).join("")}</td></tr>`).join("") || `<tr><td colspan="12"><div class="empty">Nobody here.</div></td></tr>`}
+  </tbody></table></div>
+  <div class="xs muted2 mt8">Response rate = quotes ÷ requests they could have quoted on (their city or travel range, their shoot types and photo/video). Top performer = wins 30%+ of quotes, rated 4.5+, never cancels.</div>`;
+}
+
+/* =============================== DATA QUALITY =============================== */
+function vQuality(){
+  const w = deptWait("quality", true); if(w) return w;
+  const D = S.dept.quality.data;
+  const people = arr => `<div class="tblwrap"><table><tbody>${arr.slice(0, 100).map(p => `<tr><td>${userLink(p.id, p.name, p.public_id)}</td><td class="xs">${esc(p.role || "")}</td><td class="xs">${esc(p.city || "")}</td><td class="xs">${p.created_at ? "joined " + fmt(p.created_at) : ""}</td><td class="xs">${esc(p.email || "")}</td></tr>`).join("")}</tbody></table></div>`;
+  const group = (title, sub, arr, body, t) => `<details class="card mt12" ${arr.length ? "open" : ""}><summary class="between" style="cursor:pointer"><span><b>${title}</b> <span class="xs muted2">— ${sub}</span></span><span class="chip ${arr.length ? t : "green"}">${num(arr.length)}</span></summary><div class="mt8">${arr.length ? body : `<div class="xs muted2">None — good.</div>`}</div></details>`;
+  return deptHead("quality", true) + `
+  ${group("Same phone number on several accounts", "often one person signing up twice", D.same_phone, D.same_phone.map(g => `<div class="mt8"><b>${esc(g.phone)}</b> · ${num(g.n)} accounts</div>${people(g.people)}`).join(""), "amber")}
+  ${group("Same email (ignoring dots and +tags in Gmail)", "e.g. a.b@gmail.com and ab+1@gmail.com", D.same_email, D.same_email.map(g => `<div class="mt8"><b>${esc(g.email)}</b> · ${num(g.n)} accounts</div>${people(g.people)}`).join(""), "amber")}
+  ${group("Throw-away email addresses", "temporary inboxes — often fake sign-ups", D.disposable, people(D.disposable), "red")}
+  ${group("Signed up and vanished", "joined over 7 days ago, never came back, did nothing", D.vanished, people(D.vanished), "")}
+  ${group("No city", "can't be matched with photographers or customers", D.no_city, people(D.no_city), "amber")}
+  ${group("No mobile number", "older accounts — they're asked for it in the app", D.no_phone, people(D.no_phone), "")}
+  ${group("Photographers with fewer than 3 portfolio items after a week", "remind them to add work", D.pg_empty, `<div class="tblwrap"><table><tbody>${D.pg_empty.map(p => `<tr><td>${userLink(p.id, p.name)}</td><td class="xs">${esc(p.approval)}</td><td class="xs">${num(p.photos)} items</td><td class="xs">joined ${fmt(p.created_at)}</td></tr>`).join("")}</tbody></table></div>`, "")}
+  <div class="xs muted2 mt12">Nothing is deleted automatically. Open the full record to check, then suspend or delete from there if needed.</div>`;
+}
+
+/* =============================== MONTHLY FINANCE PACK =============================== */
+function vFinancePack(){
+  const def = (() => { const d = new Date(istToday() + "T00:00:00Z"); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() - 1); return d.toISOString().slice(0, 7); })();
+  const m = S.fpMonth || def, P = S.fp && S.fp.month === m ? S.fp : null;
+  if(!P && !S.fpLoading){ S.fpLoading = 1; sb.rpc("admin_finance_pack", { p_month: m + "-01" }).then(({ data, error }) => { S.fpLoading = 0; if(error){ S.err = error.message; render(); return; } S.fp = data; render(); }); }
+  const sum = (a, k) => (a || []).reduce((t, x) => t + Number(x[k] || 0), 0);
+  const B = P ? P.bookings.filter(b => b.status !== "cancelled") : [];
+  return `<div class="row mt12" style="flex-wrap:wrap;gap:8px"><label class="sm">Month <input class="input" type="month" style="width:auto" value="${esc(m)}" max="${istToday().slice(0, 7)}" onchange="S.fpMonth=this.value;S.fp=null;render()"></label>
+    <button class="btn primary" ${P ? "" : "disabled"} onclick="downloadFinancePack()">Download finance pack (Excel)</button></div>
+  ${!P ? `<div class="empty">Loading ${esc(m)}…</div>` : `
+  <div class="grid mt16">
+    ${htile(num(B.length), "Bookings made", num(P.bookings.length - B.length) + " cancelled")}
+    ${htile(inr(sum(B, "price")), "Booked value", "Before discounts")}
+    ${htile(inr(sum(B, "commission_amount")), "SnapPro commission", "On bookings made this month")}
+    ${htile(inr(sum(P.payments, "amount")), "Payments received", num(P.payments.length) + " payments (" + num(P.payments.filter(p => !/live|production/.test(p.environment || "")).length) + " test)")}
+    ${htile(inr(sum(P.refunds.filter(r => /success|processed/i.test(r.status || "")), "amount")), "Refunded", num(P.refunds.length) + " refunds")}
+    ${htile(inr(sum(P.payouts, "amount")), "Paid to photographers", num(P.payouts.length) + " payouts")}
+  </div>
+  <div class="card mt16 sm">The Excel file has 5 sheets: <b>Summary</b>, <b>Bookings</b>, <b>Payments</b> (with Razorpay order and payment IDs), <b>Refunds</b> and <b>Payouts</b> (with UTRs).
+    <div class="xs muted2 mt8">To match bank settlements: download "Settlements" from the Razorpay dashboard (Reports) for the same month and match each payment ID (pay_…) with the Payments sheet. Test payments are marked — they aren't real money.</div></div>`}`;
+}
+function xmlCell(v){ if(v == null || v === "") return "<Cell/>"; if(typeof v === "number" || (/^-?\d+(\.\d+)?$/.test(String(v)) && String(v).length < 15)) return `<Cell><Data ss:Type="Number">${v}</Data></Cell>`;
+  return `<Cell><Data ss:Type="String">${String(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</Data></Cell>`; }
+function xmlSheet(name, rows){ if(!rows.length) rows = [{ note: "Nothing this month" }]; const keys = Object.keys(rows[0]);
+  return `<Worksheet ss:Name="${name}"><Table><Row>${keys.map(k => `<Cell ss:StyleID="h"><Data ss:Type="String">${k.replace(/_/g, " ")}</Data></Cell>`).join("")}</Row>${rows.map(r => `<Row>${keys.map(k => xmlCell(r[k])).join("")}</Row>`).join("")}</Table></Worksheet>`; }
+function downloadFinancePack(){
+  const P = S.fp; if(!P) return;
+  const sum = (a, k) => (a || []).reduce((t, x) => t + Number(x[k] || 0), 0), B = P.bookings.filter(b => b.status !== "cancelled");
+  const summary = [["Month", P.month], ["Bookings made (not cancelled)", B.length], ["Booked value (₹)", sum(B, "price")], ["Discounts (₹)", sum(B, "discount_amount")], ["SnapPro commission (₹)", sum(B, "commission_amount")],
+    ["Photographers' share (₹)", sum(B, "photographer_amount")], ["Payments received (₹)", sum(P.payments, "amount")], ["of which test payments (₹)", sum(P.payments.filter(p => !/live|production/.test(p.environment || "")), "amount")],
+    ["Refunds (₹)", sum(P.refunds, "amount")], ["Paid to photographers (₹)", sum(P.payouts, "amount")], ["Prepared", new Date().toLocaleString("en-IN")]].map(([item, value]) => ({ item, value }));
+  const xml = `<?xml version="1.0"?><?mso-application progid="Excel.Sheet"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"><Styles><Style ss:ID="h"><Font ss:Bold="1"/></Style></Styles>`
+    + xmlSheet("Summary", summary) + xmlSheet("Bookings", P.bookings) + xmlSheet("Payments", P.payments) + xmlSheet("Refunds", P.refunds) + xmlSheet("Payouts", P.payouts) + `</Workbook>`;
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([xml], { type: "application/vnd.ms-excel" })); a.download = "SnapPro-finance-" + P.month + ".xls";
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  S.note = "Finance pack for " + P.month + " downloaded."; render();
+}
+
+/* =============================== STORAGE PER PHOTOGRAPHER =============================== */
+function loadStoreUse(){ if(S.storeUse || S.storeUseLoading) return; S.storeUseLoading = 1; sb.rpc("admin_storage_usage").then(({ data }) => { S.storeUse = data || {}; S.storeUseLoading = 0; render(); }); }
+function storageCell(p){
+  loadStoreUse(); const u = (S.storeUse || {})[p.id]; if(!u) return `<span class="xs muted2">…</span>`;
+  const pct = u.quota ? Math.round(100 * u.used / u.quota) : 0, t = pctTone(pct);
+  return `<div class="xs" style="min-width:120px"><b>${MB(u.used)}</b> of ${MB(u.quota)}${u.plan && u.plan !== "free" ? ` <span class="chip green">${esc(u.plan)}</span>` : ""}</div>${bar(pct, pct >= 70 ? t : "")}<div class="xs muted2">${pct}% used</div>`;
 }
 
 /* ============================ render ========================== */
