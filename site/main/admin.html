@@ -590,7 +590,7 @@ async function loadData(){
   const [bk, rq, pg, st, inv, ready, est] = await Promise.all([
     sb.from('bookings').select('id,request_id,customer_name,photographer_name,category,start_at,city,pincode,price,status,payment_status,balance_status,created_at').order('created_at',{ascending:false}).limit(1000),
     sb.from('requests').select('id,customer_name,category,city,pincode,budget,status,start_at,created_at').order('created_at',{ascending:false}).limit(1000),
-    sb.from('photographers').select('id,display_name,city,state,pincode,bio,categories,years_exp,services,gear,travel,travel_km,services_confirmed_at,gear_photo,gear_verified_at,reminded_at,rating,review_count,jobs_done,is_online,is_verified,portfolio,created_at,approval_status,review_note,submitted_at,approved_at,commission_pct,featured_until').order('created_at',{ascending:false}).limit(500),
+    sb.from('photographers').select('id,display_name,photo_url,city,state,pincode,bio,categories,years_exp,services,gear,travel,travel_km,services_confirmed_at,gear_photo,gear_verified_at,reminded_at,rating,review_count,jobs_done,is_online,is_verified,portfolio,created_at,approval_status,review_note,submitted_at,approved_at,commission_pct,featured_until').order('created_at',{ascending:false}).limit(500),
     sb.from('staff').select('id,email,name,role,status,created_at').order('created_at'),
     isSuper ? sb.from('staff_invites').select('id,email,role,created_at,accepted_at,email_request,email_sent_at').order('created_at',{ascending:false}) : null,
     isSuper ? sb.rpc('invite_email_ready') : null,
@@ -734,6 +734,7 @@ function bucketLabel(d, b){
 
 let insightSeq = 0;
 async function loadInsights(quiet){
+  if(S.me && S.me.role !== 'super_admin') return;
   const r = periodRange(), seq = ++insightSeq;
   if(!quiet){ S.insightErr = ""; S.insightBusy = true; render(); }
   const [se, kp] = await Promise.all([
@@ -1108,12 +1109,12 @@ function vPayments(){
   const refundsFor = id => P.refunds.filter(r => r.payment_id === id);
   return `
   <div class="grid">
-    ${tile(inr(collected), "Collected online", "", "hl", "collected", "Payments collected", null, true)}
-    ${tile(inr(commission), "SnapPro commission (" + P.commission + "%)", "", "", "commission", "Payments with commission", null, true)}
+    ${!isSup() ? "" : tile(inr(collected), "Collected online", "", "hl", "collected", "Payments collected", null, true)}
+    ${!isSup() ? "" : tile(inr(commission), "SnapPro commission (" + P.commission + "%)", "", "", "commission", "Payments with commission", null, true)}
     <button class="stat tap" onclick="goPage('payouts')"><div class="v">${inr(real.filter(p => p.refund_status === "none").reduce((s,p) => s + Math.max(0, Number(p.photographer_amount) - Number(p.paid_out_amount || 0)), 0))}</div><div class="l">Owed to photographers <span class="go">›</span></div><div class="xs muted2 mt8">Open Photographer payouts</div></button>
     ${tile(num(balances.length), "Balances owed by customers", inr(balances.reduce((s,b) => s + (b.balance_amount||0), 0)), "", "balances_due", "Balances still owed by customers", null, true)}
     ${tile(num(refundsDue.length), "Refunds to do", "", "", "refunds_due", "Refunds to do", null, true)}
-    ${tile(inr(refunded), "Refunded", "", "", "refunds", "Refunds", null, true)}
+    ${!isSup() ? "" : tile(inr(refunded), "Refunded", "", "", "refunds", "Refunds", null, true)}
   </div>
   ${S.me.role === "super_admin" ? `<div class="xs muted2 mt8">Commission is ${P.commission}% of each booking. Customers pay an advance when they book and the balance online once the shoot starts; payouts become due when both are paid. <button class="linkbtn" onclick="setCommission()">Change</button></div>` : ""}
 
@@ -1148,14 +1149,14 @@ function vPayments(){
       <td>${payRef(p.booking_id)}${p.receipt_no ? `<div class="xs mono">${esc(p.receipt_no)}</div>` : ""}<div class="xs muted2">${esc(p.order_id)}</div></td>
       <td>${esc(bk(p.booking_id).customer_name || "—")}</td>
       <td>${esc(bk(p.booking_id).photographer_name || "—")}</td>
-      <td class="bold">${inr(p.amount)}<div class="xs muted2">${p.stage === "balance" ? "Balance" : "Advance"} · fee ${inr(p.commission_amount)}</div></td>
+      <td class="bold">${inr(p.amount)}<div class="xs muted2">${p.stage === "balance" ? "Balance" : "Advance"}${isSup() ? " · fee " + inr(p.commission_amount) : ""}</div></td>
       <td>${payChip(p)}${p.is_duplicate ? `<div class="xs mt8" style="color:#ffd88a">Duplicate payment</div>` : ""}${p.payment_message && p.status !== "paid" ? `<div class="xs muted2 mt8" style="max-width:200px">${esc(p.payment_message)}</div>` : ""}</td>
       <td class="sm">${methodName(p.payment_group)}</td>
       <td class="xs">${p.gateway_payment_id ? esc(p.gateway_payment_id) : "—"}${p.gateway_order_id ? `<div class="muted2">${esc(p.gateway_order_id)}</div>` : ""}${p.bank_reference ? `<div class="muted2">RRN ${esc(p.bank_reference)}</div>` : ""}</td>
       <td>${refundChip(p)}${refundsFor(p.id).map(r => `<div class="xs muted2 mt8">${inr(r.amount)} · ${esc(r.status)}${r.refund_arn ? " · ARN " + esc(r.refund_arn) : ""}${["requested","pending","pending_approval","onhold"].includes(r.status) && r.gateway_refund_id ? ` <button class="linkbtn" onclick="checkRefund('${r.refund_id}','${esc(r.gateway_refund_id)}')">check</button>` : ""}</div>`).join("")}</td>
       <td style="text-align:right">${p.status === "paid" && Number(p.refunded_amount) < Number(p.amount) && p.refund_status !== "refund_pending" && !["refund_due","refund_failed"].includes(p.refund_status) ? `<button class="btn sm" onclick="refundPayment('${p.id}')">Refund…</button>` : ""}</td>
     </tr>`).join("")}</tbody></table></div>` : `<div class="card mt8"><div class="empty">No payments yet.</div></div>`}
-  ${vStoragePlans()}`;
+  ${isSup() ? vStoragePlans() : ""}`;
 }
 const pgName = id => { const p = (S.photographers || []).find(x => x.id === id); return p ? p.display_name : "—"; };
 function vStoragePlans(){
@@ -1511,7 +1512,7 @@ function vPros(){
   <div class="between mt24"><div class="sec" style="margin:0">Approved (${live.length})</div><button class="btn sm" onclick="exportPhotographers()">Download CSV (all photographers)</button></div>
   ${proFilterChips()}
   ${!live.length ? `<div class="card"><div class="empty">No approved photographers yet.</div></div>` : `<div class="card tblwrap"><table>
-    <thead><tr><th>Name</th><th>City</th><th>Rating</th><th>Shoots</th><th>Photos</th><th>Storage</th><th>Offers &amp; gear</th><th>Records</th><th>Status</th><th>Verified</th>${canDecide ? "<th>Commission</th>" : ""}</tr></thead>
+    <thead><tr><th>Name</th><th>City</th><th>Rating</th><th>Shoots</th><th>Photos</th><th>Storage</th><th>Offers &amp; gear</th><th>Records</th><th>Status</th><th>Verified</th>${isSup() ? "<th>Commission</th>" : ""}</tr></thead>
     <tbody>${live.map(p=>`<tr>
       <td style="font-weight:600">${esc(p.display_name||'—')}${p.featured_until && Date.parse(p.featured_until) > Date.now() ? ' <span class="chip amber">★ Featured</span>' : ""}<div class="xs" style="color:var(--accent)">${esc(idOf(p.id))}</div><div class="xs muted2">${emailOf(p.id) ? esc(emailOf(p.id)) + " · " : ""}approved ${fmt(p.approved_at || p.created_at)}</div></td>
       <td class="muted">${esc(p.city||'—')}${p.state?', '+esc(p.state):''}</td>
@@ -1520,7 +1521,7 @@ function vPros(){
       <td><span class="chip ${p.is_online?'green':''}">${p.is_online?'Available':'Away'}</span></td>
       <td>${canDecide ? `<label class="sw"><input type="checkbox" ${p.is_verified?'checked':''} onchange="setVerified('${p.id}',this.checked)">${p.is_verified?'Verified':'No'}</label>`
                       : (p.is_verified?'<span class="chip admin">Verified</span>':'<span class="muted2">No</span>')}</td>
-      ${canDecide ? `<td>${p.commission_pct != null ? `<b>${Number(p.commission_pct)}%</b> <span class="xs muted2">own rate</span>` : `<span class="muted2">${S.pay ? S.pay.commission : 20}% standard</span>`}
+      ${isSup() ? `<td>${p.commission_pct != null ? `<b>${Number(p.commission_pct)}%</b> <span class="xs muted2">own rate</span>` : `<span class="muted2">${S.pay ? S.pay.commission : 20}% standard</span>`}
         <button class="linkbtn" style="margin-left:6px" onclick="setPgCommission('${p.id}')">Change</button></td>` : ""}
     </tr>`).join('')}</tbody></table></div>
   ${canDecide ? `<div class="xs muted2 mt12">Approved means they can work on SnapPro. "Verified" is an extra badge for photographers whose identity and work you've checked in person.</div>` : ''}`}`;
@@ -1612,6 +1613,7 @@ async function setUserStatus(id, status){
 }
 function statusCell(u){
   if(u.is_staff) return "";
+  if(!isSup()) return (u.account_status || "active") !== "active" ? `<span class="chip red">${u.account_status === "blocked" ? "Blocked" : "Suspended"}</span>` : "";
   const st = u.account_status || "active";
   return `${st !== "active" ? `<div><span class="chip red">${st === "blocked" ? "Blocked" : "Suspended"}</span></div><div class="xs muted2 mt8" style="max-width:200px">${esc(u.status_reason || "")}${u.status_until ? " · until " + fmt(u.status_until) : ""}</div>` : ""}
     <div class="row mt8" style="gap:6px;flex-wrap:wrap">${st === "active"
@@ -1669,7 +1671,7 @@ function kycBox(p, canDecide){
   const chip = { submitted: '<span class="chip amber">Waiting for check</span>', verified: '<span class="chip green">ID verified</span>', rejected: '<span class="chip red">Asked to re-do</span>' }[k.status] || "";
   return `<div class="kycbox mt12">
     <div class="between" style="flex-wrap:wrap;gap:8px"><div><b>ID check</b> · ${esc(ID_NAMES[k.id_type] || k.id_type)}${k.id_last4 ? " · ends " + esc(k.id_last4) : ""} · sent ${ago(k.submitted_at)}</div>${chip}</div>
-    <div class="kimgs mt8">${img(k.selfie_path, "Face photo")}${img(k.front_path, k.id_type === "passport" ? "Photo page" : "ID front")}${img(k.back_path, k.id_type === "passport" ? "Address page" : "ID back")}</div>
+    <div class="kimgs mt8">${p.photo_url ? `<a class="kimg" href="${esc(p.photo_url)}" target="_blank" rel="noopener"><img src="${esc(p.photo_url)}" alt="Profile photo"><i>Profile photo</i></a>` : ""}${img(k.selfie_path, "Face photo")}${img(k.front_path, k.id_type === "passport" ? "Photo page" : "ID front")}${img(k.back_path, k.id_type === "passport" ? "Address page" : "ID back")}</div>
     <div class="xs muted2 mt8">Check: the face matches the ID photo, the name matches "${esc(p.display_name || "")}", the ID isn't expired or edited, and the photo is clear.</div>
     ${k.note && k.status === "rejected" ? `<div class="xs mt8" style="color:#ff8f9b">Asked: ${esc(k.note)}</div>` : ""}
     ${canDecide && k.status !== "verified" ? `<div class="row mt12" style="flex-wrap:wrap">
@@ -2048,7 +2050,7 @@ function vBooking(){
     </div>
     ${money ? `<div class="card mt12"><div class="sec">Money</div>
       <div class="grid">${[["Price", inr(b.price)], ["Advance", inr(b.advance_amount)], ["Balance", inr(b.balance_amount) + " · " + esc(b.balance_status || "—")],
-        ["Commission", inr(b.commission_amount) + (b.commission_pct != null ? " (" + Number(b.commission_pct) + "%)" : "")], ["Reward discount", b.discount_amount ? "− " + inr(b.discount_amount) : "—"], ["Photographer share", inr(b.photographer_amount)], ["Payout", esc(b.payout_status) + (b.payout_ref ? " · " + esc(b.payout_ref) : "")]]
+        ...(isSup() ? [["Commission", inr(b.commission_amount) + (b.commission_pct != null ? " (" + Number(b.commission_pct) + "%)" : "")]] : []), ["Reward discount", b.discount_amount ? "− " + inr(b.discount_amount) : "—"], ["Photographer share", inr(b.photographer_amount)], ["Payout", esc(b.payout_status) + (b.payout_ref ? " · " + esc(b.payout_ref) : "")]]
         .map(([l, v]) => `<div><div class="xs muted2">${l}</div><div class="sm" style="font-weight:700">${v}</div></div>`).join("")}</div>
       ${(d.payments || []).length ? `<div class="tblwrap mt12"><table><thead><tr><th>Part</th><th>Amount</th><th>Status</th><th>Method</th><th>When</th><th>Razorpay ID</th><th>Refund</th></tr></thead><tbody>
         ${d.payments.map(p => `<tr><td>${esc(p.stage)}</td><td>${inr(p.amount)}</td><td>${statusChip(p.status)}</td><td>${esc(methodName(p.method))}</td><td>${when(p.at)}</td><td class="xs">${esc(p.razorpay_id || "—")}</td><td>${esc(p.refund)}${Number(p.refunded) ? " · " + inr(p.refunded) : ""}</td></tr>`).join("")}
@@ -2062,6 +2064,7 @@ function vBooking(){
 /* ---------- reports (below the overview numbers) ---------- */
 let reportSeq = 0;
 async function loadReport(){
+  if(S.me && S.me.role !== 'super_admin') return;
   const r = periodRange(), seq = ++reportSeq;
   const { data, error } = await sb.rpc("admin_report", { p_from: r.from, p_to: r.to, p_bucket: r.bucket });
   if(seq !== reportSeq) return;
@@ -2977,7 +2980,7 @@ function vUser360(){
       <div class="card"><div class="sec">Details</div>${kvs([["Email", m && p.email ? `<a href="mailto:${esc(p.email)}">${esc(p.email)}</a>` : ""], ["Phone", m && p.phone ? `<a href="tel:${esc(p.phone)}">${esc(p.phone)}</a>` : ""],
         ["City", esc([p.city, p.state, p.pincode].filter(Boolean).join(", "))], ["Member no.", num(p.member_no)], ["Account", esc(p.status) + (p.status_reason ? " — " + esc(p.status_reason) : "") + (p.status_until ? " until " + dt(p.status_until) : "")],
         ["Invited by", p.referred_by ? userLink(p.referred_by.id, p.referred_by.name, p.referred_by.public_id) + (p.referral_at ? " · " + fmt(p.referral_at) : "") : ""], ["Invite rewarded", p.referral_rewarded_at ? dt(p.referral_rewarded_at) : ""]])}
-        ${m ? `<div class="row mt12" style="flex-wrap:wrap">${p.status === "active" ? `<button class="btn sm danger" onclick="setUserStatus('${p.id}','suspended').then(()=>openUser('${p.id}'))">Suspend</button><button class="btn sm danger" onclick="setUserStatus('${p.id}','blocked').then(()=>openUser('${p.id}'))">Block</button>` : `<button class="btn sm" onclick="setUserStatus('${p.id}','active').then(()=>openUser('${p.id}'))">Restore account</button>`}
+        ${isSup() ? `<div class="row mt12" style="flex-wrap:wrap">${p.status === "active" ? `<button class="btn sm danger" onclick="setUserStatus('${p.id}','suspended').then(()=>openUser('${p.id}'))">Suspend</button><button class="btn sm danger" onclick="setUserStatus('${p.id}','blocked').then(()=>openUser('${p.id}'))">Block</button>` : `<button class="btn sm" onclick="setUserStatus('${p.id}','active').then(()=>openUser('${p.id}'))">Restore account</button>`}
           ${p.name !== "Deleted user" ? `<button class="btn sm danger" onclick="adminDeleteAccount('${p.id}')">Delete account…</button>` : ""}
           ${p.phone ? `<a class="btn sm" href="https://wa.me/${esc(String(p.phone).replace(/\D/g, "").replace(/^(\d{10})$/, "91$1"))}" target="_blank" rel="noopener">WhatsApp</a>` : ""}</div>` : ""}</div>
       <div class="card"><div class="sec">How they found SnapPro</div>
@@ -2987,7 +2990,7 @@ function vUser360(){
       ${g ? `<div class="card" style="grid-column:1/-1"><div class="sec">Photographer</div><div class="grid">
         ${kpi(esc(g.approval_status), "Approval", g.approved_at ? fmt(g.approved_at) : "")}${kpi(esc(g.kyc || "not sent"), "ID check")}${kpi(g.rating ? Number(g.rating).toFixed(1) + "★" : "—", "Rating", num(g.review_count) + " reviews")}
         ${kpi(num(g.jobs_done), "Shoots done")}${kpi(num(g.photos), "Portfolio items")}${kpi(g.is_online ? "Available" : "Off", "Right now")}${kpi(esc((g.categories || []).map(c => CAT_NAMES[c] || c).join(", ") || "—"), "Shoots offered")}
-        ${m ? `<button class="stat tap" onclick="editPgRate('${p.id}', ${JSON.stringify(g.display_name || p.name || "").replace(/"/g, "&quot;")}, ${g.commission_pct == null ? "null" : Number(g.commission_pct)})" title="Change this photographer's commission"><div class="v">${g.commission_pct != null ? Number(g.commission_pct) + "%" : "Standard"}</div><div class="l">Commission · change <span class="go">›</span></div></button>` : ""}${m && g.storage_quota ? kpi((Number(g.storage_quota) / 1048576).toFixed(0) + " MB", "Storage") : ""}${g.featured_until ? kpi(fmt(g.featured_until), "Featured until") : ""}${kpi(esc({ city: "Own city only", nearby: "Nearby cities", anywhere: "Anywhere in India" }[g.travel] || "Own city only"), "Travels for shoots")}</div></div>` : ""}
+        ${isSup() ? `<button class="stat tap" onclick="editPgRate('${p.id}', ${JSON.stringify(g.display_name || p.name || "").replace(/"/g, "&quot;")}, ${g.commission_pct == null ? "null" : Number(g.commission_pct)})" title="Change this photographer's commission"><div class="v">${g.commission_pct != null ? Number(g.commission_pct) + "%" : "Standard"}</div><div class="l">Commission · change <span class="go">›</span></div></button>` : ""}${m && g.storage_quota ? kpi((Number(g.storage_quota) / 1048576).toFixed(0) + " MB", "Storage") : ""}${g.featured_until ? kpi(fmt(g.featured_until), "Featured until") : ""}${kpi(esc({ city: "Own city only", nearby: "Nearby cities", anywhere: "Anywhere in India" }[g.travel] || "Own city only"), "Travels for shoots")}</div></div>` : ""}
     </div>
     <div class="mt16">
       ${recordHtml(p)}
@@ -3100,55 +3103,65 @@ const ICO = {
 };
 const ic = (n, s, c) => `<svg width="${s || 18}" height="${s || 18}" viewBox="0 0 24 24" fill="none" stroke="${c || "currentColor"}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICO[n] || ""}</svg>`;
 
-/* ---------- the menu: every page in plain words ---------- */
+/* ---------- the menu: every page in plain words ----------
+   Need to know: the owner (super admin) sees the whole business. Admins and managers see only
+   the pages their daily work needs; the database enforces the same rules. */
+const isSup = () => !!(S.me && S.me.role === "super_admin");
 function navGroups(){
   const role = S.me.role, money = role !== "manager", sup = role === "super_admin";
   const waiting = (S.photographers || []).filter(p => p.approval_status === "pending").length;
   const refunds = S.pay ? S.pay.payments.filter(p => ["refund_due","refund_failed"].includes(p.refund_status)).length : 0;
   const reports = S.dept && S.dept.trust && S.dept.trust.data ? S.dept.trust.data.reports_open || 0 : 0;
   const g = [
-    { t: "", items: [["overview", "home", "Home", "Today at a glance and what needs you"]] },
-    { t: "Company", items: [
+    { t: "", items: [["overview", "home", "Home", sup ? "Today at a glance and what needs you" : "What needs you today"]] },
+    sup && { t: "Company", items: [
       ["departments", "grid", "All departments", "Every part of SnapPro and where to go"],
       ["health", "target", "Business health", "The whole business on one page"],
-      money && ["usage", "gauge", "Plans & usage", "Free limits used — when to upgrade", S.usageWarn || 0],
-      money && ["system", "pulse", "System health", "Payments, emails, notifications working?"],
-      money && ["compliance", "doc", "Legal & compliance", "Agreements, ID checks, GST tracker"] ] },
+      ["usage", "gauge", "Plans & usage", "Free limits used — when to upgrade", S.usageWarn || 0],
+      ["system", "pulse", "System health", "Payments, emails, notifications working?"],
+      ["compliance", "doc", "Legal & compliance", "Agreements, ID checks, GST tracker"] ] },
+    sup && { t: "Safety", items: [
+      ["trust", "shield", "Trust & support", "Reports, blocks, suspensions", reports],
+      ["quality", "filter", "Data quality", "Duplicate, fake or unfinished accounts"],
+      ["activity", "list", "Staff activity", "Who on the team did what"],
+      ["team", "team", "Team", "Invite staff and set their access"] ] },
     { t: "People", items: [
       money && ["users", "users", "Everyone", "All customers and photographers"],
       ["pros", "cam", "Photographers", "Approve new ones, check IDs", waiting],
       ["cities", "pin", "Cities", "Customers & photographers city by city, call list", S.fuDue || 0],
       ["scorecard", "star", "Photographer scorecard", "Who quotes, wins, cancels — who to call"],
-      ["customers", "heart", "Customer insights", "Who books, who comes back"],
-      ["leads", "funnel", "Leads", "Where new people come from"],
-      ["referrals", "gift", "Invites & referrals", "Friends inviting friends"] ] },
+      sup && ["customers", "heart", "Customer insights", "Who books, who comes back"],
+      sup && ["leads", "funnel", "Leads", "Where new people come from"],
+      sup && ["referrals", "gift", "Invites & referrals", "Friends inviting friends"] ] },
     { t: "Shoots", items: [
       ["requests", "bolt", "Shoot requests", "What customers have asked for"],
       ["bookings", "cal", "Bookings", "Every booked shoot"],
-      ["ops", "gear", "Operations", "Speed, cancellations, cities"],
+      sup && ["ops", "gear", "Operations", "Speed, cancellations, cities"],
       ["timeline", "clock", "Live timeline", "Everything that happens, as it happens"] ] },
     { t: "Money", items: [
       money && ["payments", "card", "Payments & refunds", "Money in from customers, refunds", refunds],
       money && ["payouts", "wallet", "Photographer payouts", "Who's owed, pay them, holds", S.po && S.po.data ? (S.po.data.photographers || []).filter(p => Number(p.ready) > 0).length : 0],
-      money && ["finance", "chart", "Profit & finance", "Revenue, commission, profit"],
-      money && ["commission", "pct", "Commission", "Standard rate and each photographer's rate"],
-      money && ["offers", "tag", "Offers & promo codes", "Discounts and rewards"],
-      money && ["financepack", "dl", "Monthly finance pack", "One Excel file for your CA"] ] },
-    { t: "Grow", items: [
+      sup && ["finance", "chart", "Profit & finance", "Revenue, commission, profit"],
+      sup && ["commission", "pct", "Commission", "Standard rate and each photographer's rate"],
+      sup && ["offers", "tag", "Offers & promo codes", "Discounts and rewards"],
+      sup && ["financepack", "dl", "Monthly finance pack", "One Excel file for your CA"] ] },
+    sup && { t: "Grow", items: [
       ["marketing", "mega", "Marketing", "Campaigns, sources, conversion"],
-      money && ["adspend", "coin", "Ad spend & results", "What each channel costs and brings"],
+      ["adspend", "coin", "Ad spend & results", "What each channel costs and brings"],
       ["segments", "send", "Segments & messages", "Ready-made lists, message them at once"],
       ["map", "map", "Map of India", "Customers, photographers, requests by city"],
-      ["retention", "repeat", "Retention", "Do customers come back?"] ] },
-    { t: "Safety", items: [
-      ["trust", "shield", "Trust & support", "Reports, blocks, suspensions", reports],
-      ["quality", "filter", "Data quality", "Duplicate, fake or unfinished accounts"],
-      money && ["activity", "list", "Staff activity", "Who on the team did what"],
-      sup && ["team", "team", "Team", "Invite staff and set their access"] ] }
-  ];
+      ["retention", "repeat", "Retention", "Do customers come back?"] ] }
+  ].filter(Boolean);
   g.forEach(x => x.items = x.items.filter(Boolean));
   return g.filter(x => x.items.length);
 }
+/* Home for admins and managers: what needs them, then the pages they can open */
+function vStaffHome(){
+  const items = navGroups().flatMap(x => x.items).filter(i => i[0] !== "overview");
+  return `${secT("Your pages", "Everything your role can open. Ask the owner if you need something else.")}
+  <div class="grid">${items.map(([k, i, l, d]) => `<button class="stat tap" style="text-align:left" onclick="goPage('${k}')"><div class="row" style="gap:10px">${ic(i, 20)}<b>${l}</b></div><div class="xs muted2 mt8">${esc(d)}</div></button>`).join("")}</div>`;
+}
+function vNoAccess(){ return `<div class="card"><div class="empty">This page is only for the owner (super admin).</div></div>`; }
 const navItem = k => { for(const g of navGroups()) for(const it of g.items) if(it[0] === k) return it; return null; };
 function goPage(k){ S.navOpen = false; S.menuOpen = false; S.trail = []; S.drill = null; S.u360 = null; S.bk = null; S.poPg = null; S.poOut = null; S.poPay = null; openTab(k); try{ window.scrollTo(0, 0); }catch(e){} }
 
@@ -3191,8 +3204,8 @@ vConsole = function(){
       ${S.note ? `<div class="okbar">${esc(S.note)}</div>` : ""}
       ${S.err ? `<div class="errbar">${esc(S.err)}</div>` : ""}
       <div class="pbody">${
-        S.tab === "commission" ? vCommission() :
-        S.tab === "overview" ? vAttention() + vOverview() :
+        S.tab === "commission" ? (isSup() ? vCommission() : vNoAccess()) :
+        S.tab === "overview" ? vAttention() + (isSup() ? vOverview() : vStaffHome()) :
         tabContent()
       }</div>
     </main>
@@ -3203,7 +3216,8 @@ function tabContent(){
               leads: vLeads, marketing: vMarketing, finance: vFinance, ops: vOps, customers: vCustomers, referrals: vReferrals, trust: vTrust, timeline: vTimeline,
               cities: vCities, health: vHealth, system: vSystem, compliance: vCompliance,
               departments: vDepartments, usage: vUsage, segments: vSegments, map: vMap, adspend: vAdspend, retention: vRetention, scorecard: vScorecard, quality: vQuality, financepack: vFinancePack };
-  return V[S.tab] ? V[S.tab]() : vAttention() + vOverview();
+  if(S.tab !== "overview" && !navItem(S.tab)) return vNoAccess();
+  return V[S.tab] ? V[S.tab]() : vAttention() + (isSup() ? vOverview() : vStaffHome());
 }
 /* one line about every page, and a tip */
 const PAGE_HELP = {
@@ -3229,9 +3243,10 @@ const PAGE_HELP = {
 };
 
 /* ---------- Home: things waiting for a decision ---------- */
+function loadTodo(){ if(S.todoLoading) return; S.todoLoading = 1; sb.rpc("admin_todo").then(({ data }) => { S.todo = data || {}; S.todoLoading = 0; render(); }); }
 function vAttention(){
-  const k = S.insights && S.insights.kpis || {}, money = S.me.role !== "manager", T = S.dept && S.dept.trust && S.dept.trust.data;
-  if(money && S.dept && !S.dept.trust && !S.attLoading){ S.attLoading = true; setTimeout(() => deptLoad("trust", true)); }
+  if(!S.todo) loadTodo();
+  const k = S.todo || {}, money = S.me.role !== "manager", T = { kyc: { submitted: k.kyc_submitted }, reports_open: k.reports_open };
   const waiting = (S.photographers || []).filter(p => p.approval_status === "pending").length;
   if(S.fuDue === undefined && typeof loadFollowUps === "function") setTimeout(loadFollowUps);
   const items = [
@@ -3454,7 +3469,9 @@ render = function(){
 };
 document.addEventListener("click", e => { if(S.menuOpen && !e.target.closest(".pmenu-wrap")){ S.menuOpen = false; render(); } });
 const _openTabOld = openTab;
-openTab = function(k){ if(k === "commission"){ S.tab = k; S.err = ""; S.note = ""; S.comm = null; render(); return; } return _openTabOld(k); };
+openTab = function(k){ if(k === "overview") S.todo = null;
+  if(k !== "overview" && !navItem(k)){ S.tab = k; S.err = ""; S.note = ""; render(); return; }
+  if(k === "commission"){ S.tab = k; S.err = ""; S.note = ""; S.comm = null; render(); return; } return _openTabOld(k); };
 
 /* ===================== PHOTOGRAPHER PAYOUTS =====================
    Who SnapPro owes, how much, for which shoot — and every payout sent.

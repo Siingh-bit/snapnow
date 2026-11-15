@@ -118,7 +118,8 @@ create table if not exists public.offers (
 alter table public.offers
   add column if not exists eta_min           integer default 20,
   add column if not exists note              text,
-  add column if not exists photographer_name text;
+  add column if not exists photographer_name text,
+  add column if not exists pg_amount         integer;   -- what the photographer receives (they quote this; the customer sees price)
 
 create table if not exists public.bookings (
   id              uuid primary key default gen_random_uuid(),
@@ -446,8 +447,14 @@ begin
   new.payment_status    := 'unpaid';
   -- this photographer's commission (their own rate, or a reward that lowers it)
   select c.pct, c.benefit_id into new.commission_pct, new.commission_benefit_id from public.commission_for(o.photographer_id) c;
-  new.commission_amount := round(o.price * new.commission_pct / 100.0);
-  new.photographer_amount := o.price - new.commission_amount;
+  if o.pg_amount is not null and o.pg_amount between 0 and o.price then
+    -- the photographer quoted what they want to earn; SnapPro's fee is the rest of the customer's price
+    new.photographer_amount := o.pg_amount;
+    new.commission_amount   := o.price - o.pg_amount;
+  else
+    new.commission_amount := round(o.price * new.commission_pct / 100.0);
+    new.photographer_amount := o.price - new.commission_amount;
+  end if;
   new.payout_amount     := new.photographer_amount;
   new.payout_status     := 'not_due';
   -- the advance confirms the booking; the balance is paid after the shoot
@@ -1603,8 +1610,9 @@ revoke insert, update, delete on public.payments, public.payment_events, public.
 
 -- A photographer's own quotes, with what happened to each one:
 -- open / chosen (customer picked it, advance not paid yet) / booked / closed.
+drop function if exists public.my_offers();
 create or replace function public.my_offers()
-returns table(id uuid, request_id uuid, price integer, eta_min integer, note text, created_at timestamptz, state text)
+returns table(id uuid, request_id uuid, price integer, eta_min integer, note text, created_at timestamptz, state text, pg_amount integer)
 language sql stable security definer set search_path = public
 as $$
   select o.id, o.request_id, o.price, o.eta_min, o.note, o.created_at,
@@ -1613,7 +1621,8 @@ as $$
            when exists (select 1 from public.bookings b where b.offer_id = o.id and b.status <> 'cancelled') then 'booked'
            when r.status in ('broadcasting','awaiting') then 'open'
            else 'closed'
-         end
+         end,
+         o.pg_amount
     from public.offers o left join public.requests r on r.id = o.request_id
    where o.photographer_id = auth.uid()
    order by o.created_at desc
@@ -5284,7 +5293,7 @@ begin
                 and exists (select 1 from public.push_subscriptions s where s.user_id = g.id)
               limit 300 loop
       perform public._push(b.id, 'request', 'New ' || public._cat_name(r.category) || case r.service when 'video' then ' video' when 'both' then ' photo + video' else '' end || ' shoot in ' || coalesce(r.city, 'your area'),
-        'Budget ₹' || to_char(r.budget, 'FM99,99,99,999') || ' · ' || public._when(r.start_at) || '. Send your price before it closes.',
+        'Up to ₹' || to_char(public._net_of(r.budget, (select c.pct from public.commission_for(b.id) c)), 'FM99,99,99,999') || ' for you · ' || public._when(r.start_at) || '. Send your price before it closes.',
         '/app.html?open=quote&id=' || r.id, 'req-' || r.id);
     end loop;
 
@@ -5604,7 +5613,7 @@ begin
                b.customer_id, b.customer_name, b.photographer_id, b.photographer_name, b.payment_status, b.balance_status,
                b.advance_amount, b.balance_amount, b.cancelled_by,
                case when pg then b.commission_pct end commission_pct, case when pg then b.commission_amount end commission_amount,
-               case when pg then b.photographer_amount end photographer_amount, case when pg then b.payout_status end payout_status,
+               b.photographer_amount photographer_amount, case when pg then b.payout_status end payout_status,
                case when pg then b.payout_at end payout_at, case when pg then b.payout_ref end payout_ref
           from public.bookings b
          where (b.customer_id = me or (b.photographer_id = me and b.status <> 'pending_payment'))
@@ -5646,7 +5655,7 @@ begin
         'customer_name', b.customer_name, 'photographer_name', b.photographer_name, 'price', b.price, 'discount_amount', b.discount_amount,
         'advance_amount', b.advance_amount, 'balance_amount', b.balance_amount, 'payment_status', b.payment_status, 'balance_status', b.balance_status,
         'commission_pct', case when side = 'photographer' then b.commission_pct end, 'commission_amount', case when side = 'photographer' then b.commission_amount end,
-        'photographer_amount', case when side = 'photographer' then b.photographer_amount end, 'payout_status', case when side = 'photographer' then b.payout_status end,
+        'photographer_amount', b.photographer_amount,   -- customers see it as the photographer's fee on their receipt 'payout_status', case when side = 'photographer' then b.payout_status end,
         'payout_at', case when side = 'photographer' then b.payout_at end, 'payout_ref', case when side = 'photographer' then b.payout_ref end,
         'customer_public_id', (select public_id from public.profiles where id = b.customer_id),
         'photographer_public_id', (select public_id from public.profiles where id = b.photographer_id)),
@@ -8003,6 +8012,193 @@ revoke all on function public.admin_finance_pack(date) from public, anon;
 grant execute on function public.admin_finance_pack(date) to authenticated;
 -- <<< 8v admin grow
 
+-- >>> 8w pricing net
+-- ============================================================
+-- 8w. PRICES: PHOTOGRAPHERS QUOTE WHAT THEY EARN
+--     A photographer types the amount they want to receive. The customer sees that amount
+--     plus SnapPro's fee (the photographer's commission % of the customer price):
+--       20% · photographer ₹800 → customer ₹1,000 · photographer ₹1,000 → customer ₹1,250.
+--     The amount is locked on the quote, so the photographer gets exactly what they quoted
+--     even if the commission rate changes before the customer books.
+--     Older app versions that still send a customer price keep working (earnings = price − fee).
+-- ============================================================
+alter table public.offers add column if not exists pg_amount integer;
+
+-- customer price for an amount the photographer wants to receive (rounded up to the rupee)
+create or replace function public._gross_price(p_net integer, p_pct numeric)
+returns integer language sql immutable
+as $$ select ceil(p_net * 100.0 / (100 - least(greatest(coalesce(p_pct, 0), 0), 90)))::int $$;
+-- what the photographer receives from a customer price (e.g. a budget)
+create or replace function public._net_of(p_price integer, p_pct numeric)
+returns integer language sql immutable
+as $$ select case when p_price is null then null else (p_price - round(p_price * least(greatest(coalesce(p_pct, 0), 0), 90) / 100.0))::int end $$;
+
+-- runs before offer_before_insert (triggers fire in name order)
+create or replace function public.offer_a_price_from_earnings()
+returns trigger language plpgsql security definer set search_path = public
+as $$
+declare pct numeric;
+begin
+  select c.pct into pct from public.commission_for(coalesce(new.photographer_id, auth.uid())) c;
+  pct := coalesce(pct, public.commission_pct());
+  if new.pg_amount is not null then
+    if new.pg_amount < 100 then raise exception 'Enter at least ₹100 — the amount you want to receive.'; end if;
+    new.price := public._gross_price(new.pg_amount, pct);
+    if new.price > 1000000 then raise exception 'That''s above the limit for one shoot.'; end if;
+  elsif new.price is not null then
+    new.pg_amount := public._net_of(new.price, pct);
+  end if;
+  return new;
+end $$;
+drop trigger if exists offer_a_price_from_earnings on public.offers;
+create trigger offer_a_price_from_earnings before insert on public.offers
+  for each row execute function public.offer_a_price_from_earnings();
+-- <<< 8w pricing net
+
+-- >>> 8x quote ready
+-- ============================================================
+-- 8x. BEFORE A PHOTOGRAPHER CAN QUOTE
+--     Approved photographers can always see requests (and what they'd earn), but to send a
+--     quote they also need: 3+ portfolio items, their ID + face check VERIFIED by SnapPro,
+--     a profile photo and a short bio — on top of mobile, UPI, gear and the Partner Agreement.
+--     Switch off with platform setting require_profile_to_quote = false.
+-- ============================================================
+alter table public.photographers add column if not exists photo_url text;
+
+-- the profile photo must be one the photographer uploaded to their own folder
+create or replace function public.photographer_photo_check()
+returns trigger language plpgsql
+as $$
+begin
+  if public.snappro_system() or coalesce(public.staff_role() in ('super_admin','admin'), false) then return new; end if;
+  if new.photo_url is not null and new.photo_url !~ ('^https://[^/?#]+/storage/v1/object/public/portfolio/' || new.id::text || '/[A-Za-z0-9._-]+$') then
+    raise exception 'Upload your profile photo from the SnapPro app.';
+  end if;
+  return new;
+end $$;
+drop trigger if exists photographer_photo_check on public.photographers;
+create trigger photographer_photo_check before insert or update of photo_url on public.photographers
+  for each row execute function public.photographer_photo_check();
+
+-- everything still missing before a photographer can be booked (used by admin lists, reminders and the quote check)
+create or replace function public._pg_missing(p uuid)
+returns text[] language sql stable security definer set search_path = public
+as $$
+  select array_remove(array[
+    case when coalesce(pr.phone, '') = '' then 'Mobile number' end,
+    case when not exists (select 1 from public.photographer_payout x where x.id = p and x.upi_id is not null) then 'UPI ID for payouts' end,
+    case when not public._gear_ok(g.gear) then 'Your gear (camera or phone model)' end,
+    case when g.services_confirmed_at is null then 'Photos, video or both' end,
+    case when not exists (select 1 from public.partner_agreements a where a.user_id = p and a.version = public.partner_agreement_version()) then 'Partner Agreement' end,
+    case coalesce((select k.status from public.photographer_kyc k where k.id = p), 'not_submitted')
+      when 'verified' then null when 'submitted' then 'ID check — waiting for SnapPro to verify' else 'Identity check (ID + face photo)' end,
+    case when cardinality(coalesce(g.portfolio, '{}')) < 3 then 'At least 3 portfolio photos or videos' end,
+    case when coalesce(g.photo_url, '') = '' then 'Profile photo' end,
+    case when length(trim(coalesce(g.bio, ''))) < 20 then 'A short bio about you' end
+  ], null)
+  from public.photographers g join public.profiles pr on pr.id = g.id where g.id = p
+$$;
+revoke all on function public._pg_missing(uuid) from public, anon, authenticated;
+
+create or replace function public.offer_ready_guard()
+returns trigger language plpgsql security definer set search_path = public
+as $$
+declare g record; ks text;
+begin
+  if public.snappro_system() or not public._setting_bool('require_profile_to_quote', true) then return new; end if;
+  select portfolio, photo_url, bio into g from public.photographers where id = new.photographer_id;
+  if cardinality(coalesce(g.portfolio, '{}')) < 3 then
+    raise exception 'Add at least 3 photos or videos to your portfolio before sending quotes.';
+  end if;
+  select status into ks from public.photographer_kyc where id = new.photographer_id;
+  if coalesce(ks, 'not_submitted') = 'submitted' then
+    raise exception 'SnapPro is still checking your ID and face photo. You can send quotes as soon as it''s verified.';
+  elsif coalesce(ks, 'not_submitted') <> 'verified' then
+    raise exception 'Complete your ID and face check before sending quotes (Profile → ID check).';
+  end if;
+  if coalesce(g.photo_url, '') = '' or length(trim(coalesce(g.bio, ''))) < 20 then
+    raise exception 'Add a profile photo and a short bio before sending quotes (Profile → Your details).';
+  end if;
+  return new;
+end $$;
+drop trigger if exists offer_ready_guard on public.offers;
+create trigger offer_ready_guard before insert on public.offers
+  for each row execute function public.offer_ready_guard();
+-- <<< 8x quote ready
+
+-- >>> 8y owner only
+-- ============================================================
+-- 8y. NEED-TO-KNOW ADMIN ACCESS
+--     The whole-business view is for the owner (super admin) only: company pages, business
+--     health, usage, finance, marketing and growth, safety (reports, blocks, deletions, staff log),
+--     commission and offers. Admins and managers keep exactly what their daily work needs
+--     (approvals, ID checks, requests, bookings, cities, payments/refunds and payouts for admins).
+--     Each owner-only function is wrapped with a super-admin check, so it holds even if someone
+--     calls the database directly. Safe to re-run.
+-- ============================================================
+create or replace function public._super_only()
+returns void language plpgsql stable security definer set search_path = public
+as $$
+begin
+  if coalesce(public.staff_role() = 'super_admin', false) is not true then
+    raise exception 'Only the owner (super admin) can see this.';
+  end if;
+end $$;
+revoke all on function public._super_only() from public, anon;
+grant execute on function public._super_only() to authenticated;
+
+do $$
+declare
+  owner_only text[] := array[
+    'admin_audit_log','admin_broadcast','admin_broadcast_history','admin_cohorts','admin_commission_overview','admin_compliance',
+    'admin_customers','admin_data_quality','admin_delete_account','admin_deletions','admin_finance','admin_finance_pack','admin_health',
+    'admin_kpis','admin_leads','admin_map','admin_marketing','admin_marketing_roi','admin_media_status','admin_offer_grant','admin_offer_save',
+    'admin_offers_overview','admin_ops','admin_push_health','admin_referral_action','admin_referral_save','admin_referrals','admin_report',
+    'admin_report_action','admin_segment_people','admin_segments','admin_series','admin_set_commission','admin_set_pg_commission',
+    'admin_set_storage_plans','admin_set_user_status','admin_spend_delete','admin_spend_save','admin_system_health','admin_trust','admin_usage'];
+  fns record; r record; inner_name text; callargs text; body text;
+begin
+  for fns in select p.oid, p.proname, p.pronargs, p.proretset, pg_get_function_identity_arguments(p.oid) ia,
+                    pg_get_function_arguments(p.oid) fa, pg_get_function_result(p.oid) res, p.prosrc
+               from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+              where n.nspname = 'public' and p.proname = any(owner_only) loop
+    continue when fns.prosrc like '%_super_only()%';               -- already wrapped
+    inner_name := '_su_' || fns.proname;
+    execute format('drop function if exists public.%I(%s)', inner_name, fns.ia);
+    execute format('alter function public.%I(%s) rename to %I', fns.proname, fns.ia, inner_name);
+    execute format('revoke all on function public.%I(%s) from public, anon, authenticated', inner_name, fns.ia);
+    select coalesce(string_agg('$' || g, ', '), '') into callargs from generate_series(1, fns.pronargs) g;
+    if fns.proretset then body := format('return query select * from public.%I(%s);', inner_name, callargs);
+    elsif fns.res = 'void' then body := format('perform public.%I(%s);', inner_name, callargs);
+    else body := format('return public.%I(%s);', inner_name, callargs); end if;
+    execute format('create function public.%I(%s) returns %s language plpgsql security definer set search_path = public as $w$ begin perform public._super_only(); %s end $w$',
+                   fns.proname, fns.fa, fns.res, body);
+    execute format('revoke all on function public.%I(%s) from public, anon', fns.proname, fns.ia);
+    execute format('grant execute on function public.%I(%s) to authenticated', fns.proname, fns.ia);
+  end loop;
+end $$;
+
+-- "Needs you now" on Home, for every staff role (only what that role works on)
+create or replace function public.admin_todo()
+returns jsonb language plpgsql stable security definer set search_path = public
+as $$
+declare role text := public.staff_role(); money boolean := public._money_ok(); sup boolean := role = 'super_admin';
+begin
+  if role is null then raise exception 'Staff only'; end if;
+  return jsonb_build_object(
+    'photographers_pending', (select count(*) from public.photographers where approval_status = 'pending'),
+    'kyc_submitted', (select count(*) from public.photographer_kyc where status = 'submitted'),
+    'reports_open', case when sup then (select count(*) from public.user_reports where status in ('open','reviewing')) end,
+    'refunds_due', case when money then (select count(*) from public.payments where refund_status in ('refund_due','refund_failed')) end,
+    'balances_due', case when money then (select count(*) from public.bookings where balance_status = 'due') end,
+    'payouts_due', case when money then public._owed_total('ready') end,
+    'now_open_requests', (select count(*) from public.requests where status = 'broadcasting' and expires_at > now()),
+    'role', role);
+end $$;
+revoke all on function public.admin_todo() from public, anon;
+grant execute on function public.admin_todo() to authenticated;
+-- <<< 8y owner only
+
 -- =====================================================================
 -- 9. ONE-OFF CLEAN-UP
 -- =====================================================================
@@ -8097,4 +8293,7 @@ select
   exists (select 1 from pg_proc where proname = 'admin_remind_photographers')   as gear_required_ready,
   exists (select 1 from pg_proc where proname = 'admin_city_people')   as admin_command_ready,
   exists (select 1 from pg_proc where proname = 'admin_switch_media_domain')   as media_domain_ready,
-  exists (select 1 from pg_proc where proname = 'admin_finance_pack')   as admin_grow_ready;
+  exists (select 1 from pg_proc where proname = 'admin_finance_pack')   as admin_grow_ready,
+  exists (select 1 from pg_proc where proname = 'offer_a_price_from_earnings')   as pricing_net_ready,
+  exists (select 1 from pg_proc where proname = 'offer_ready_guard')   as quote_ready_ready,
+  exists (select 1 from pg_proc where proname = '_su_admin_health')   as owner_only_ready;

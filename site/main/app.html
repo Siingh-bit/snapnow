@@ -243,6 +243,7 @@ input[type=datetime-local].input{color-scheme:light}
 
 /* avatars & photos */
 .avatar{border-radius:50%;display:grid;place-items:center;font-weight:600;flex:0 0 auto;position:relative}
+.avatar .av-img{width:100%;height:100%;border-radius:50%;object-fit:cover;display:block}
 .av-40{width:40px;height:40px;font-size:14px}.av-48{width:48px;height:48px;font-size:16px}
 .av-56{width:56px;height:56px;font-size:18px}.av-72{width:72px;height:72px;font-size:24px}
 .avatar.ring{border:3px solid var(--paper)}
@@ -738,8 +739,16 @@ function leftStr(v){
 }
 function hueOf(str){ let h = 2166136261; str = String(str||""); for(let i=0;i<str.length;i++){ h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return Math.abs(h) % 360; }
 function initials(name){ return String(name||"?").trim().split(/\s+/).map(w=>w[0]||"").slice(0,2).join("").toUpperCase() || "?"; }
+/* a photographer's profile photo, if they've added one */
+function photoOf(id){
+  if(!id || typeof S === "undefined") return null;
+  if(S.pg && S.pg.id === id && S.pg.photo_url) return S.pg.photo_url;
+  const p = S.d && S.d.pgs && S.d.pgs[id];
+  return p && p.photo_url || null;
+}
 function avatarHtml(id, name, size, online){
-  const h = hueOf(id || name);
+  const h = hueOf(id || name), ph = photoOf(id);
+  if(ph) return `<div class="avatar ${size||'av-48'}" style="background:hsl(${h} 32% 86%)"><img class="av-img" src="${esc(ph)}" alt="" loading="lazy">${online?'<i class="online-dot"></i>':''}</div>`;
   return `<div class="avatar ${size||'av-48'}" style="background:hsl(${h} 32% 86%);color:hsl(${h} 45% 24%)"><span>${esc(initials(name))}</span>${online?'<i class="online-dot"></i>':''}</div>`;
 }
 function ratingHtml(pg){
@@ -766,6 +775,7 @@ function icon(name, size=20, color="currentColor", w=2){
     cam:'<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>',
     pin:'<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>',
     clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>',
+    lock:'<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
     chat:'<path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.5 8.5 0 0 1-3.9-.9L3 21l1.9-5A8.4 8.4 0 0 1 12 3a8.4 8.4 0 0 1 9 8.5z"/>',
     back:'<path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/>',
     check:'<path d="M20 6L9 17l-5-5"/>',
@@ -1181,7 +1191,7 @@ async function q(promise){
   return res ? res.data : null;
 }
 
-const PG_COLS = "id,display_name,city,state,pincode,bio,categories,years_exp,price_multiplier,rating,review_count,jobs_done,is_online,is_verified,portfolio,created_at,approval_status,review_note,featured_until,travel,travel_km,services,gear,services_confirmed_at,gear_verified_at,gear_photo";
+const PG_COLS = "id,display_name,photo_url,city,state,pincode,bio,categories,years_exp,price_multiplier,rating,review_count,jobs_done,is_online,is_verified,portfolio,created_at,approval_status,review_note,featured_until,travel,travel_km,services,gear,services_confirmed_at,gear_verified_at,gear_photo";
 const REQ_COLS = "id,customer_id,customer_name,category,urgency,duration_hrs,city,state,pincode,budget,deliverables,notes,status,start_at,expires_at,created_at,service,needs_pro";
 const BK_COLS = "id,request_id,offer_id,customer_id,photographer_id,customer_name,photographer_name,category,start_at,duration_hrs,city,pincode,address,price,status,created_at,updated_at,commission_pct,commission_amount,photographer_amount,payment_status,paid_at,payout_status,payout_at,cancelled_from,cancelled_by,advance_amount,balance_amount,balance_status,balance_paid_at,discount_amount,call_token";
 
@@ -1263,8 +1273,9 @@ const api = {
     try{ const { data, error } = await sb.rpc("my_offers"); if(!error && Array.isArray(data)) return data; }catch(e){}
     return q(sb.from("offers").select("id,request_id,price,eta_min,note,created_at").eq("photographer_id", S.me.id).order("created_at", {ascending:false}).limit(60));
   },
-  async sendOffer(reqId, price, eta, note){
-    return q(sb.from("offers").insert({ request_id: reqId, photographer_id: S.me.id, price, eta_min: eta, note }).select("id").single());
+  async sendOffer(reqId, earn, eta, note){
+    /* the photographer quotes what they'll receive; the server adds SnapPro's fee to make the customer's price */
+    return q(sb.from("offers").insert({ request_id: reqId, photographer_id: S.me.id, pg_amount: earn, eta_min: eta, note }).select("id").single());
   },
   async withdrawOffer(id){ return q(sb.from("offers").delete().eq("id", id)); },
 
@@ -1290,9 +1301,10 @@ const api = {
   },
   async commission(){
     try{
-      const rows = await q(sb.from("platform_settings").select("key,value").in("key", ["commission_pct","advance_pct"]));
+      const rows = await q(sb.from("platform_settings").select("key,value").in("key", ["commission_pct","advance_pct","require_profile_to_quote"]));
       (rows || []).forEach(r => {
         const n = Number(r.value);
+        if(r.key === "require_profile_to_quote") S.needProfile = !(r.value === false || r.value === "false");
         if(r.key === "commission_pct" && n >= 0 && n <= 50) S.commission = n;
         if(r.key === "advance_pct" && n > 0 && n <= 100) S.advance = n;
       });
@@ -2876,13 +2888,13 @@ function reqCardPg(r, compact){
   return `<div class="card req-card mt12">
     <div class="between"><div class="row gap8">      <div><div class="bold sm">${esc(cat.name)} · ${esc(svcName(r.service))} · ${r.duration_hrs} hr${r.duration_hrs>1?'s':''}</div>
         <div class="xs muted2">${esc(r.customer_name||"Customer")} · ${esc(r.city||"")} ${esc(r.pincode||"")}${r.needs_pro ? ` · <b>Pro camera only</b>` : ""}</div></div></div>
-      <div class="stack right"><div class="bold sm">${inr(r.budget)}</div><div class="xs muted2">budget</div></div></div>
+      <div class="stack right"><div class="bold sm">${inr(pgNet(r.budget))}</div><div class="xs muted2">budget for you</div></div></div>
     <div class="row gap8 mt8 xs muted">${icon("calendar",13)} ${whenStr(r.start_at)} <span class="muted2">·</span> <span data-until="${esc(r.expires_at)}">${leftStr(r.expires_at)}</span> to quote</div>
     ${!mine && clashWith(r.start_at, r.duration_hrs) ? `<div class="clash mt8">${icon("calendar",13,"var(--red)")} You're busy then — ${esc(clashWith(r.start_at, r.duration_hrs))}</div>` : ""}
     ${!compact && (r.deliverables||[]).length ? `<div class="chips mt8">${r.deliverables.map(x => `<span class="chip">${esc(x)}</span>`).join("")}</div>` : ""}
     ${!compact && r.notes ? `<div class="quote mt8">“${esc(r.notes)}”</div>` : ""}
     ${!compact ? `<div class="right mt6">${safetyLink(r.customer_id, r.customer_name, "request", r.id)}</div>` : ""}
-    ${mine ? `<div class="row gap8 mt12"><span class="chip green">You quoted ${inr(mine.price)}</span><div class="grow"></div><button class="btn sm" onclick="withdrawOffer('${mine.id}')">Withdraw</button></div>`
+    ${mine ? `<div class="row gap8 mt12"><span class="chip green">You quoted ${inr(offerNet(mine))}</span><div class="grow"></div><button class="btn sm" onclick="withdrawOffer('${mine.id}')">Withdraw</button></div>`
       : r.needs_pro && !hasPro(S.pg) ? `<div class="card soft mt12 xs">They want a <b>professional camera</b> — you've listed ${kitKind(S.pg) === "phone" ? "a phone only" : "no camera yet"}. <button class="linkish accent" onclick="openGearSetup()"><b>Update your gear</b></button></div>`
       : !svcOk(S.pg && S.pg.services, r.service) ? `<div class="card soft mt12 xs">They want <b>${esc(svcName(r.service).toLowerCase())}</b> — you offer ${esc(svcName(S.pg && S.pg.services).toLowerCase())} only. <button class="linkish accent" onclick="push('editPg')"><b>Change what you offer</b></button></div>`
       : `<div class="row gap8 mt12"><button class="btn sm grow" onclick="passRequest('${r.id}')">Not for me</button>
@@ -2946,6 +2958,7 @@ function vPgRequests(){
     ${pageHead("Requests", "Shoots customers have posted near you. Send your price before the timer runs out.")}
     ${hint("pgreq", "Tap <b>Send a quote</b> to offer your price. The customer compares quotes and books one — you'll get an alert when they do. Tap <b>Not for me</b> to hide a request.")}
     ${rangeBarHtml()}
+    ${quoteLockedHtml()}
     <div class="chips mt12">
       <button class="chip ${mode==='match'?'accent':''}" onclick="S.prefs.reqMode='match';savePrefs();render()">For you${nFor ? " (" + nFor + ")" : ""}</button>
       <button class="chip ${mode==='city'?'accent':''}" onclick="S.prefs.reqMode='city';savePrefs();render()">All shoot types${nAll ? " (" + nAll + ")" : ""}</button>
@@ -2967,16 +2980,20 @@ function vPgRequests(){
 function quoteStateCard(o){
   const bk = S.d.bookings.find(b => b.offer_id === o.id && b.status !== "cancelled");
   if(o.state === "booked" || bk) return `<button class="card tap mt12" style="text-align:left;width:100%" ${bk ? `onclick="push('job',{id:'${bk.id}'})"` : ""}>
-      <div class="between"><div class="sm">Quote of <b>${inr(o.price)}</b></div><span class="chip green">Booked</span></div>
+      <div class="between"><div class="sm">You quoted <b>${inr(offerNet(o))}</b></div><span class="chip green">Booked</span></div>
       <div class="xs muted2 mt4">The customer booked you and paid the advance.${bk ? " Tap to see the shoot." : ""}</div></button>`;
-  if(o.state === "chosen") return `<div class="card mt12"><div class="between"><div class="sm">Quote of <b>${inr(o.price)}</b></div><span class="chip accent">Chosen</span></div>
+  if(o.state === "chosen") return `<div class="card mt12"><div class="between"><div class="sm">You quoted <b>${inr(offerNet(o))}</b></div><span class="chip accent">Chosen</span></div>
       <div class="xs muted2 mt4">The customer picked your quote and is paying the advance. It moves to your shoots as soon as they pay.</div></div>`;
-  return `<div class="card mt12"><div class="between"><div class="sm">Quote of <b>${inr(o.price)}</b></div><span class="chip">Closed</span></div>
+  return `<div class="card mt12"><div class="between"><div class="sm">You quoted <b>${inr(offerNet(o))}</b></div><span class="chip">Closed</span></div>
       <div class="xs muted2 mt4">Sent ${timeAgo(o.created_at)}. The customer booked someone else or the request closed.</div></div>`;
 }
 
 /* ---------- earnings, completed shoots and reviews (from the home tiles) ---------- */
 const shareOf = b => b.photographer_amount != null ? b.photographer_amount : (b.price || 0);
+/* photographers only ever see what they earn: SnapPro adds its fee to the price the customer sees */
+const pgNet = gross => gross == null || gross === "" ? null : Math.round(gross) - Math.round(Math.round(gross) * myCommission() / 100);
+const offerNet = o => o && o.pg_amount != null ? o.pg_amount : pgNet(o && o.price);
+const grossOfNet = n => Math.ceil(n * 100 / (100 - Math.min(90, Math.max(0, myCommission()))));
 function payoutLabel(b){
   if(b.payment_status === "not_required") return ["Paid to you directly", ""];
   if(b.payout_status === "paid") return ["Sent" + (b.payout_at ? " " + dayStr(b.payout_at) : ""), "green"];
@@ -2990,7 +3007,7 @@ function earningRow(b){
     <div class="grow"><div class="sm bold">${esc(b.customer_name || "Customer")}</div>
       <div class="xs muted2">${esc(catById(b.category).name)} · ${dayStr(b.start_at)}</div>
       <div class="mt4"><span class="chip ${chip}" style="font-size:11px">${esc(lbl)}</span></div></div>
-    <div class="stack right"><div class="bold">${inr(shareOf(b))}</div><div class="xs muted2">of ${inr(b.price)}</div></div></button>`;
+    <div class="stack right"><div class="bold">${inr(shareOf(b))}</div><div class="xs muted2">your earnings</div></div></button>`;
 }
 function vPgEarnings(){
   const e = earnings();
@@ -3003,7 +3020,7 @@ function vPgEarnings(){
       <div class="stat"><div class="s-v">${inr(e.month)}</div><div class="s-l">This month · ${e.monthJobs} shoot${e.monthJobs===1?"":"s"}</div></div>
       <div class="stat"><div class="s-v">${inr(e.total)}</div><div class="s-l">All time · ${e.jobs} shoot${e.jobs===1?"":"s"}</div></div>
     </div>
-    <div class="xs muted2 mt8">Your share after SnapPro's fee, for each completed shoot.</div>
+    <div class="xs muted2 mt8">What you've earned from each completed shoot.</div>
     <button class="li card mt12 w100" onclick="push('payouts')">${icon("wallet",18,"var(--green)")}<div class="grow" style="text-align:left"><div class="sm bold">Payouts</div><div class="xs muted2">Money waiting for you, and every payout with its slip</div></div>${icon("chevron",16,"var(--muted-2)")}</button>
     ${month.length ? `<div class="sec-title mt20">This month</div><div class="card list">${month.map(earningRow).join("")}</div>` : ""}
     ${earlier.length ? `<div class="sec-title mt20">Earlier</div><div class="card list">${earlier.map(earningRow).join("")}</div>` : ""}
@@ -3046,7 +3063,7 @@ function vQuote(p){
   if(!r) return `${topbar("Send a quote")}${emptyState("⏳", "This request has closed", "The customer booked someone or it expired.")}`;
   const gate = readyGate("quote"); if(gate) return `${topbar("Send a quote")}${gate}`;
   const cat = catById(r.category);
-  const suggest = suggestedPrice(r.category, r.duration_hrs, r.urgency, (S.pg && S.pg.price_multiplier) || 1);
+  const suggest = Math.max(100, Math.round(pgNet(suggestedPrice(r.category, r.duration_hrs, r.urgency, (S.pg && S.pg.price_multiplier) || 1)) / 50) * 50), bNet = pgNet(r.budget) || 0;
   if(!S.quote || S.quote.id !== r.id) S.quote = { id: r.id, price: suggest, eta: 30, note: "" };
   const soon = toMs(r.start_at) - Date.now() < 3*3600e3;
   return `${topbar("Send a quote", cat.name + " · " + whenStr(r.start_at))}
@@ -3057,22 +3074,22 @@ function vQuote(p){
       <div class="kv"><span>They want</span><span class="bold">${esc(svcName(r.service))}</span></div>
       <div class="kv"><span>When</span><span>${whenStr(r.start_at)}</span></div>
       <div class="kv"><span>Area</span><span>${esc(r.city||"")} ${esc(r.pincode||"")}</span></div>
-      <div class="kv"><span>Their budget</span><span class="bold">${inr(r.budget)}</span></div>
+      <div class="kv"><span>Their budget for you</span><span class="bold">${inr(bNet)}</span></div>
       ${(r.deliverables||[]).length ? `<div class="kv"><span>Wants</span><span class="right">${r.deliverables.map(esc).join(", ")}</span></div>` : ""}
       ${r.notes ? `<div class="quote mt8">“${esc(r.notes)}”</div>` : ""}
     </div>
-    <div class="field mt16"><label for="qPrice">Your price (₹)</label>
-      <input id="qPrice" class="input big" type="number" inputmode="numeric" min="100" max="1000000" step="50" value="${S.quote.price}" oninput="S.quote.price=Math.round(+this.value||0);setHtml('qHint',quoteHint(${r.budget}))">
-      <div class="chips mt8">${[["Their budget", r.budget], ["Your usual", suggest]].map(([l,v]) => `<button class="chip" onclick="S.quote.price=${v};el('qPrice').value=${v};setHtml('qHint',quoteHint(${r.budget}))">${l}: ${inr(v)}</button>`).join("")}</div>
-      <div id="qHint" class="mt6">${quoteHint(r.budget)}</div>
+    <div class="field mt16"><label for="qPrice">What you'll receive (₹)</label>
+      <input id="qPrice" class="input big" type="number" inputmode="numeric" min="100" max="900000" step="50" value="${S.quote.price}" oninput="S.quote.price=Math.round(+this.value||0);setHtml('qHint',quoteHint(${bNet}))">
+      <div class="chips mt8">${[["Their budget", bNet], ["Your usual", suggest]].map(([l,v]) => `<button class="chip" onclick="S.quote.price=${v};el('qPrice').value=${v};setHtml('qHint',quoteHint(${bNet}))">${l}: ${inr(v)}</button>`).join("")}</div>
+      <div id="qHint" class="mt6">${quoteHint(bNet)}</div>
     </div>
     ${soon ? `<div class="field"><label>How soon can you get there?</label>
       <div class="chips">${[15,30,45,60,90].map(m => `<button class="chip lg ${S.quote.eta===m?'accent':''}" onclick="S.quote.eta=${m};render()">${m} min</button>`).join("")}</div></div>` : ""}
     <div class="field"><label for="qNote">Message to the customer <span class="muted2">(optional)</span></label>
       <textarea id="qNote" class="input" rows="3" maxlength="500" placeholder="e.g. I shoot on a full-frame camera and deliver 50+ edited photos within 48 hours." oninput="S.quote.note=this.value">${esc(S.quote.note)}</textarea></div>
     ${clashWith(r.start_at, r.duration_hrs) ? `<div class="clash mt12">${icon("calendar",14,"var(--red)")} <span><b>You're busy then.</b> ${esc(clashWith(r.start_at, r.duration_hrs))}. Only quote if you can really make it.</span></div>` : ""}
-    ${hint("quote", "Set one price for the whole shoot. The customer sees it next to other quotes. You can withdraw it until they book.")}
-    <div class="note">${icon("wallet",18,"var(--green)")}<div>The customer pays ${S.advance}% online when they book and the rest online after the shoot. SnapPro keeps its fee (as set out in your Partner Agreement) and transfers the rest to you once the shoot is done and fully paid.</div></div>
+    ${hint("quote", "Enter what you want to receive for the whole shoot. The customer sees your quote next to others, with SnapPro's fee included. You can withdraw it until they book.")}
+    <div class="note">${icon("wallet",18,"var(--green)")}<div>The customer pays online — part when they book, the rest after the shoot. Once the shoot is done and fully paid, SnapPro sends you the amount you quoted.</div></div>
     <button class="btn primary block mt16" ${S.loading.quote?"disabled":""} onclick="sendQuote('${r.id}')">${S.loading.quote ? "Sending…" : icon("send",16,"var(--on-text)") + " Send quote"}</button>
     <div id="formErr">${errHtml(S.formErr)}</div>
     <div class="center mt16">${safetyLink(r.customer_id, r.customer_name, "request", r.id)}</div>
@@ -3080,18 +3097,16 @@ function vQuote(p){
 }
 function quoteHint(budget){
   const p = S.quote ? S.quote.price : 0;
-  if(!p || p < 100) return `<div class="field-err">Enter a price of at least ₹100.</div>`;
-  if(p > 1000000) return `<div class="field-err">That's above the ₹10,00,000 limit.</div>`;
-  const cm = myCommission();
-  const fee = Math.round(p * cm / 100);
-  const yours = `<div class="sm mt4">You'll receive <b>${inr(p - fee)}</b></div><div class="xs muted2">SnapPro fee ${inr(fee)}${cm < S.commission ? ' <span class="green bold">(lower fee from your reward)</span>' : ""} · <a class="linkish" onclick="push('agreement')">see Partner Agreement</a></div>`;
+  if(!p || p < 100) return `<div class="field-err">Enter at least ₹100.</div>`;
+  if(grossOfNet(p) > 1000000) return `<div class="field-err">That's above the limit for one shoot.</div>`;
+  const yours = `<div class="sm mt4">You'll receive exactly <b>${inr(p)}</b></div><div class="xs muted2">SnapPro adds its fee to the price the customer sees · <a class="linkish" onclick="push('agreement')">see Partner Agreement</a></div>`;
   if(budget && p > budget) return `<div class="xs muted">${inr(p - budget)} above their budget — add a note explaining what's included.</div>` + yours;
   return `<div class="xs green">Within their budget.</div>` + yours;
 }
 async function sendQuote(id){
   const qv = S.quote, pv = el("qPrice") ? Math.round(+el("qPrice").value || 0) : qv.price;
   qv.price = pv;
-  if(!pv || pv < 100 || pv > 1000000){ S.formErr = "Enter a price between ₹100 and ₹10,00,000."; render(); return; }
+  if(!pv || pv < 100 || grossOfNet(pv) > 1000000){ S.formErr = pv >= 100 ? "That's above the limit for one shoot." : "Enter at least ₹100 — the amount you want to receive."; render(); return; }
   S.loading.quote = true; S.formErr = null; render();
   try{
     await api.sendOffer(id, pv, qv.eta, (qv.note||"").trim());
@@ -3134,10 +3149,8 @@ function vJob(p){
       <div class="kv"><span>When</span><span>${whenStr(b.start_at)}</span></div>
       <div class="kv"><span>Duration</span><span>${b.duration_hrs} hr${b.duration_hrs>1?'s':''}</span></div>
       ${b.photographer_amount != null && b.payment_status !== "not_required" ? `
-      <div class="kv"><span>Booking amount</span><span>${inr(b.price)}</span></div>
-      ${b.balance_status && b.balance_status !== "not_required" ? `<div class="kv"><span>Customer's payments</span><span class="right">Advance ${inr(advOf(b))} paid<br>Balance ${inr(balOf(b))} ${b.balance_status === "paid" ? "paid" : b.balance_status === "due" ? "due now" : "after the shoot"}</span></div>` : ""}
-      <div class="kv"><span>SnapPro fee</span><span>− ${inr(b.commission_amount)}</span></div>
       <div class="kv"><span>You'll be paid</span><span class="bold">${inr(b.photographer_amount)}</span></div>
+      ${b.balance_status && b.balance_status !== "not_required" ? `<div class="kv"><span>Customer's payments</span><span class="right">Advance paid<br>Balance ${b.balance_status === "paid" ? "paid" : b.balance_status === "due" ? "due now" : "after the shoot"}</span></div>` : ""}
       <div class="kv"><span>Payout</span><span class="right">${b.payout_status === "paid" ? "Sent " + (b.payout_at ? dayStr(b.payout_at) : "") : b.payout_status === "due" ? "Being processed" : b.balance_status === "due" ? "After the customer pays the balance" : "After the shoot"}</span></div>`
       : `<div class="kv"><span>You'll be paid</span><span class="bold">${inr(b.price)}</span></div>`}
       <div class="kv top"><span>Address</span><span class="right">${esc(b.address||"—")}<br><span class="xs muted2">${esc(b.city||"")} ${esc(b.pincode||"")}</span></span></div>
@@ -3148,9 +3161,9 @@ function vJob(p){
     ${b.status === "completed" ? `<div class="note mt16">${icon("check",18,"var(--green)")}<div>${b.payment_status === "not_required"
         ? "Shoot complete. Collect " + inr(b.price) + " from " + esc(firstName(b.customer_name)) + " if you haven't already."
         : b.payout_status === "paid" ? "Shoot complete. " + inr(b.photographer_amount) + " has been sent to you."
-        : b.balance_status === "due" ? "Shoot complete. " + esc(firstName(b.customer_name)) + " can now pay the balance of " + inr(balOf(b)) + " in the SnapPro app. Once they do, we'll send your " + inr(b.photographer_amount) + "."
+        : b.balance_status === "due" ? "Shoot complete. " + esc(firstName(b.customer_name)) + " can now pay the balance in the SnapPro app. Once they do, we'll send your " + inr(b.photographer_amount) + "."
         : "Shoot complete. SnapPro will send " + inr(b.photographer_amount) + " to your payout UPI ID."}</div></div>` : ""}
-    ${b.status === "shooting" && b.balance_status === "due" ? `<div class="note mt12">${icon("wallet",18,"var(--accent)")}<div>${esc(firstName(b.customer_name))} can pay the balance of ${inr(balOf(b))} in the SnapPro app now. Please don't take cash — paying in the app is what lets us pay you.</div></div>` : ""}
+    ${b.status === "shooting" && b.balance_status === "due" ? `<div class="note mt12">${icon("wallet",18,"var(--accent)")}<div>${esc(firstName(b.customer_name))} can pay the balance in the SnapPro app now. Please don't take cash — paying in the app is what lets us pay you.</div></div>` : ""}
     ${b.status !== "cancelled" && b.payment_status !== "unpaid" ? `<button class="btn block mt12" onclick="push('receipt',{id:'${b.id}'})">${icon("doc",15)} Earnings receipt</button>` : ""}
     ${canCancel ? `<button class="btn block danger mt12" onclick="jobStep('${b.id}','cancelled')">Cancel this booking</button>` : ""}
     <div class="center mt16">${safetyLink(b.customer_id, b.customer_name, "booking", b.id)}</div>
@@ -3208,8 +3221,11 @@ function vEditPg(){
   const d = S.editPg;
   return `${topbar("Your details")}
   <div class="pad">
+    <div class="row gap16 mb12" style="align-items:center">${avatarHtml(S.me.id, pg.display_name || S.me.name, "av-72")}
+      <div class="grow"><div class="sm bold">Profile photo</div><div class="xs muted2">A clear photo of your face — customers book people they can see.</div>
+        <label class="btn sm mt8">${icon("image",14)} ${pg.photo_url ? "Change photo" : "Add photo"}<input id="pgPhotoIn" type="file" accept="image/*" hidden onchange="uploadPgPhoto(this.files[0])"></label></div></div>
     <div class="field"><label for="epBio">Bio</label>
-      <textarea id="epBio" class="input" rows="4" maxlength="600" oninput="S.editPg.bio=this.value">${esc(d.bio)}</textarea></div>
+      <textarea id="epBio" class="input" rows="4" maxlength="600" placeholder="e.g. Wedding and portrait photographer in Pune. I love natural light and candid moments." oninput="S.editPg.bio=this.value">${esc(d.bio)}</textarea></div>
     <div class="field"><label>Years of experience — <span id="epYrs">${d.years}</span></label>
       <input type="range" min="0" max="30" value="${d.years}" oninput="S.editPg.years=+this.value;setHtml('epYrs',this.value)"></div>
     ${svcPicker(d.services, "S.editPg.services")}
@@ -3222,6 +3238,18 @@ function vEditPg(){
     <button class="btn primary block" onclick="saveEditPg()">Save</button>
     <div id="formErr"></div>
   </div>`;
+}
+async function uploadPgPhoto(file){
+  if(!file || !/^image\//.test(file.type)){ toast("Choose a photo", "JPG, PNG or WebP", "image"); return; }
+  try{
+    setBusyNote("Uploading your photo…");
+    const blob = await resizeImage(file, 480, 0.85), path = S.me.id + "/avatar-" + Date.now() + ".jpg";
+    const { error } = await sb.storage.from("portfolio").upload(path, blob, { contentType: "image/jpeg", upsert: false });
+    if(error) throw error;
+    await api.savePg({ photo_url: sb.storage.from("portfolio").getPublicUrl(path).data.publicUrl });
+    toast("Profile photo saved", "Customers see it on your profile and quotes", "image");
+  }catch(e){ toast("Couldn't upload the photo", (e && e.message) || "Please try again", "x"); }
+  setBusyNote(""); render();
 }
 function epCat(c){
   const a = S.editPg.cats, i = a.indexOf(c);
@@ -3310,7 +3338,7 @@ function vEditPayout(){
   const d = S.payout || {};
   return `${topbar("Payout details")}
   <div class="pad">
-    <p class="sm muted">After each completed shoot, SnapPro sends your share (the booking amount minus SnapPro's fee) to this UPI ID. Only you and the SnapPro team can see it.</p>
+    <p class="sm muted">After each completed shoot, SnapPro sends the amount you quoted to this UPI ID. Only you and the SnapPro team can see it.</p>
     <div class="field mt16"><label for="poUpi">UPI ID</label>
       <input id="poUpi" class="input" autocapitalize="off" spellcheck="false" placeholder="e.g. yourname@okhdfcbank" value="${esc(d.upi_id || "")}"></div>
     <div class="field"><label for="poName">Name on the account</label>
@@ -5202,14 +5230,17 @@ function histCard(b){
       <div class="stack right">${statusChip(BK_LABEL[b.status], BK_CHIP[b.status])}<div class="sm bold mt4">${inr(money)}</div></div></div>
   </button>`;
 }
+/* the customer's breakdown: what goes to the photographer and SnapPro's fee (together = the price) */
+const pgFeeOf = b => b.photographer_amount != null ? Number(b.photographer_amount) : null;
+const snapFeeOf = b => b.photographer_amount != null ? Number(b.price) - Number(b.photographer_amount) : null;
 function downloadStatement(){
   const H = S.hist || {}, rows = histRows(), pay = (H.data && H.data.payments) || [], [f, t] = rangeDates();
   const q = v => { v = v == null ? "" : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
   const d = v => v ? new Date(toMs(v)).toLocaleString("en-IN") : "";
   const lines = ["SnapPro statement," + q(S.me.name) + "," + q(S.me.public_id || "") + ",from " + f + " to " + t, "",
-    "SHOOTS", ["Booking ref","Shoot date","Shoot type","City", isPg() ? "Customer" : "Photographer","Status","Price","Discount"].concat(isPg() ? ["SnapPro fee","Your share","Payout","Paid out on","Payout ref"] : ["Payment"]).join(",")];
-  rows.forEach(b => lines.push([bookingRef(b), d(b.start_at), catById(b.category).name, b.city, isPg() ? b.customer_name : b.photographer_name, BK_LABEL[b.status], b.price, b.discount_amount || 0]
-    .concat(isPg() ? [b.commission_amount, b.photographer_amount, b.payout_status, d(b.payout_at), b.payout_ref] : [b.payment_status]).map(q).join(",")));
+    "SHOOTS", ["Booking ref","Shoot date","Shoot type","City", isPg() ? "Customer" : "Photographer","Status"].concat(isPg() ? ["Your earnings","Payout","Paid out on","Payout ref"] : ["Photographer's fee","SnapPro fee","Price","Discount","Payment"]).join(",")];
+  rows.forEach(b => lines.push([bookingRef(b), d(b.start_at), catById(b.category).name, b.city, isPg() ? b.customer_name : b.photographer_name, BK_LABEL[b.status]]
+    .concat(isPg() ? [b.photographer_amount, b.payout_status, d(b.payout_at), b.payout_ref] : [pgFeeOf(b), snapFeeOf(b), b.price, b.discount_amount || 0, b.payment_status]).map(q).join(",")));
   lines.push("", isPg() ? "PAYOUTS" : "PAYMENTS AND REFUNDS", ["Date","What","Amount","Shoot type",isPg() ? "Customer" : "Photographer","Reference","Method", isPg() ? "Payout no" : "Receipt no"].join(","));
   pay.forEach(p => lines.push([d(p.at), PAY_KIND[p.kind] || p.kind, p.amount, catById(p.category).name, p.who, p.ref, p.method, isPg() ? p.payout_no : p.receipt_no].map(q).join(",")));
   const blob = new Blob(["﻿" + lines.join("\n")], { type: "text/csv" });
@@ -5238,12 +5269,13 @@ function vReceipt(p){
       ${kv("Customer", esc(b.customer_name || "") + (b.customer_public_id ? " · " + esc(b.customer_public_id) : ""))}${kv("Photographer", esc(b.photographer_name || "") + (b.photographer_public_id ? " · " + esc(b.photographer_public_id) : ""))}
       ${kv("Status", esc(BK_LABEL[b.status] || b.status))}</div>
     <div class="card mt12">
-      ${kv("Price", inr(b.price))}${b.discount_amount ? kv("Reward discount", "− " + inr(b.discount_amount)) : ""}
-      ${pgSide ? kv("SnapPro fee", "− " + inr(b.commission_amount)) + kv("<b>Your share</b>", "<b>" + inr(b.photographer_amount) + "</b>")
+      ${pgSide ? kv("<b>Your earnings</b>", "<b>" + inr(b.photographer_amount) + "</b>")
           + ((R.data.payouts || []).map(o => kv(`Paid to you · <a onclick="push('payoutSlip',{id:'${o.id}'})" class="link">${esc(o.payout_no)}</a>`, inr(o.amount) + `<div class="xs muted2">${dayStr(o.paid_at)}${o.utr ? " · ref " + esc(o.utr) : ""}</div>`)).join("")
              + (Number(R.data.owed) > 0 ? kv("Still to come", inr(R.data.owed) + `<div class="xs muted2">${b.payout_status === "on_hold" ? "On hold" : "On the way to you"}</div>`) : "")
              + (!(R.data.payouts || []).length && !(Number(R.data.owed) > 0) ? kv("Payout", "When the customer pays") : ""))
-        : pays.map(x => kv((x.stage === "balance" ? "Balance" : "Advance") + " paid · " + dayStr(x.paid_at), inr(x.amount) + (x.method ? " · " + esc(String(x.method).toUpperCase()) : "") + `<div class="xs muted2">${x.receipt_no ? "Receipt " + esc(x.receipt_no) : ""}${x.receipt_no && x.gateway_payment_id ? " · " : ""}${x.gateway_payment_id ? esc(x.gateway_payment_id) : ""}</div>`)).join("")
+        : (pgFeeOf(b) != null ? kv("Photographer's fee", inr(pgFeeOf(b))) + kv("SnapPro fee", inr(snapFeeOf(b))) : "") + kv("Price", inr(b.price))
+          + (b.discount_amount ? kv("Reward discount", "− " + inr(b.discount_amount)) : "") + kv("<b>Booking total</b>", "<b>" + inr(Number(b.price) - Number(b.discount_amount || 0)) + "</b>")
+          + `</div><div class="card mt12">` + pays.map(x => kv((x.stage === "balance" ? "Balance" : "Advance") + " paid · " + dayStr(x.paid_at), inr(x.amount) + (x.method ? " · " + esc(String(x.method).toUpperCase()) : "") + `<div class="xs muted2">${x.receipt_no ? "Receipt " + esc(x.receipt_no) : ""}${x.receipt_no && x.gateway_payment_id ? " · " : ""}${x.gateway_payment_id ? esc(x.gateway_payment_id) : ""}</div>`)).join("")
           + (refunded ? kv("Refunded", "− " + inr(refunded)) : "") + kv("<b>Total paid</b>", "<b>" + inr(paid - refunded) + "</b>")}</div>
     <div class="xs muted2 mt12">Payments are processed securely by Razorpay. This is a receipt for your records, not a tax invoice. Questions? Write to ${SUPPORT_EMAIL} with ${!pgSide && pays.some(x => x.receipt_no) ? "receipt no. " + esc(pays.find(x => x.receipt_no).receipt_no) : "booking " + esc(b.ref)}.</div>
     <button class="btn primary block mt16 no-print" onclick="window.print()">${icon("doc",16,"var(--on-text)")} Print or save as PDF</button>
@@ -5479,7 +5511,7 @@ function vMyPayouts(){
     ${items.length ? `<div class="sec-title mt20">Waiting for you</div><div class="card list">${items.map(i => `<button class="li" onclick="openShoot('${i.booking_id}')">
         <div class="grow" style="text-align:left"><div class="sm bold">${esc(catById(i.category).name)} · ${esc(i.customer || "")} <span class="xs muted2">(${SHOOT_STATE[i.shoot] || i.shoot})</span></div>
           <div class="xs muted2">${i.stage === "balance" ? "Balance" : "Advance"} · ${dayStr(i.start_at)} · ${esc(i.ref)}</div>
-          <div class="xs muted2">Customer paid ${inr(i.customer_paid)} − SnapPro fee ${inr(i.commission)} = your ${inr(i.share)}</div>
+          <div class="xs muted2">Your earnings for this shoot: ${inr(i.share)}</div>
           <div class="xs mt2 ${i.state === "ready" ? "green" : ""}">${PAY_STATE[i.state] || i.state}</div></div>
         <div class="bold sm ${Number(i.owed) < 0 ? "" : "green"}">${Number(i.owed) < 0 ? "− " + inr(-i.owed) : inr(i.owed)}</div></button>`).join("")}</div>` : ""}
 
@@ -5510,8 +5542,7 @@ function vPayoutSlip(p){
     <div class="sec-title mt16">Shoots in this payout</div>
     <div class="card list">${lines.map(l => `<div class="li" style="cursor:default">
         <div class="grow"><div class="sm bold">${esc(catById(l.category).name)} · ${esc(l.customer || "")}</div>
-          <div class="xs muted2">${esc(l.ref)} · ${dayStr(l.start_at)} · ${l.stage === "balance" ? "Balance" : "Advance"}</div>
-          <div class="xs muted2">Customer paid ${inr(l.customer_paid)} − SnapPro fee ${inr(l.commission)}</div></div>
+          <div class="xs muted2">${esc(l.ref)} · ${dayStr(l.start_at)} · ${l.stage === "balance" ? "Balance" : "Advance"}</div></div>
         <div class="bold sm">${Number(l.amount) < 0 ? "− " + inr(-l.amount) : inr(l.amount)}</div></div>`).join("")}</div>
     <div class="card mt12">
       ${back ? kv("Your share", inr(gross)) + kv("Taken back (refunded shoots)", "− " + inr(back)) : ""}
@@ -6200,26 +6231,48 @@ function readyItems(kind){
       if(!S.agr) loadAgreement();
       out.push({ k: "agr", ok: agreementOk(), wait: !S.agr, t: "Partner Agreement", s: agreementOk() ? "Accepted" : "Read the key points and tick to accept — about 2 minutes", go: "push('agreement')" });
     }
+    if(S.needProfile !== false){
+      const pg = S.pg || {}, nPf = (pg.portfolio || []).length, bioOk = (pg.bio || "").trim().length >= 20;
+      out.push({ k: "pf", ok: nPf >= 3, t: "Portfolio: at least 3 photos or videos", s: nPf >= 3 ? nPf + " added" : nPf + " of 3 added — show customers your best work", go: "push('portfolio')" });
+      if(S.kyc === undefined && typeof loadKyc === "function"){ S.kyc = null; loadKyc().then(() => softRender()); }
+      const ks = S.kyc ? S.kyc.status : null;
+      out.push({ k: "kyc", ok: ks === "verified", wait: !S.kyc, pending: ks === "submitted", t: "ID and face check",
+        s: ks === "verified" ? "Verified by SnapPro" : ks === "submitted" ? "Sent — SnapPro is checking it, usually within a day" : ks === "rejected" ? "Please do it again" + (S.kyc.note ? " — " + S.kyc.note : "") : "Your ID (front and back) and a face photo — about 2 minutes", go: "push('kyc')" });
+      out.push({ k: "prof", ok: !!pg.photo_url && bioOk, t: "Profile photo and a short bio",
+        s: pg.photo_url && bioOk ? "Added" : !pg.photo_url && !bioOk ? "A clear photo of your face and a line or two about you" : !pg.photo_url ? "Add a clear photo of your face" : "Write a line or two about you", go: "S.editPg=null;push('editPg')" });
+    }
   } else {
     const u = hasUpi(false);
     out.push({ k: "upi", ok: u === true, wait: u === undefined, t: "UPI ID", s: u === true ? ((S.upi && S.upi.upi_id) || "Added") : "Only used if SnapPro ever needs to send you money", go: "push('editUpi')" });
   }
   return out;
 }
+/* approved photographers can browse requests (and see what they'd earn) before they're ready to quote */
+function quoteLockedHtml(){
+  const left = readyItems("quote").filter(x => !x.ok && !x.wait);
+  if(!left.length) return "";
+  return `<button class="card tap mt12" style="text-align:left;width:100%;display:block;border-color:var(--accent)" onclick="push('readyQuote')">
+    <div class="row gap12">${icon("lock", 18, "var(--accent)")}<div class="grow"><div class="sm bold">You can see requests, but can't send quotes yet</div>
+      <div class="xs muted2">${left.length === 1 ? "1 thing" : left.length + " things"} left: ${esc(left.map(x => x.t).join(", "))}. Tap to finish.</div></div>${icon("chevron", 16, "var(--muted-2)")}</div></button>`;
+}
+function vReadyQuote(){
+  const g = readyGate("quote");
+  return `${topbar("Finish your profile")}${g || `<div class="pad"><div class="card"><div class="bold">You're all set</div><div class="sm muted mt4">Open any request and tap <b>Send a quote</b>.</div></div></div>`}`;
+}
 /* null when everything's done; otherwise the checklist (or a loading skeleton) */
 function readyGate(kind){
   const items = readyItems(kind);
   if(items.every(x => x.ok)) return null;
-  if(items.some(x => x.wait && !x.ok)) return `<div class="pad"><div class="skeleton"></div></div>`;
+  if(items.some(x => x.wait && !x.ok && !x.pending)) return `<div class="pad"><div class="skeleton"></div></div>`;
   const left = items.filter(x => !x.ok).length;
   let n = 0;
   return `<div class="pad" id="readyList">
     <div class="h2">${kind === "quote" ? "Before you send quotes" : "Before you post your shoot"}</div>
     <div class="sm muted mt4">Your account is ready. ${left === 1 ? "One quick thing is" : left + " quick things are"} needed ${kind === "quote" ? "before you can send quotes and get booked" : "before photographers can quote on your shoot"}. Tap each one — you'll come back here.</div>
-    <div class="stack gap8 mt16">${items.map(x => { if(!x.ok) n++; return `<button class="card tap" style="text-align:left;width:100%;display:block" ${x.ok ? "disabled" : `onclick="${x.go}"`}><div class="row gap12" style="align-items:center">
+    <div class="stack gap8 mt16">${items.map(x => { if(!x.ok) n++; return `<button class="card tap" style="text-align:left;width:100%;display:block" ${x.ok || x.pending ? "disabled" : `onclick="${x.go}"`}><div class="row gap12" style="align-items:center">
       ${x.ok ? icon("check", 20, "var(--green)") : `<span class="chip accent" style="min-width:26px;justify-content:center">${n}</span>`}
       <div class="grow"><div class="bold sm">${esc(x.t)}</div><div class="xs muted2">${esc(x.s)}</div></div>
-      ${x.ok ? `<span class="chip green">Done</span>` : `<span class="btn sm primary">Add</span>`}</div></button>`; }).join("")}</div>
+      ${x.ok ? `<span class="chip green">Done</span>` : x.pending ? `<span class="chip amber">Being checked</span>` : `<span class="btn sm primary">Add</span>`}</div></button>`; }).join("")}</div>
     <div class="xs muted2 mt12">${kind === "quote" ? "When everything is ticked, the quote form opens here." : "When everything is ticked, your shoot form opens here — nothing you've chosen is lost."}</div>
   </div>`;
 }
@@ -6285,7 +6338,7 @@ const STACK_VIEWS = { pg: vPgProfile, photo: vPhoto, newRequest: vNewRequest, re
                       quote: vQuote, job: vJob, portfolio: vPortfolio, editPg: vEditPg,
                       payResult: vPayResult, editPayout: vEditPayout,
                       pgEarnings: vPgEarnings, pgDone: vPgDone, pgReviews: vPgReviews, how: vHow, storage: vStorage, rewards: vRewards, invite: vInvite, kyc: vKyc, deleteAccount: vDeleteAccount, receipt: vReceipt, busyNew: vBusyNew, gear: vGear,
-                      report: vReport, blockedPeople: vBlockedPeople, payouts: vMyPayouts, payoutSlip: vPayoutSlip, agreement: vAgreement, gallery: vGallery, editPhone: vEditPhone, editUpi: vEditUpi, gearSetup: vGearSetup };
+                      report: vReport, blockedPeople: vBlockedPeople, payouts: vMyPayouts, payoutSlip: vPayoutSlip, agreement: vAgreement, gallery: vGallery, editPhone: vEditPhone, editUpi: vEditUpi, gearSetup: vGearSetup, readyQuote: vReadyQuote };
 const CUST_TABS = [ ["home","Home","home",vCustHome], ["explore","Explore","search",vExplore], ["activity","My shoots","calendar",vActivity], ["messages","Messages","chat",vMessages], ["profile","Profile","user",vProfile] ];
 const PG_TABS   = [ ["home","Home","home",vPgHome], ["requests","Requests","bolt",vPgRequests], ["calendar","Calendar","calendar",vCalendar], ["jobs","My shoots","list",vJobs], ["messages","Messages","chat",vMessages], ["profile","Profile","user",vProfile] ];
 const tabsFor = () => isPg() ? PG_TABS : CUST_TABS;
