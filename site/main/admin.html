@@ -3024,6 +3024,14 @@ async function adminDeleteAccount(id){
   openUser(id);
 }
 
+/* Every date and time in admin is shown in Indian time (IST), whatever time zone this computer is set to. */
+(function(){
+  const TZ = "Asia/Kolkata";
+  ["toLocaleString", "toLocaleDateString", "toLocaleTimeString"].forEach(m => {
+    const orig = Date.prototype[m];
+    Date.prototype[m] = function(loc, opt){ return orig.call(this, loc || "en-IN", Object.assign({ timeZone: TZ }, opt || {})); };
+  });
+})();
 /* ===================== EASY CONSOLE =====================
    A simple layout on top of everything above:
    • a side menu in plain words, grouped (People, Shoots, Money…)

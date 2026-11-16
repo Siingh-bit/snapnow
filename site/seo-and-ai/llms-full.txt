@@ -1,6 +1,6 @@
 # SnapPro
 
-> SnapPro (snappro.in) is an Indian online marketplace for booking verified professional photographers and videographers. A customer posts a shoot (type, photos / video / both, date, time, duration, city and budget); verified photographers in that city send their own quotes; the customer compares portfolios, ratings and prices and books online. Payment is through Razorpay: 25% advance to confirm, balance in the app once the shoot starts. There is no booking fee for customers.
+> SnapPro (snappro.in) is an Indian online marketplace for booking verified professional photographers and videographers. A customer posts a shoot (type, photos / video / both, date, time, duration, city and budget); verified photographers in that city send their own quotes; the customer compares portfolios, ratings and prices and books online. Payment is through Razorpay: 25% advance to confirm, balance in the app once the shoot starts. The price in each quote already includes SnapPro's fee — there is no extra booking fee at checkout.
 
 Key facts:
 - Works across India, including Mumbai, Delhi, Bengaluru, Hyderabad, Chennai, Kolkata, Pune, Ahmedabad, Jaipur, Gurugram, Noida, Chandigarh, Lucknow, Kochi, Goa, Udaipur and more.
@@ -138,6 +138,45 @@ Key facts:
 - [Questions to Ask a Videographer Before You Book](https://snappro.in/guides/questions-to-ask-a-videographer/)
 - [How to Check a Photographer Is Genuine Before You Pay](https://snappro.in/guides/how-to-check-a-photographer-is-genuine/)
 
+## Costs and planning
+- [Photography cost calculator](https://snappro.in/photography-cost-calculator/): guide price for any shoot type, length, photos/video and timing
+- [Wedding photographer cost in India](https://snappro.in/guides/wedding-photographer-cost-in-india/)
+- [Pre-Wedding Shoot Cost in India (2026)](https://snappro.in/guides/pre-wedding-shoot-cost-in-india/): about ₹12,000 for 2 hours, ₹24,000 for 4 hours
+- [Birthday Photographer Cost in India (2026)](https://snappro.in/guides/birthday-photographer-cost-in-india/): about ₹3,500 for 2 hours, ₹5,250 for 3 hours
+- [Corporate Photographer Cost in India (2026)](https://snappro.in/guides/corporate-photographer-cost-in-india/): about ₹7,000 for 2 hours, ₹10,500 for 3 hours
+- [Event Photographer Cost in India (2026)](https://snappro.in/guides/event-photographer-cost-in-india/): about ₹4,000 for 2 hours, ₹6,000 for 3 hours
+- [Maternity Photoshoot Cost in India (2026)](https://snappro.in/guides/maternity-photoshoot-cost-in-india/): about ₹6,000 for 2 hours, ₹6,000 for 2 hours
+- [Product Photography Cost in India (2026)](https://snappro.in/guides/product-photography-cost-in-india/): about ₹5,000 for 2 hours, ₹5,000 for 2 hours
+- [Food Photography Cost in India (2026)](https://snappro.in/guides/food-photography-cost-in-india/): about ₹4,500 for 2 hours, ₹4,500 for 2 hours
+- [Fashion Photoshoot Cost in India (2026)](https://snappro.in/guides/fashion-photoshoot-cost-in-india/): about ₹8,000 for 2 hours, ₹12,000 for 3 hours
+- [Real Estate Photography Cost in India (2026)](https://snappro.in/guides/real-estate-photography-cost-in-india/): about ₹5,500 for 2 hours, ₹5,500 for 2 hours
+- [Portrait Photoshoot Cost in India (2026)](https://snappro.in/guides/portrait-photoshoot-cost-in-india/): about ₹2,500 for 2 hours, ₹2,500 for 2 hours
+- [Pet Photographer Cost in India (2026)](https://snappro.in/guides/pet-photographer-cost-in-india/): about ₹2,800 for 2 hours, ₹2,800 for 2 hours
+- [Candid Photographer Cost in India (2026)](https://snappro.in/guides/candid-photographer-cost-in-india/): about ₹2,200 for 2 hours, ₹2,200 for 2 hours
+- [Maternity Photoshoot Ideas](https://snappro.in/guides/maternity-photoshoot-ideas/)
+- [Birthday Photoshoot Ideas](https://snappro.in/guides/birthday-photoshoot-ideas/)
+- [Couple Photoshoot Ideas](https://snappro.in/guides/couple-photoshoot-ideas/)
+- [Family Photoshoot Ideas](https://snappro.in/guides/family-photoshoot-ideas/)
+
+## Photoshoot locations
+- [Photoshoot locations in India](https://snappro.in/photoshoot-locations/)
+- [Photoshoot locations in Mumbai](https://snappro.in/photoshoot-locations-in-mumbai/): Marine Drive, Bandra Fort and Bandstand, Gateway of India and Colaba, Kala Ghoda and Fort
+- [Photoshoot locations in Delhi](https://snappro.in/photoshoot-locations-in-delhi/): Lodhi Garden, Sunder Nursery, Humayun's Tomb, Qutub Minar complex
+- [Photoshoot locations in Bengaluru](https://snappro.in/photoshoot-locations-in-bengaluru/): Cubbon Park, Lalbagh Botanical Garden, Bangalore Palace, Nandi Hills
+- [Photoshoot locations in Hyderabad](https://snappro.in/photoshoot-locations-in-hyderabad/): Golconda Fort, Qutb Shahi Tombs, Chowmahalla Palace, Taramati Baradari
+- [Photoshoot locations in Chennai](https://snappro.in/photoshoot-locations-in-chennai/): Marina Beach, Elliot's Beach, Besant Nagar, San Thome Basilica, Mylapore
+- [Photoshoot locations in Kolkata](https://snappro.in/photoshoot-locations-in-kolkata/): Victoria Memorial, Princep Ghat, Howrah Bridge and the flower market, Kumartuli
+- [Photoshoot locations in Pune](https://snappro.in/photoshoot-locations-in-pune/): Shaniwar Wada, Aga Khan Palace, Pune–Okayama Friendship Garden, Pashan Lake
+- [Photoshoot locations in Ahmedabad](https://snappro.in/photoshoot-locations-in-ahmedabad/): Sabarmati Riverfront, Adalaj Stepwell, Sarkhej Roza, Kankaria Lake
+- [Photoshoot locations in Jaipur](https://snappro.in/photoshoot-locations-in-jaipur/): Amer Fort, Hawa Mahal, Nahargarh Fort, Patrika Gate
+- [Photoshoot locations in Gurugram](https://snappro.in/photoshoot-locations-in-gurugram/): Sultanpur National Park, Leisure Valley Park, Damdama Lake, Aravalli Biodiversity Park
+- [Photoshoot locations in Noida](https://snappro.in/photoshoot-locations-in-noida/): Okhla Bird Sanctuary, Noida Botanical Garden, Rashtriya Dalit Prerna Sthal, Worlds of Wonder area and Sector 18
+- [Photoshoot locations in Chandigarh](https://snappro.in/photoshoot-locations-in-chandigarh/): Rock Garden, Sukhna Lake, Zakir Hussain Rose Garden, Capitol Complex
+- [Photoshoot locations in Lucknow](https://snappro.in/photoshoot-locations-in-lucknow/): Bara Imambara, Rumi Darwaza, British Residency, Ambedkar Memorial Park
+- [Photoshoot locations in Kochi](https://snappro.in/photoshoot-locations-in-kochi/): Fort Kochi and the Chinese fishing nets, Mattancherry and Jew Town, Marine Drive Kochi, Cherai Beach
+- [Photoshoot locations in Goa](https://snappro.in/photoshoot-locations-in-goa/): Fontainhas, Panaji, Chapora Fort, Aguada Fort and lighthouse, Palolem Beach
+- [Photoshoot locations in Udaipur](https://snappro.in/photoshoot-locations-in-udaipur/): Lake Pichola and Ambrai Ghat, City Palace, Fateh Sagar Lake, Saheliyon ki Bari
+
 ## For photographers
 - [Join SnapPro as a photographer](https://snappro.in/for-photographers/)
 - [Freelance photographer jobs in India](https://snappro.in/photographer-jobs/): how photographers and videographers get shoot requests on SnapPro — free to join, commission only on completed bookings
@@ -264,7 +303,7 @@ SnapPro (snappro.in) is an online marketplace in India for booking professional 
 Sign up at snappro.in, post your shoot (it takes about a minute), and photographers who shoot that kind of work in your city send quotes. Compare them, tap Book, and pay a 25% advance to confirm. The rest is paid in the app once the shoot starts.
 
 ### How much does it cost to book a photographer on SnapPro?
-Each photographer sets their own price in their quote, and there is no booking fee for customers. As a starting guide, a 2-hour shoot on SnapPro is suggested at about ₹2,200 for candid, ₹2,500 for portraits, ₹3,500 for birthdays, ₹4,000 for events, ₹7,000 for corporate and ₹12,000 for weddings — longer shoots and same-day bookings cost more.
+Each photographer sets their own price in their quote, and that price already includes SnapPro's fee — there is no extra booking fee. As a starting guide, a 2-hour shoot on SnapPro is suggested at about ₹2,200 for candid, ₹2,500 for portraits, ₹3,500 for birthdays, ₹4,000 for events, ₹7,000 for corporate and ₹12,000 for weddings — longer shoots and same-day bookings cost more.
 
 ### Are photographers on SnapPro verified?
 Yes. Every photographer is reviewed by the SnapPro team before they can quote, and photographers verify their identity with a government ID and a face photo. Ratings come only from customers who completed a booking.
