@@ -1514,7 +1514,7 @@ function vPros(){
   ${!live.length ? `<div class="card"><div class="empty">No approved photographers yet.</div></div>` : `<div class="card tblwrap"><table>
     <thead><tr><th>Name</th><th>City</th><th>Rating</th><th>Shoots</th><th>Photos</th><th>Storage</th><th>Offers &amp; gear</th><th>Records</th><th>Status</th><th>Verified</th>${isSup() ? "<th>Commission</th>" : ""}</tr></thead>
     <tbody>${live.map(p=>`<tr>
-      <td style="font-weight:600">${esc(p.display_name||'—')}${p.featured_until && Date.parse(p.featured_until) > Date.now() ? ' <span class="chip amber">★ Featured</span>' : ""}<div class="xs" style="color:var(--accent)">${esc(idOf(p.id))}</div><div class="xs muted2">${emailOf(p.id) ? esc(emailOf(p.id)) + " · " : ""}approved ${fmt(p.approved_at || p.created_at)}</div></td>
+      <td style="font-weight:600">${esc(p.display_name||'—')}${(S.idName || {})[p.id] && S.idName[p.id].legal_name !== p.display_name ? `<div class="xs muted2" style="font-weight:400">ID name: ${esc(S.idName[p.id].legal_name)}</div>` : ""}${p.featured_until && Date.parse(p.featured_until) > Date.now() ? ' <span class="chip amber">★ Featured</span>' : ""}<div class="xs" style="color:var(--accent)">${esc(idOf(p.id))}</div><div class="xs muted2">${emailOf(p.id) ? esc(emailOf(p.id)) + " · " : ""}approved ${fmt(p.approved_at || p.created_at)}</div></td>
       <td class="muted">${esc(p.city||'—')}${p.state?', '+esc(p.state):''}</td>
       <td>${p.review_count ? Number(p.rating).toFixed(1)+'★ <span class="muted2">('+p.review_count+')</span>' : '<span class="muted2">No reviews</span>'}</td>
       <td>${p.jobs_done||0}</td><td>${(p.portfolio||[]).length}</td><td>${storageCell(p)}</td><td>${gearCell(p)}</td><td>${pgDocButtons(p)}</td>
@@ -1654,6 +1654,7 @@ async function loadKycAll(){
   const { data, error } = await sb.from("photographer_kyc").select("*");
   if(error){ S.kycErr = /photographer_kyc|does not exist|schema cache/i.test(error.message) ? "ID checks need the latest database update." : error.message; S.kycAll = {}; render(); return; }
   S.kycAll = {}; (data || []).forEach(k => S.kycAll[k.id] = k);
+  try{ const r2 = await sb.from("photographer_identity").select("id,legal_name,business_name"); S.idName = {}; (r2.data || []).forEach(x => S.idName[x.id] = x); }catch(e){}
   // short-lived private links to the photos (admins only)
   const paths = []; (data || []).forEach(k => [k.front_path, k.back_path, k.selfie_path].forEach(p => p && paths.push(p)));
   S.kycUrls = S.kycUrls || {};
@@ -1672,7 +1673,8 @@ function kycBox(p, canDecide){
   return `<div class="kycbox mt12">
     <div class="between" style="flex-wrap:wrap;gap:8px"><div><b>ID check</b> · ${esc(ID_NAMES[k.id_type] || k.id_type)}${k.id_last4 ? " · ends " + esc(k.id_last4) : ""} · sent ${ago(k.submitted_at)}</div>${chip}</div>
     <div class="kimgs mt8">${p.photo_url ? `<a class="kimg" href="${esc(p.photo_url)}" target="_blank" rel="noopener"><img src="${esc(p.photo_url)}" alt="Profile photo"><i>Profile photo</i></a>` : ""}${img(k.selfie_path, "Face photo")}${img(k.front_path, k.id_type === "passport" ? "Photo page" : "ID front")}${img(k.back_path, k.id_type === "passport" ? "Address page" : "ID back")}</div>
-    <div class="xs muted2 mt8">Check: the face matches the ID photo, the name matches "${esc(p.display_name || "")}", the ID isn't expired or edited, and the photo is clear.</div>
+    <div class="xs mt8"><b>Name as on their ID (they typed):</b> ${esc(((S.idName || {})[p.id] || {}).legal_name || "not added yet")} · <b>Customers see:</b> ${esc(p.display_name || "")}</div>
+    <div class="xs muted2 mt8">Check: the face matches the ID photo, the name on the ID matches "${esc(((S.idName || {})[p.id] || {}).legal_name || p.display_name || "")}", the ID isn't expired or edited, and the photo is clear.</div>
     ${k.note && k.status === "rejected" ? `<div class="xs mt8" style="color:#ff8f9b">Asked: ${esc(k.note)}</div>` : ""}
     ${canDecide && k.status !== "verified" ? `<div class="row mt12" style="flex-wrap:wrap">
       <button class="btn sm primary" onclick="reviewKyc('${p.id}','verified')">ID looks genuine</button>

@@ -8065,6 +8065,58 @@ create trigger offer_a_price_from_earnings before insert on public.offers
 -- ============================================================
 alter table public.photographers add column if not exists photo_url text;
 
+-- Two names for every photographer: their name exactly as on their government ID (private — used for the
+-- ID check, payouts and agreements) and an optional business / studio name. Customers see the business
+-- name, or the person's name when there's no business name (photographers.display_name).
+create table if not exists public.photographer_identity (
+  id            uuid primary key references public.photographers(id) on delete cascade,
+  legal_name    text not null check (length(trim(legal_name)) between 2 and 100),
+  business_name text check (business_name is null or length(trim(business_name)) between 1 and 100),
+  updated_at    timestamptz not null default now()
+);
+alter table public.photographer_identity enable row level security;
+drop policy if exists identity_own_read on public.photographer_identity;
+create policy identity_own_read on public.photographer_identity for select to authenticated using (id = auth.uid() or public.is_staff());
+drop policy if exists identity_own_insert on public.photographer_identity;
+create policy identity_own_insert on public.photographer_identity for insert to authenticated with check (id = auth.uid());
+drop policy if exists identity_own_update on public.photographer_identity;
+create policy identity_own_update on public.photographer_identity for update to authenticated
+  using (id = auth.uid() or coalesce(public.staff_role() in ('super_admin','admin'), false))
+  with check (id = auth.uid() or coalesce(public.staff_role() in ('super_admin','admin'), false));
+revoke delete on public.photographer_identity from anon, authenticated;
+
+create or replace function public.photographer_identity_check()
+returns trigger language plpgsql security definer set search_path = public
+as $$
+begin
+  new.legal_name := regexp_replace(trim(new.legal_name), '\s+', ' ', 'g');
+  new.business_name := nullif(regexp_replace(trim(coalesce(new.business_name, '')), '\s+', ' ', 'g'), '');
+  new.updated_at := now();
+  if tg_op = 'UPDATE' and new.legal_name is distinct from old.legal_name and not public.snappro_system()
+     and not coalesce(public.staff_role() in ('super_admin','admin'), false)
+     and exists (select 1 from public.photographer_kyc k where k.id = new.id and k.status = 'verified') then
+    raise exception 'Your ID is verified, so your legal name can''t be changed here. Write to SnapPro support if it''s wrong.';
+  end if;
+  return new;
+end $$;
+drop trigger if exists photographer_identity_check on public.photographer_identity;
+create trigger photographer_identity_check before insert or update on public.photographer_identity
+  for each row execute function public.photographer_identity_check();
+
+-- a deleted account keeps no legal name
+create or replace function public.photographer_identity_forget()
+returns trigger language plpgsql security definer set search_path = public
+as $$
+begin
+  if new.display_name = 'Deleted photographer' and old.display_name is distinct from new.display_name then
+    delete from public.photographer_identity where id = new.id;
+  end if;
+  return new;
+end $$;
+drop trigger if exists photographer_identity_forget on public.photographers;
+create trigger photographer_identity_forget after update of display_name on public.photographers
+  for each row execute function public.photographer_identity_forget();
+
 -- the profile photo must be one the photographer uploaded to their own folder
 create or replace function public.photographer_photo_check()
 returns trigger language plpgsql
@@ -8086,6 +8138,7 @@ returns text[] language sql stable security definer set search_path = public
 as $$
   select array_remove(array[
     case when coalesce(pr.phone, '') = '' then 'Mobile number' end,
+    case when not exists (select 1 from public.photographer_identity i where i.id = p) then 'Your name as on your government ID' end,
     case when not exists (select 1 from public.photographer_payout x where x.id = p and x.upi_id is not null) then 'UPI ID for payouts' end,
     case when not public._gear_ok(g.gear) then 'Your gear (camera or phone model)' end,
     case when g.services_confirmed_at is null then 'Photos, video or both' end,
@@ -8118,6 +8171,9 @@ begin
   end if;
   if coalesce(g.photo_url, '') = '' or length(trim(coalesce(g.bio, ''))) < 20 then
     raise exception 'Add a profile photo and a short bio before sending quotes (Profile → Your details).';
+  end if;
+  if not exists (select 1 from public.photographer_identity i where i.id = new.photographer_id) then
+    raise exception 'Add your name exactly as on your government ID before sending quotes (Profile → Name).';
   end if;
   return new;
 end $$;
@@ -8296,4 +8352,5 @@ select
   exists (select 1 from pg_proc where proname = 'admin_finance_pack')   as admin_grow_ready,
   exists (select 1 from pg_proc where proname = 'offer_a_price_from_earnings')   as pricing_net_ready,
   exists (select 1 from pg_proc where proname = 'offer_ready_guard')   as quote_ready_ready,
-  exists (select 1 from pg_proc where proname = '_su_admin_health')   as owner_only_ready;
+  exists (select 1 from pg_proc where proname = '_su_admin_health')   as owner_only_ready,
+  exists (select 1 from pg_class where relname = 'photographer_identity')   as pg_identity_ready;
