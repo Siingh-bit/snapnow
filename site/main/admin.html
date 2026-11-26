@@ -588,7 +588,7 @@ async function signOut(){
 async function loadData(){
   const isSuper = S.me.role === 'super_admin';
   const [bk, rq, pg, st, inv, ready, est] = await Promise.all([
-    sb.from('bookings').select('id,request_id,customer_name,photographer_name,category,start_at,city,pincode,price,status,payment_status,balance_status,created_at').order('created_at',{ascending:false}).limit(1000),
+    sb.from('bookings').select('id,request_id,customer_name,photographer_name,category,start_at,city,pincode,price,photographer_amount,status,payment_status,balance_status,created_at').order('created_at',{ascending:false}).limit(1000),
     sb.from('requests').select('id,customer_name,category,city,pincode,budget,status,start_at,created_at').order('created_at',{ascending:false}).limit(1000),
     sb.from('photographers').select('id,display_name,photo_url,city,state,pincode,bio,categories,years_exp,services,gear,travel,travel_km,services_confirmed_at,gear_photo,gear_verified_at,reminded_at,rating,review_count,jobs_done,is_online,is_verified,portfolio,created_at,approval_status,review_note,submitted_at,approved_at,commission_pct,featured_until').order('created_at',{ascending:false}).limit(500),
     sb.from('staff').select('id,email,name,role,status,created_at').order('created_at'),
@@ -1400,7 +1400,7 @@ function bkRowsHtml(){
   return list.map(b=>`<tr class="rowlink" onclick="openBooking('${b.id}')">
       <td>${when(b.start_at)}</td><td class="xs">${payRef(b.id)}</td><td>${esc(b.customer_name||'—')}</td><td>${esc(b.photographer_name||'—')}</td>
       <td class="muted">${esc(CAT_NAMES[b.category]||b.category||'—')}</td><td class="muted">${esc(b.city||'—')} ${esc(b.pincode||'')}</td>
-      <td>${statusChip(b.status === 'pending_payment' ? 'awaiting payment' : b.status)}</td>${money?`<td>${inr(b.price)}</td><td class="xs">${esc(({paid:'Paid online',unpaid:'Unpaid',refund_due:'Refund due',refund_pending:'Refund processing',refunded:'Refunded',partially_refunded:'Part refunded',not_required:'Paid directly'})[b.payment_status] || b.payment_status || '—')}${b.payment_status === 'paid' && b.balance_status && b.balance_status !== 'not_required' ? `<div class="muted2">${b.balance_status === 'paid' ? 'Paid in full' : b.balance_status === 'due' ? 'Balance due' : 'Advance paid'}</div>` : ''}</td>`:''}
+      <td>${statusChip(b.status === 'pending_payment' ? 'awaiting payment' : b.status)}</td>${money?`<td>${dualPrice(b.price, b.photographer_amount)}</td><td class="xs">${esc(({paid:'Paid online',unpaid:'Unpaid',refund_due:'Refund due',refund_pending:'Refund processing',refunded:'Refunded',partially_refunded:'Part refunded',not_required:'Paid directly'})[b.payment_status] || b.payment_status || '—')}${b.payment_status === 'paid' && b.balance_status && b.balance_status !== 'not_required' ? `<div class="muted2">${b.balance_status === 'paid' ? 'Paid in full' : b.balance_status === 'due' ? 'Balance due' : 'Advance paid'}</div>` : ''}</td>`:''}
     </tr>`).join('');
 }
 function vBookings(){
@@ -1412,7 +1412,7 @@ function vBookings(){
         <button class="btn sm" onclick="csvOf('bookings',['created_at','start_at','id','customer_name','photographer_name','category','city','pincode','status'${money?",'price','payment_status','balance_status'":""}],bkList())">Download CSV</button></div></div>
     <div class="xs muted2 mt8">Tap a booking to see payments, quotes, chat activity and the review.</div>
     <div class="card tblwrap mt8"><table>
-    <thead><tr><th>Shoot time</th><th>Booking</th><th>Customer</th><th>Photographer</th><th>Type</th><th>City</th><th>Status</th>${money?'<th>Price</th><th>Payment</th>':''}</tr></thead>
+    <thead><tr><th>Shoot time</th><th>Booking</th><th>Customer</th><th>Photographer</th><th>Type</th><th>City</th><th>Status</th>${money?'<th>Price → photographer</th><th>Payment</th>':''}</tr></thead>
     <tbody id="bkBody">${bkRowsHtml()}</tbody></table></div>`;
 }
 function rqRowsHtml(){
@@ -1422,7 +1422,7 @@ function rqRowsHtml(){
     return `<tr ${bk ? `class="rowlink" onclick="openBooking('${bk.id}')" title="Open the booking"` : ""}>
       <td class="muted">${when(r.created_at)}</td><td>${esc(r.customer_name||'—')}</td><td>${esc(CAT_NAMES[r.category]||r.category||'—')}</td>
       <td class="muted">${esc(r.city||'—')} ${esc(r.pincode||'')}</td><td>${when(r.start_at)}</td>
-      <td>${inr(r.budget)}</td><td>${statusChip(r.status === 'broadcasting' ? 'open' : r.status === 'matched' ? 'booked' : r.status)}</td><td>${bk ? '<span class="linkbtn">Booking ›</span>' : ''}</td>
+      <td>${dualPrice(r.budget, null, true)}</td><td>${statusChip(r.status === 'broadcasting' ? 'open' : r.status === 'matched' ? 'booked' : r.status)}</td><td>${bk ? '<span class="linkbtn">Booking ›</span>' : ''}</td>
     </tr>`; }).join('');
 }
 function vRequests(){
@@ -1958,15 +1958,16 @@ async function openDrill(kind, title, arg, allTime){
 function closeDrill(){ S.drill = null; S.bk = null; render(); }
 const COL_LABEL = { shoot_time:"Shoot time", booked_at:"Booked", posted:"Posted", sent:"Sent", at:"When", joined:"Joined", last_sign_in:"Last sign-in",
   first_at:"First visit", last_at:"Last visit", photographer_share:"Photographer share", first_quote_min:"First quote (min)", minutes_after_post:"Min after post",
-  booked_price:"Booked price", lowest_quote:"Lowest quote", pay_to_upi:"Pay to (UPI)", razorpay_id:"Razorpay ID", razorpay_refund:"Razorpay refund",
+  booked_price:"Booked price", photographer_gets:"Photographer gets", lowest_quote:"Lowest quote", pay_to_upi:"Pay to (UPI)", razorpay_id:"Razorpay ID", razorpay_refund:"Razorpay refund",
   signed_in_as:"Signed in as", email_confirmed:"Email confirmed", paid_online:"Paid online", quotes_sent:"Quotes sent", shoot_types:"Shoot types",
   approved_at:"Approved", last_message:"Last message", snappro_id:"SnapPro ID", commission_pct:"Commission %", from_customer:"From customer", from_photographer:"From photographer", cancelled_by:"Cancelled by",
   cancelled_from:"Cancelled at stage", started_by:"Started by", first_day:"First day", last_day:"Last day", order_id:"Our ref" };
-const MONEY_COLS = /^(price|amount|commission|photographer_share|budget|booked_price|lowest_quote|earnings|paid_online|refunded|spent|value|earned)$/;
+const MONEY_COLS = /^(price|photographer_gets|amount|commission|photographer_share|budget|booked_price|lowest_quote|earnings|paid_online|refunded|spent|value|earned)$/;
 const HIDE_COLS = new Set(["id","booking_id"]);
 function cellHtml(k, v){
   if(v == null || v === "") return `<span class="muted2">—</span>`;
   if(typeof v === "boolean") return v ? "Yes" : "No";
+  if((k === "budget" || k === "lowest_quote") && moneyRole()) return dualPrice(v, null, true);
   if(MONEY_COLS.test(k)) return inr(v);
   if(/(_at|^at|time|posted|sent|joined|closes|last_sign_in|last_message|^day|_day)$/.test(k) && /^\d{4}-\d\d-\d\d/.test(String(v)))
     return String(v).length === 10 ? fmt(v) : when(v);
@@ -1983,7 +1984,7 @@ function drillRows(){
 /* the database returns rows as JSON objects (no column order), so order them here */
 const COL_ORDER = ["snappro_id","shoot_time","booked_at","posted","sent","at","requested","done","day","first_at","last_at","first_day","last_day","joined",
   "name","customer","photographer","signed_in_as","role","email","phone","category","shoot_types","city","state","pincode","hours","stage",
-  "status","approval","outcome","available","verified","budget","price","lowest_quote","booked_price","amount","commission","photographer_share",
+  "status","approval","outcome","available","verified","budget","price","photographer_gets","lowest_quote","booked_price","amount","commission","photographer_share",
   "refunded","method","payment","balance","payout","pay_to_upi","payout_ref","paid_out_at","refund","quotes","quotes_sent","first_quote_min",
   "minutes_after_post","requests","bookings","paid_online","jobs_done","rating","reviews","stars","comment","photos","earnings","messages",
   "from_customer","from_photographer","last_message","views","days","device","path","referrer","cancelled_by","cancelled_from","reason",
@@ -2051,15 +2052,15 @@ function vBooking(){
         ${kv("Review", d.review ? esc(d.review.stars + "★ " + (d.review.comment || "")) : "Not rated yet")}</div>
     </div>
     ${money ? `<div class="card mt12"><div class="sec">Money</div>
-      <div class="grid">${[["Price", inr(b.price)], ["Advance", inr(b.advance_amount)], ["Balance", inr(b.balance_amount) + " · " + esc(b.balance_status || "—")],
-        ...(isSup() ? [["Commission", inr(b.commission_amount) + (b.commission_pct != null ? " (" + Number(b.commission_pct) + "%)" : "")]] : []), ["Reward discount", b.discount_amount ? "− " + inr(b.discount_amount) : "—"], ["Photographer share", inr(b.photographer_amount)], ["Payout", esc(b.payout_status) + (b.payout_ref ? " · " + esc(b.payout_ref) : "")]]
+      <div class="grid">${[["Customer pays", inr(b.price)], ["Advance", inr(b.advance_amount)], ["Balance", inr(b.balance_amount) + " · " + esc(b.balance_status || "—")],
+        ...(isSup() ? [["Commission", inr(b.commission_amount) + (b.commission_pct != null ? " (" + Number(b.commission_pct) + "%)" : "")]] : []), ["Reward discount", b.discount_amount ? "− " + inr(b.discount_amount) : "—"], ["Photographer gets", inr(b.photographer_amount)], ["Payout", esc(b.payout_status) + (b.payout_ref ? " · " + esc(b.payout_ref) : "")]]
         .map(([l, v]) => `<div><div class="xs muted2">${l}</div><div class="sm" style="font-weight:700">${v}</div></div>`).join("")}</div>
       ${(d.payments || []).length ? `<div class="tblwrap mt12"><table><thead><tr><th>Part</th><th>Amount</th><th>Status</th><th>Method</th><th>When</th><th>Razorpay ID</th><th>Refund</th></tr></thead><tbody>
         ${d.payments.map(p => `<tr><td>${esc(p.stage)}</td><td>${inr(p.amount)}</td><td>${statusChip(p.status)}</td><td>${esc(methodName(p.method))}</td><td>${when(p.at)}</td><td class="xs">${esc(p.razorpay_id || "—")}</td><td>${esc(p.refund)}${Number(p.refunded) ? " · " + inr(p.refunded) : ""}</td></tr>`).join("")}
       </tbody></table></div>` : `<div class="xs muted2 mt8">No payment attempts yet.</div>`}</div>` : ""}
     <div class="card mt12"><div class="sec">Quotes on this request (${(d.quotes || []).length})</div>
-      ${(d.quotes || []).map(q => `<div class="kvr"><span>${esc(q.photographer)}${q.chosen ? ' <span class="chip green">chosen</span>' : ""}</span><span>${inr(q.price)} · ${when(q.sent)}</span></div>`).join("") || `<div class="xs muted2">None</div>`}
-      ${d.request ? `<div class="xs muted2 mt8">Customer's budget ${inr(d.request.budget)} · posted ${when(d.request.created_at)}${d.request.notes ? " · “" + esc(d.request.notes) + "”" : ""}</div>` : ""}</div>`}
+      ${(d.quotes || []).map(q => `<div class="kvr"><span>${esc(q.photographer)}${q.chosen ? ' <span class="chip green">chosen</span>' : ""}</span><span>${inr(q.price)}${moneyRole() ? " → photographer " + inr(q.pg_amount != null ? q.pg_amount : pgNetStd(q.price)) : ""} · ${when(q.sent)}</span></div>`).join("") || `<div class="xs muted2">None</div>`}
+      ${d.request ? `<div class="xs muted2 mt8">Customer's budget ${inr(d.request.budget)}${moneyRole() && pgNetStd(d.request.budget) != null ? " (≈ " + inr(pgNetStd(d.request.budget)) + " for the photographer)" : ""} · posted ${when(d.request.created_at)}${d.request.notes ? " · “" + esc(d.request.notes) + "”" : ""}</div>` : ""}</div>`}
   </div></div>`;
 }
 
@@ -2999,8 +3000,8 @@ function vUser360(){
       ${sec("Timeline — everything they did (" + num((D.timeline || []).length) + ")", `<div class="tl">${(D.timeline || []).map(e => { const gg = evGroup(e.kind);
         return `<div class="tlrow"><div class="tlt">${dts(e.at)}</div><span class="tldot" style="background:${EV_COLOR[gg]}"></span><div class="grow">${evText({ ...e, user_id: null, other_id: null }, true)}${e.entity === "booking" && e.entity_id ? ` · ${bkLink(e.entity_id, "booking")}` : ""}</div></div>`; }).join("") || `<div class="xs muted2">Nothing yet.</div>`}</div>`, true)}
       ${sec("Bookings (" + num(bks.length) + ")", mini([["created_at","Booked","dt"],["start_at","Shoot","dt"],["status","Status","chip"],["category","Shoot", r => esc(CAT_NAMES[r.category] || r.category)],["customer_name","Customer"],["photographer_name","Photographer"]].concat(m ? [["total_amount","Value","inr"],["discount_amount","Discount","inr"]] : []).concat([["payment_status","Payment"],["balance_status","Balance"],["payout_status","Payout"],["messages","Messages","n"],["stars","Review", r => r.stars ? "★".repeat(r.stars) : "—"]]), bks, r => `openBooking('${r.id}')`))}
-      ${(D.requests || []).length ? sec("Shoots posted (" + num(D.requests.length) + ")", mini([["created_at","Posted","dt"],["category","Shoot", r => esc(CAT_NAMES[r.category] || r.category)],["city","City"],["urgency","When"],["start_at","Starts","dt"],["budget","Budget","inr"],["quotes","Quotes","n"],["status","Status","chip"]], D.requests)) : ""}
-      ${(D.quotes || []).length ? sec("Quotes sent (" + num(D.quotes.length) + ")", mini([["created_at","Sent","dt"],["category","Shoot", r => esc(CAT_NAMES[r.category] || r.category)],["city","City"],["price","Price","inr"],["won","Won", r => r.won ? '<span class="chip green">Won</span>' : ""],["request_status","Request","chip"]], D.quotes)) : ""}
+      ${(D.requests || []).length ? sec("Shoots posted (" + num(D.requests.length) + ")", mini([["created_at","Posted","dt"],["category","Shoot", r => esc(CAT_NAMES[r.category] || r.category)],["city","City"],["urgency","When"],["start_at","Starts","dt"],["budget","Budget", r => dualPrice(r.budget, null, true)],["quotes","Quotes","n"],["status","Status","chip"]], D.requests)) : ""}
+      ${(D.quotes || []).length ? sec("Quotes sent (" + num(D.quotes.length) + ")", mini([["created_at","Sent","dt"],["category","Shoot", r => esc(CAT_NAMES[r.category] || r.category)],["city","City"],["price","Price", r => dualPrice(r.price, r.pg_amount)],["won","Won", r => r.won ? '<span class="chip green">Won</span>' : ""],["request_status","Request","chip"]], D.quotes)) : ""}
       ${m && (D.payments || []).length ? sec("Payments (" + num(D.payments.length) + ")", mini([["created_at","Started","dt"],["paid_at","Paid","dt"],["stage","Stage"],["amount","Amount","inr"],["status","Status","chip"],["payment_group","Method", r => esc(methodName(r.payment_group) || "")],["refund_status","Refund"],["refunded_amount","Refunded","inr"],["environment","Mode"],["order_id","Order"]], D.payments, r => r.booking_id ? `openBooking('${r.booking_id}')` : "")) : ""}
       ${m && (D.storage_orders || []).length ? sec("Storage plans", mini([["created_at","Ordered","dt"],["plan","Plan"],["amount","Amount","inr"],["status","Status","chip"],["period_end","Until","d"]], D.storage_orders)) : ""}
       ${sec("Visits & pages viewed (" + num((D.visits || []).length) + " days)", mini([["day","Day","d"],["first_at","First","dt"],["last_at","Last","dt"],["views","Views","n"],["device","Device"],["channel","Channel"],["referrer","From site"],["utm_campaign","Campaign"],["ref_code","Invite code"],["paths","Pages, in order", r => (r.paths || []).map(x => `<span class="mono">${esc(x)}</span>`).join(" → ")]], D.visits))}
@@ -3117,6 +3118,18 @@ const ic = (n, s, c) => `<svg width="${s || 18}" height="${s || 18}" viewBox="0 
    Need to know: the owner (super admin) sees the whole business. Admins and managers see only
    the pages their daily work needs; the database enforces the same rules. */
 const isSup = () => !!(S.me && S.me.role === "super_admin");
+/* every price shows what the customer pays AND what the photographer gets, so nobody has to work it out.
+   Bookings and quotes use the exact locked amount; budgets use the standard rate (a photographer's own rate can differ). */
+function loadStdRate(){ if(S.stdRate !== undefined) return; S.stdRate = null;
+  sb.from("platform_settings").select("value").eq("key", "commission_pct").maybeSingle().then(({ data }) => { const n = data ? Number(data.value) : NaN; S.stdRate = isFinite(n) ? n : 25; render(); }); }
+const moneyRole = () => !!(S.me && S.me.role !== "manager");
+const pgNetStd = g => { if(g == null || g === "") return null; loadStdRate(); return S.stdRate == null ? null : Math.round(g) - Math.round(Math.round(g) * S.stdRate / 100); };
+function dualPrice(cust, pg, approx){
+  if(cust == null || cust === "") return `<span class="muted2">—</span>`;
+  if(!moneyRole()) return inr(cust);
+  const exact = pg != null && !approx, p = exact ? pg : pgNetStd(cust);
+  return inr(cust) + (p != null ? `<div class="xs muted2" style="white-space:nowrap" title="${exact ? "Exactly what the photographer receives" : "At the standard " + S.stdRate + "% rate — a photographer's own rate can differ"}">${exact ? "" : "≈ "}photographer ${inr(p)}</div>` : "");
+}
 function navGroups(){
   const role = S.me.role, money = role !== "manager", sup = role === "super_admin";
   const waiting = (S.photographers || []).filter(p => p.approval_status === "pending").length;
@@ -4269,7 +4282,7 @@ function cityDetail(){
           <div class="xs muted2" style="text-align:right">${num(c.requests)} posted · ${num(c.bookings)} booked</div></div>
         <div class="row mt8" style="flex-wrap:wrap;gap:6px">${noteChip(c.last_note)}</div>
         ${(c.open || []).map(r => `<div class="row mt8" style="flex-wrap:wrap;gap:6px;background:var(--surface-2);border-radius:10px;padding:8px 10px">
-          <span class="sm"><b>${esc(CAT_N(r.category))}</b> · ${esc(SVC_N(r.service))} · ${dt(r.start_at)} · ₹${Number(r.budget || 0).toLocaleString("en-IN")}</span>
+          <span class="sm"><b>${esc(CAT_N(r.category))}</b> · ${esc(SVC_N(r.service))} · ${dt(r.start_at)} · ₹${Number(r.budget || 0).toLocaleString("en-IN")}${moneyRole() && pgNetStd(r.budget) != null ? ` <span class="xs muted2">(≈ ${inr(pgNetStd(r.budget))} for the photographer)</span>` : ""}</span>
           <span class="chip ${r.quotes ? "green" : "amber"}">${r.quotes ? r.quotes + " quote" + (r.quotes > 1 ? "s" : "") : "No quote yet"}</span>
           <button class="btn sm primary" onclick='S.matchReq=${esc(JSON.stringify(Object.assign({}, r, { customer: c.name })))};S.ppF="all";render()'>Find photographers</button></div>`).join("")}
         ${personActions(c, custMsg(c, city), "c")}</div>`).join("") || `<div class="empty">No customers here.</div>`}</div></div>

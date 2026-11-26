@@ -3153,7 +3153,8 @@ begin
   elsif p_kind = 'quotes' then
     select coalesce(jsonb_agg(to_jsonb(z) order by z.sent desc), '[]') into res from (
       select o.created_at as sent, o.photographer_name as photographer, r.customer_name as customer, r.category, r.city,
-             o.price, r.budget, round(extract(epoch from o.created_at - r.created_at) / 60) as minutes_after_post,
+             o.price, case when public._money_ok() then coalesce(o.pg_amount, o.price - round(o.price * public.commission_pct() / 100.0)::int) end as photographer_gets,
+             r.budget, round(extract(epoch from o.created_at - r.created_at) / 60) as minutes_after_post,
              case when exists (select 1 from public.bookings b where b.offer_id = o.id and b.status not in ('cancelled','pending_payment')) then 'booked'
                   when exists (select 1 from public.bookings b where b.offer_id = o.id and b.status = 'pending_payment') then 'chosen, unpaid'
                   when r.status in ('broadcasting','awaiting') then 'open' else 'not chosen' end as outcome
@@ -3265,7 +3266,7 @@ begin
     'booking', to_jsonb(b) - case when money then '{}'::text[] else array['price','total_amount','payout_amount','commission_amount',
               'photographer_amount','payment_status','payout_ref','payout_by','commission_pct','advance_amount','balance_amount'] end,
     'request', (select to_jsonb(r) from public.requests r where r.id = b.request_id),
-    'quotes', (select coalesce(jsonb_agg(jsonb_build_object('photographer', o.photographer_name, 'price', o.price, 'sent', o.created_at,
+    'quotes', (select coalesce(jsonb_agg(jsonb_build_object('photographer', o.photographer_name, 'price', o.price, 'pg_amount', case when public._money_ok() then o.pg_amount end, 'sent', o.created_at,
                  'chosen', o.id = b.offer_id) order by o.created_at), '[]') from public.offers o where o.request_id = b.request_id),
     'messages', (select count(*) from public.messages m where m.booking_id = b.id),
     'last_message', (select max(created_at) from public.messages m where m.booking_id = b.id),
@@ -4416,7 +4417,7 @@ begin
         select r.id, r.category, r.city, r.status, r.budget, r.urgency, r.start_at, r.created_at, (select count(*) from public.offers o where o.request_id = r.id) quotes
           from public.requests r where r.customer_id = uid limit 200) z),
     'quotes', (select coalesce(jsonb_agg(z order by z.created_at desc), '[]') from (
-        select o.request_id, o.price, o.created_at, r.category, r.city, r.status request_status,
+        select o.request_id, o.price, case when public._money_ok() then o.pg_amount end pg_amount, o.created_at, r.category, r.city, r.status request_status,
                exists (select 1 from public.bookings b where b.offer_id = o.id) won
           from public.offers o join public.requests r on r.id = o.request_id where o.photographer_id = uid limit 300) z),
     'bookings', (select coalesce(jsonb_agg(z order by z.created_at desc), '[]') from (
