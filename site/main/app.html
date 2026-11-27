@@ -689,6 +689,36 @@ html[data-theme=dark] .chip.amber{background:#3a2c14;color:#e9b866}
 .stg-nag-bg{position:absolute;inset:0;background:rgba(0,0,0,.35)}
 .stg-nag-card{position:relative;width:min(520px,100%);border-radius:16px 16px 0 0;padding:20px 18px calc(18px + env(safe-area-inset-bottom));box-shadow:var(--shadow);animation:stgUp .22s ease-out}
 @keyframes stgUp{from{transform:translateY(30px);opacity:0}to{transform:none;opacity:1}}
+/* ===== inside the Android / iPhone app: native look and feel (website unchanged) ===== */
+html.native-app{--ff:Roboto,system-ui,-apple-system,"Segoe UI","Noto Sans",sans-serif;--serif:var(--ff)}
+html.native-app body{-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;overscroll-behavior-y:none;touch-action:manipulation}
+html.native-app input,html.native-app textarea,html.native-app [contenteditable]{-webkit-user-select:text;user-select:text}
+html.native-app ::-webkit-scrollbar{display:none}
+html.native-app .wordmark{font-family:'Instrument Serif',Georgia,serif}
+html.native-app .display{font-size:30px;font-weight:700;letter-spacing:-.3px;line-height:1.15}
+html.native-app .display-sm{font-size:22px;font-weight:700;letter-spacing:-.2px;line-height:1.2}
+html.native-app .h1{font-size:24px;font-weight:700;letter-spacing:-.2px;line-height:1.2}
+html.native-app .h2{font-weight:700}
+html.native-app .pad{padding:16px}
+html.native-app .topbar{min-height:56px;padding:4px 12px 4px 4px;gap:4px;border-bottom:0;box-shadow:0 1px 0 var(--border-soft)}
+html.native-app .topbar .iconbtn{width:48px;height:48px;border-radius:24px;background:transparent;border:0}
+html.native-app .topbar .h3{font-size:19px;font-weight:600}
+html.native-app .tabbar{left:0;transform:none;width:100%;padding:6px 4px calc(8px + env(safe-area-inset-bottom));border-top:0;box-shadow:0 -1px 0 var(--border-soft)}
+html.native-app .tab{min-height:56px;justify-content:center;gap:4px;font-size:12px}
+html.native-app .tab.on::before{display:none}
+html.native-app .tab svg{padding:4px 18px;border-radius:16px;box-sizing:content-box;transition:background-color .2s}
+html.native-app .tab.on svg{background:var(--surface-2)}
+html.native-app .tab .badge{top:0;right:calc(50% - 26px)}
+html.native-app .btn{min-height:48px;border-radius:12px}
+html.native-app .btn.sm{min-height:36px;border-radius:10px}
+html.native-app .input{min-height:48px;border-radius:12px}
+html.native-app .card{border-radius:14px}
+html.native-app .card.tap,html.native-app .li,html.native-app .btn,html.native-app .chip,html.native-app .tab,html.native-app .iconbtn{transition:transform .08s ease-out,background-color .15s}
+html.native-app .card.tap:active,html.native-app .li:active,html.native-app .btn:active,html.native-app .chip:active,html.native-app .iconbtn:active{transform:scale(.97)}
+html.native-app .back-home{display:none}
+html.native-app .welcome{padding-top:calc(40px + env(safe-area-inset-top))}
+@keyframes snapNavIn{from{opacity:.35}to{opacity:1}}
+html.native-app #screen.nav-in{animation:snapNavIn .16s ease-out}
 
 </style>
 </head>
@@ -4859,6 +4889,32 @@ async function deleteMyAccount(){
     S.loading.del = false; S.delChk = undefined; render();
     toast("Couldn't delete your account", e.message, "x");
   }
+}
+
+/* ===================== FEEL LIKE A REAL ANDROID APP =====================
+   Only inside the SnapPro Android / iPhone app — the website stays exactly as it is.
+   System font, Android-size touch targets and bars, no text selection / zoom / pull-to-refresh /
+   long-press image menu, website pages open in a separate browser sheet, soft screen transitions. */
+if(PLAY_APP){
+  document.documentElement.classList.add("native-app");
+  try{ const m = document.querySelector('meta[name="viewport"]'); if(m) m.setAttribute("content", "width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"); }catch(e){}
+  document.addEventListener("contextmenu", e => { if(!(e.target && e.target.closest && e.target.closest("input,textarea,[contenteditable]"))) e.preventDefault(); });
+  /* website pages (terms, guides, the home page) open in a browser sheet, not inside the app */
+  document.addEventListener("click", e => {
+    const a = e.target && e.target.closest && e.target.closest("a[href]"); if(!a || a.target) return;
+    let u; try{ u = new URL(a.getAttribute("href"), location.href); }catch(err){ return; }
+    if(u.origin === location.origin && !/^\/app\.html/.test(u.pathname)){ e.preventDefault(); window.open(u.href, "_blank", "noopener"); }
+  }, true);
+  /* a short fade when moving between screens, like native navigation */
+  let navKey = "";
+  const _renderApp = render;
+  render = function(){
+    const depth = S.stack ? S.stack.length : 0, top = depth ? S.stack[depth - 1].v : S.tab;
+    const key = (S.me ? "in" : "out") + ":" + depth + ":" + top + ":" + ((S.auth && S.auth.step) || "");
+    const prev = navKey; navKey = key;
+    _renderApp.apply(this, arguments);
+    if(prev && prev !== key){ const sc = el("screen"); if(sc){ sc.classList.remove("nav-in"); void sc.offsetWidth; sc.classList.add("nav-in"); } }
+  };
 }
 
 /* ============================================================
